@@ -2,7 +2,7 @@
 """Shapes shared by two or more endpoints under the client root, generated from `spec/schemas.json`."""
 
 from typing_extensions import Literal, NotRequired, TypedDict
-from github.core import TimestampIso
+from truewire_core.types import TimestampIso
 
 
 class CommitRef(TypedDict):

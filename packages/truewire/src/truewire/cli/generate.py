@@ -292,6 +292,7 @@ def generate(
     skip_endpoint,
     skip_router,
   )
+  from truewire.codegen.meta import META_MODULE, meta_module
   from truewire.codegen.python import (
     RouterChild,
     endpoint_transport,
@@ -465,6 +466,11 @@ def generate(
           add_planned_file(planned, path=file['path'], content=file['content'])
       generator.schemas_scope = None
       generator.shared_schemas = merged_shared_schemas
+
+    meta_source = meta_module(loaded.config.cores) if loaded.config is not None else None
+    if meta_source is not None:
+      log(f'[{client}] generating meta module')
+      add_planned_file(planned, path=f'{META_MODULE}.py', content=meta_source)
 
     surface_groups = generator.surface_groups()
     if surface_groups:

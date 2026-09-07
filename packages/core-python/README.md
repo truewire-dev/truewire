@@ -36,6 +36,8 @@ pip install 'truewire-core[grpc]'   # gRPC transport (grpclib)
 | `truewire_core.grpc` | `GrpcClient`, `GrpcEndpoint`, `wrap_exceptions` (requires the `grpc` extra) |
 | `truewire_core.validation` | `validator[T]`, a cached pydantic adapter that validates and dumps wire shapes, and a base `TypedDict` that tolerates undocumented fields |
 | `truewire_core.times` | `TimeConverter`, `EpochConverter`, `IsoConverter`, `DateConverter` — parse/dump between a wire timestamp and a real `datetime`/`date` |
+| `truewire_core.types` | `TimestampSeconds`, `TimestampMillis`, `TimestampMicros`, `TimestampNanos`, `TimestampIso`, `DateIso` — the one alias per spec `format` that generated code imports, plus the converter instance behind each |
+| `truewire_core.contract` | `HttpEndpoint`, `CommandEndpoint`, `StreamEndpoint`, `ClientRoot`, `Composite` — `Protocol`s spelling out what a hand-written core provides to generated code |
 | `truewire_core.util` | `PaginatedResponse`/`Page`, `Stream`/`StreamManager`, `RateLimit`, and small numeric/path helpers |
 
 ### Errors

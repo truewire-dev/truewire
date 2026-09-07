@@ -7,23 +7,15 @@ never changes when you do.
 """
 from dataclasses import dataclass, field
 from types import UnionType
-from typing_extensions import Any, NotRequired, Self, TypedDict, TypeVar, cast
+from typing_extensions import Any, Self, TypeVar, cast
 
 from truewire_core.exceptions import ApiError
 from truewire_core.http import HttpClient
 from truewire_core.validation import validator
 
-from .types import (  # noqa: F401  re-exported for generated code
-  DateIso, TimestampIso, TimestampMicros, TimestampMillis, TimestampNanos, TimestampSeconds,
-)
+from ..meta import DefaultMeta as Meta
 
 T = TypeVar('T')
-
-
-class Meta(TypedDict):
-  """Per-endpoint facts declared in `endpoint.json`'s `meta`, matching `[cores.default].meta`."""
-  public: NotRequired[bool]
-  """Whether the call needs no credentials."""
 
 
 @dataclass(kw_only=True)

@@ -29,6 +29,12 @@ base = "petstore.core:ClientBase"
 
 [python.cores.default]       # every other symbolic core: base class + how children get the transport
 base = "petstore.core:Endpoint"
+
+[python.cores.streams]       # a base built through `new(client, *, ...)` declares its keywords
+base = "petstore.core:StreamsBase"
+forward = ["market_client"]  # passed from the composing class's own same-named field
+params = { network = "petstore.core:Network" }   # exposed to the caller, typed by import
+children = { market_data = "market_client", private = "private_client" }
 ```
 
 ## Sections
@@ -45,13 +51,35 @@ base = "petstore.core:Endpoint"
 - **`[python]`**: where the generated package goes and how it is finished. Only `python` is a
   target today.
 - **`[python.cores.<name>]`**: `base` is `module.path:Class`, the hand-written class every
-  generated endpoint under that core subclasses; the module is imported during generation to
-  introspect its `new()` signature. `children` maps a composed child attribute to the field
-  it receives the transport from, for cores whose children need a different connection.
+  generated endpoint under that core subclasses. Nothing is imported during generation
+  (ADR 0011); the three optional keys below say how a composite built on this base is
+  constructed.
+  - `children` maps a composed child attribute to the field of `self` it receives as its
+    transport, for a base whose children need different connections
+    (`{ spot = "spot_client", streams = "private_client" }`). Unlisted children get
+    `self.client`.
+  - `forward` lists the keywords of this base's `new(client, *, ...)` that the composing
+    class passes from its own same-named fields: `forward = ["market_client"]` renders
+    `Streams.new(self.private_client, market_client=self.market_client)`.
+  - `params` maps the keywords of `new()` a caller supplies to their types. A string is
+    `module.path:Name` (imported by the composing module) or a bare builtin (`str`); the
+    table form `{ type = "...", required = false }` makes it optional. The composing class
+    exposes each as a keyword-only parameter (`def token(self, *, network: Network)`),
+    unless its own core is this same core, in which case it already carries the field and
+    forwards `self.<name>`.
+
+  Declaring `forward` (even as `[]`) or `params` means the base is built through
+  `new(client, *, ...)`; declaring neither builds it as `Child(client=self.<field>)`. The
+  protocols a base satisfies are in `truewire_core.contract`.
 - **`[[python.extras."<router node>"]]`**: hand-written classes folded into a generated
   router node (`file`, `class`, optional `replaces`).
 
 ## Generated state
+
+`generate` writes `<src>/<package>/meta.py`, one `TypedDict` per `[cores.<name>]` that
+declares a `meta` schema (`SpotMeta` for `spot`); the hand-written core annotates its
+`meta` parameter with it. `truewire init` writes the first one so the core template can
+import it before the first `generate`.
 
 `generate` writes `.truewire/python-files.json`, the manifest of files it owns. Files not in
 the manifest are never deleted; `generate --check` compares the plan to it, and

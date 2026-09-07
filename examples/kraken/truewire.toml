@@ -23,6 +23,9 @@ base = "kraken.core.endpoint.rpc:RpcEndpoint"
 
 [python.cores.streams]
 base = "kraken.core.base:StreamsBase"
+# `StreamsBase.new(client, *, market_client)`: the root passes `private_client` as `client`
+# (its `children` entry above) and its own `market_client` field for the keyword.
+forward = ["market_client"]
 children = { market_data = "market_client", private = "private_client" }
 
 [python.cores.socket]

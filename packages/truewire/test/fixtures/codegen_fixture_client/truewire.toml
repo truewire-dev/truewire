@@ -27,3 +27,6 @@ base = "fixture_client.futures.core:FuturesEndpoint"
 
 [python.cores.chain]
 base = "fixture_client.token.core:ChainRpc"
+# `ChainRpc.new(client, *, network)`: declared here, never introspected (ADR 0011). The
+# root exposes `network` on `token(...)`; `Token`'s own descendants forward `self.network`.
+params = { network = "fixture_client.token.core:Network" }

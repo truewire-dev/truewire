@@ -27,11 +27,11 @@ a distinct import path, guarding against a future futures endpoint mistakenly sp
 itself was built with credentials (`ClientBase.new(public=True)`, say) -- that's
 enforced one level down, in the shared transport's own `send`.
 
-`request` accepts `meta` as this module's own hand-written `Meta` now (design §2/§6,
-corrected: never code-generated, matching the JSON Schema `codegen/config.toml`'s top-level
-`[cores.futures]` declares directly -- `signed` required, `public` optional). Every
-generated call under this core emits a plain dict literal (`meta={'signed': True}`),
-checked structurally against this class's own `meta: Meta` parameter, no import needed.
+`request` accepts `meta` as `fixture_client.meta.FuturesMeta`, rendered by `truewire
+generate` from `truewire.toml`'s top-level `[cores.futures]` schema (`signed` required,
+`public` optional; ADR 0011). Every generated call under this core emits a plain dict
+literal (`meta={'signed': True}`), checked structurally against this class's own
+`meta: Meta` parameter, no import needed.
 
 `FuturesEndpoint` does *not* subclass `fixture_client.core.RpcEndpoint` -- it delegates
 its own request mechanics to that module's `perform_request` (a plain function), instead
@@ -42,26 +42,15 @@ without breaking Liskov substitutability -- see `fixture_client.core`'s own modu
 docstring for the full reasoning.
 """
 
-from typing_extensions import Any, NotRequired, TypedDict, TypeVar
+from typing_extensions import Any, TypeVar
 from types import UnionType
 from dataclasses import dataclass
 
 from fixture_client.core import perform_request
+from fixture_client.meta import FuturesMeta as Meta
 from fixture_client.transport import InMemoryTransport
 
 T = TypeVar('T')
-
-
-class Meta(TypedDict):
-  """`meta`'s shape for this core (`codegen/config.toml`'s `[cores.futures]`) -- hand-written to
-  match the declared JSON Schema exactly, never code-generated (design §2/§6). Distinct
-  from `fixture_client.core.Meta` (`default`'s own, all-optional) -- each resolved core
-  hand-authors its own `Meta`, matching only its own declared schema."""
-
-  signed: bool
-  """Whether this call must be signed -- required: every futures endpoint states it."""
-  public: NotRequired[bool]
-  """Whether this call is public (no credentials required)."""
 
 
 @dataclass(kw_only=True, frozen=True)

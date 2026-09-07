@@ -12,9 +12,14 @@ TIMESTAMP_FORMATS: Mapping[str, str] = {
   'date-time': 'TimestampIso',
   'date': 'DateIso',
 }
-"""Wire timestamp format -> the render id the project's own `core_package` is expected to
-export. Uniform across every project: a core only defines the pairs its spec actually
-uses, and the generator only ever asks for a name from this table."""
+"""Wire timestamp format -> the alias `truewire_core.types` exports for it. Uniform across
+every project: the runtime defines every pair, and the generator only ever asks for a
+name from this table."""
+
+TYPES_PACKAGE = 'truewire_core.types'
+"""Runtime module the `TIMESTAMP_FORMATS` aliases (and the converter instances the request
+builders call `.dump()` on) are imported from. Generated code never reaches into a
+project's own core for these (ADR 0011)."""
 
 OPAQUE_STRING_FORMATS = {'uuid', 'hostname', 'uri'}
 """Standard OpenAPI string formats that document a value without narrowing its Python type.
@@ -36,7 +41,7 @@ constant already makes for `uuid`, not a new one.
 BOOLEAN_STRING_FORMATS = {'boolean-string'}
 """String formats that narrow to the builtin `bool`, `docs/spec/authoring.md` rule 12.
 
-Unlike `TIMESTAMP_FORMATS`, this needs no `core_package` type: `pydantic`'s default (lax)
+Unlike `TIMESTAMP_FORMATS`, this needs no runtime alias: `pydantic`'s default (lax)
 coercion already turns the wire strings `"true"`/`"false"` into a real `bool` with no custom
 `BeforeValidator`, so this renders straight to the builtin the same way `uuid` above renders
 straight to `str`.
@@ -55,7 +60,7 @@ DECIMAL_STRING_FORMATS = {'decimal-string'}
 
 Same reasoning as `BOOLEAN_STRING_FORMATS`/`INTEGER_STRING_FORMATS`: `pydantic`'s default
 (lax) coercion already turns a wire string like `"1.23"` into a real `Decimal` with no
-custom `BeforeValidator`, so this needs no `core_package` type either -- it renders to
+custom `BeforeValidator`, so this needs no runtime alias either -- it renders to
 `decimal.Decimal`, a stdlib import rather than a builtin, the same way `Any` renders to a
 `typing_extensions` import.
 """
@@ -63,14 +68,6 @@ custom `BeforeValidator`, so this needs no `core_package` type either -- it rend
 @dataclass(kw_only=True)
 class Parser:
   typing_package: str = 'typing_extensions'
-  core_package: str | None = None
-  """Package exporting the `TIMESTAMP_FORMATS` render ids (`TimestampMillis`, etc.), e.g.
-  `petstore.core`.
-
-  Required before any timestamp `format` can be rendered — a `TimestampX` type with
-  nowhere to be imported from emits a `NameError` at import time rather than a type error
-  at generation.
-  """
   any: InlineType = field(default_factory=lambda: {'type': 'ref', 'id': 'Any', 'package': 'typing_extensions'})
 
   def __call__(self, schema: Reference | Schema | None, *, id: str | None = None, inline: bool = False) -> Type:
@@ -171,13 +168,8 @@ class Parser:
     return {'type': 'ref', 'id': 'int'}
 
   def timestamp(self, schema: Schema, *, id: str | None = None) -> Type:
-    """Render a timestamp-formatted field as the project core's matching `TimestampX` alias."""
-    if self.core_package is None:
-      raise ValueError(
-        f"Schema declares format '{schema.format}' but this Parser has no `core_package` "
-        'to import a Timestamp type from; pass one via the backend\'s `type_generator()`'
-      )
-    return {'type': 'ref', 'id': TIMESTAMP_FORMATS[schema.format], 'package': self.core_package}
+    """Render a timestamp-formatted field as the runtime's matching `TimestampX` alias."""
+    return {'type': 'ref', 'id': TIMESTAMP_FORMATS[schema.format], 'package': TYPES_PACKAGE}
 
   def boolean(self, schema: Schema, id: str | None = None) -> Type:
     if schema.enum:

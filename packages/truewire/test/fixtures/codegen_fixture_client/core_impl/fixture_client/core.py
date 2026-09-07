@@ -17,15 +17,13 @@ This is a real, working implementation against a trivial in-memory transport
 (`.transport.InMemoryTransport`), not a stub that only satisfies the type checker --
 `test_codegen_generator_e2e.py` drives real generated methods through it.
 
-`request`/`subscribe` accept `meta` as `Meta` now (design §2/§6, corrected: `Meta` is
-never code-generated -- it's hand-written here, directly, matching the JSON Schema
-`codegen/config.toml`'s top-level `[cores.default]` declares, exactly the pattern this repo
-already uses for a spec-declared timestamp `format`, S27's `TimestampMillis` and friends,
-hand-written to match, never code-generated). Every generated call under this core emits
-a plain dict literal (`meta={'signed': True}`), never a `Meta(...)` construction and
-never an import of `Meta` -- pyright checks the emitted literal against this class
-structurally, since a `TypedDict` is checked by shape, not by whether the call site's own
-module names the class.
+`request`/`subscribe` accept `meta` as `Meta` -- `fixture_client.meta.DefaultMeta`, the
+`TypedDict` `truewire generate` renders from `truewire.toml`'s top-level `[cores.default]`
+schema (ADR 0011). Every generated call under this core emits a plain dict literal
+(`meta={'signed': True}`), never a `Meta(...)` construction and never an import of `Meta`
+-- pyright checks the emitted literal against this class structurally, since a
+`TypedDict` is checked by shape, not by whether the call site's own module names the
+class.
 
 `perform_request` (below) is the shared RPC mechanics every resolved core's own
 `request()` delegates to, as a plain function -- deliberately *not* something
@@ -41,7 +39,7 @@ hand-builds `SpotMixin`/`FuturesMixin` as two genuinely independent mixin chains
 one subclassing the other's request method.
 """
 
-from typing_extensions import Any, NotRequired, Self, TypedDict, TypeVar, cast
+from typing_extensions import Any, Self, TypeVar, cast
 from dataclasses import dataclass, field
 from types import UnionType
 import json
@@ -49,19 +47,10 @@ import json
 from truewire_core.util import Stream, StreamManager
 from truewire_core.validation import validator
 
+from .meta import DefaultMeta as Meta
 from .transport import InMemoryTransport, fill_template
 
 T = TypeVar('T')
-
-
-class Meta(TypedDict):
-  """`meta`'s shape for this core (`codegen/config.toml`'s `[cores.default]`) -- hand-written to
-  match the declared JSON Schema exactly, never code-generated (design §2/§6)."""
-
-  signed: NotRequired[bool]
-  """Whether this call must be signed."""
-  public: NotRequired[bool]
-  """Whether this call is public (no credentials required)."""
 
 
 async def perform_request(

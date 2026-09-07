@@ -17,8 +17,12 @@ recording passes `truewire check`.
 `core/__init__.py`: `Transport` (base URL, `HttpClient`, optional token, `headers()`,
 `send()`), `ClientBase` (the root client's `new(...)`, named after `[python].name`, and
 the context manager) and `Endpoint` (the base every generated class subclasses;
-`request()` sends and validates). `core/types.py` maps the spec's timestamp formats to
-real `datetime`/`date` types. Generated code never changes when you change the core.
+`request()` sends and validates). `meta.py` is generated from `[cores.<name>].meta`; the
+core imports its `Meta` from there. `core/types.py` re-exports the runtime's timestamp
+aliases (`truewire_core.types`) for anyone importing them from the project. Generated
+code never changes when you change the core, and the generator never imports your
+package: what it needs from the core is declared in `truewire.toml` and spelled out as
+protocols in `truewire_core.contract`.
 
 ## Steps
 
@@ -41,13 +45,16 @@ real `datetime`/`date` types. Generated code never changes when you change the c
    error}`), unwrap in `send()` or `request()` and declare `envelope.payload` on the
    endpoints. The response schema still describes the whole wire frame; the path selects
    the value the generated method returns (authoring rule 6, ADR 0010).
-5. **`meta`.** The `Meta` TypedDict in the core and `[cores.<name>].meta` in
-   `truewire.toml` agree on the per-endpoint facts the core reads (`public`, `signed`, a
-   scope). `truewire check` validates every endpoint's `meta` against that schema.
+5. **`meta`.** `[cores.<name>].meta` in `truewire.toml` declares the per-endpoint facts
+   the core reads (`public`, `signed`, a scope); `truewire generate` renders it to
+   `<pkg>/meta.py` as `<Name>Meta`, which the core's `request()` annotates its `meta`
+   parameter with. `truewire check` validates every endpoint's `meta` against the schema.
 6. **WebSocket.** For `stream` or `ws` endpoints, add a socket client in the core
-   (`truewire_core.ws` has the primitives) and route it through `[python.cores]` children
-   in `truewire.toml`; `examples/kraken/src/kraken/core` in the toolchain repository is a
-   complete reference.
+   (`truewire_core.ws` has the primitives) and route it through `[python.cores]` `children`
+   in `truewire.toml`. A base built through `new(client, *, ...)` declares its keywords
+   there too (`forward` for fields the parent passes, `params` for ones the caller
+   supplies); `examples/kraken/src/kraken/core` in the toolchain repository is a complete
+   reference.
 7. **Pyright config, now.** `truewire generate python` runs pyright when the project has
    `pyrightconfig.json`. Write it before generating, with `test/` created (empty is fine)
    so it does not warn:

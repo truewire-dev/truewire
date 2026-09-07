@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
-      id-token: write   # Trusted Publishing; falls back to PYPI_API_TOKEN when set
+      id-token: write   # PyPI Trusted Publishing (OIDC); no token stored anywhere
       contents: read
     steps:
       - uses: actions/checkout@v4
@@ -24,6 +24,4 @@ jobs:
       - name: Build
         run: uv build "${{ steps.pick.outputs.dir }}" --out-dir dist
       - name: Publish
-        env:
-          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
-        run: uv publish dist/*
+        run: uv publish --trusted-publishing always dist/*

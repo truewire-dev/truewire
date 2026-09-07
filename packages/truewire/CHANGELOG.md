@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 (2026-09-07)
 
 - **A response schema describes the wire body; `envelope.payload` selects the returned
   value** (ADR 0010, authoring rule 6). Before, the schema described the value the core

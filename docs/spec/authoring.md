@@ -111,17 +111,36 @@ The type parser raises on `oneOf` and `allOf`. Write `anyOf` directly. A nullabl
 
 Enforcement: `truewire check`, `error`.
 
-## 6. Schemas describe what the core returns
+## 6. Schemas describe the wire body
 
-A response schema, and the examples recorded against it, describe exactly the value the client core hands back to the caller, which is not always the wire body. Where the core unwraps an envelope, they describe the unwrapped payload and the endpoint declares `envelope` (ADR 0004). Where it does not, they describe the whole frame. Nothing else can hold: the generated method validates its response against this schema, and the core is what produced that response.
+A response schema, and the examples recorded against it, describe the body exactly as the API sent it: the whole frame, envelope included. Where the core unwraps an envelope, the endpoint declares `envelope.payload` (ADR 0004, ADR 0010), a dotted path into that schema naming the value the generated method returns; the generator derives the method's return type from the schema at that path. Where the core returns the frame, there is no `envelope`. Nothing else can hold: `truewire check` validates a recording against this schema and a recording is the wire, `truewire capture` writes the wire, and `truewire import openapi` copies a document that describes the wire too.
 
-**Unwrap in the core by default.** An API that wraps every response (`{retCode, retMsg, result}`, `{success, data}`, JSON-RPC `{jsonrpc, id, result}`) has exactly one envelope, and the alternative is repeating it in every schema and making every caller index past it. Errors belong to the core, and an envelope is how errors arrive.
+```jsonc
+// The API sends {"error": [], "result": {...}}; the core returns `result`.
+{"spec": {"...": "...",
+  "response": {"title": "BalanceFrame", "type": "object", "required": ["result"],
+    "description": "Wire frame.",
+    "properties": {
+      "error": {"type": "array", "items": {"type": "string"}, "description": "Wire envelope field; see the core."},
+      "result": {"title": "Balance", "type": "object", "description": "Balance by asset.",
+        "additionalProperties": {"type": "string", "format": "decimal-string"}}}}},
+ "envelope": {"payload": "result"}}
+// The generated method returns `Balance`. `BalanceFrame` is never rendered.
+```
 
-**Keep the envelope when it carries something the caller needs.** An API that puts its page counts beside `data` rather than inside it keeps the frame, and its `pagination` block reads `"done": {"kind": "total", "path": "data.totalPage"}`, a path that exists only because the schema kept the envelope.
+**Unwrap in the core by default.** An API that wraps every response (`{retCode, retMsg, result}`, `{success, data}`, JSON-RPC `{jsonrpc, id, result}`) has exactly one envelope, and a caller should never index past it. Unwrap in the core, declare `envelope.payload`, and let the schema keep the wrapper as it is on the wire. The wrapper's fields are wire facts the core reads (an error array, a request id); describe them briefly ("Wire envelope field; see the core."), since nothing generates from them. Errors belong to the core, and an envelope is how errors arrive.
+
+**Keep the envelope when it carries something the caller needs.** An API that puts its page counts beside `data` rather than inside it returns the frame: no `envelope`, and its `pagination` block reads `"done": {"kind": "total", "path": "data.totalPage"}`.
+
+**Pagination paths are relative to what the method returns.** `done.rows`, `done.path` and `cursor.from` resolve inside the schema at `envelope.payload`, never from the frame root, because the generated walk reads them off the value the core handed back.
 
 **Be consistent with the core, not with the venue.** Envelope is declared per endpoint, never per project, because a real client can be two cores' worth of behavior: 9 JSON-RPC endpoints that unwrap `result` and 32 REST endpoints that do not, under one package. A project-level default could only pick one answer.
 
 **A response field that is a genuine secret or PII gets an obviously fake, shape-preserving placeholder, never the real value.** An API key's own secret in a recorded response is a literal `"REDACTED_CLIENT_SECRET"` string: obviously fake, right shape. This needs no mechanism; a response body is never compared by the mock server, only replayed. `truewire standards` flags a credential-shaped response field with no obvious fake marker.
+
+A spec written under the previous form of this rule, where the schema described the unwrapped value, is rewritten by `truewire migrate`: it wraps each such schema into the frame its recordings show.
+
+Enforcement: `truewire check`, `error` (`envelope`): `envelope.payload` names a property of the response schema. A `$ref` or `anyOf` on the path is undecidable from the endpoint alone and is not flagged.
 
 ## 7. Describe everything that becomes a docstring
 

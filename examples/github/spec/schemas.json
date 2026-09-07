@@ -1,0 +1,268 @@
+{
+  "SimpleUser": {
+    "title": "SimpleUser",
+    "type": "object",
+    "description": "A GitHub user or organization, as embedded in other resources.",
+    "properties": {
+      "login": {
+        "type": "string",
+        "description": "Account login."
+      },
+      "id": {
+        "type": "integer",
+        "description": "Account id."
+      },
+      "node_id": {
+        "type": "string",
+        "description": "GraphQL node id."
+      },
+      "avatar_url": {
+        "type": "string",
+        "description": "Avatar image URL."
+      },
+      "html_url": {
+        "type": "string",
+        "description": "Profile page URL."
+      },
+      "type": {
+        "type": "string",
+        "description": "Account kind.",
+        "enum": [
+          "User",
+          "Organization",
+          "Bot"
+        ]
+      },
+      "site_admin": {
+        "type": "boolean",
+        "description": "Whether the account is a GitHub staff member."
+      }
+    },
+    "required": [
+      "login",
+      "id",
+      "type"
+    ]
+  },
+  "License": {
+    "title": "License",
+    "type": "object",
+    "description": "A repository license.",
+    "properties": {
+      "key": {
+        "type": "string",
+        "description": "License key, such as `apache-2.0`."
+      },
+      "name": {
+        "type": "string",
+        "description": "License display name."
+      },
+      "spdx_id": {
+        "anyOf": [
+          {
+            "type": "string",
+            "description": "SPDX identifier, when one exists."
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "SPDX identifier, when one exists."
+      },
+      "url": {
+        "anyOf": [
+          {
+            "type": "string",
+            "description": "API URL of the license, when one exists."
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "API URL of the license, when one exists."
+      }
+    },
+    "required": [
+      "key",
+      "name"
+    ]
+  },
+  "CommitRef": {
+    "title": "CommitRef",
+    "type": "object",
+    "description": "A reference to a commit by sha.",
+    "properties": {
+      "sha": {
+        "type": "string",
+        "description": "Commit sha."
+      },
+      "url": {
+        "type": "string",
+        "description": "API URL of the commit."
+      }
+    },
+    "required": [
+      "sha",
+      "url"
+    ]
+  },
+  "GitActor": {
+    "title": "GitActor",
+    "type": "object",
+    "description": "The author or committer recorded in the git object.",
+    "properties": {
+      "name": {
+        "type": "string",
+        "description": "Name recorded in the commit."
+      },
+      "email": {
+        "type": "string",
+        "description": "Email recorded in the commit."
+      },
+      "date": {
+        "type": "string",
+        "format": "date-time",
+        "description": "When the commit was authored or committed."
+      }
+    },
+    "required": [
+      "name",
+      "email",
+      "date"
+    ]
+  },
+  "GitCommit": {
+    "title": "GitCommit",
+    "type": "object",
+    "description": "The git commit object behind a repository commit.",
+    "properties": {
+      "author": {
+        "$ref": "GitActor",
+        "description": "Who wrote the commit."
+      },
+      "committer": {
+        "$ref": "GitActor",
+        "description": "Who committed it."
+      },
+      "message": {
+        "type": "string",
+        "description": "Full commit message."
+      },
+      "comment_count": {
+        "type": "integer",
+        "description": "Number of comments on the commit."
+      },
+      "tree": {
+        "$ref": "CommitRef",
+        "description": "Root tree of the commit."
+      },
+      "url": {
+        "type": "string",
+        "description": "API URL of the git commit object."
+      }
+    },
+    "required": [
+      "author",
+      "committer",
+      "message",
+      "tree"
+    ]
+  },
+  "Commit": {
+    "title": "Commit",
+    "type": "object",
+    "description": "A commit on the repository, as listed.",
+    "properties": {
+      "sha": {
+        "type": "string",
+        "description": "Commit sha."
+      },
+      "node_id": {
+        "type": "string",
+        "description": "GraphQL node id."
+      },
+      "html_url": {
+        "type": "string",
+        "description": "Web page of the commit."
+      },
+      "commit": {
+        "$ref": "GitCommit",
+        "description": "The underlying git commit."
+      },
+      "author": {
+        "anyOf": [
+          {
+            "$ref": "SimpleUser",
+            "description": "GitHub account matched to the author, when known."
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "GitHub account matched to the author, when known."
+      },
+      "committer": {
+        "anyOf": [
+          {
+            "$ref": "SimpleUser",
+            "description": "GitHub account matched to the committer, when known."
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "GitHub account matched to the committer, when known."
+      },
+      "parents": {
+        "title": "CommitParents",
+        "type": "array",
+        "description": "Parent commits.",
+        "items": {
+          "$ref": "CommitRef",
+          "description": "One parent."
+        }
+      }
+    },
+    "required": [
+      "sha",
+      "commit",
+      "parents"
+    ]
+  },
+  "Label": {
+    "title": "Label",
+    "type": "object",
+    "description": "An issue label.",
+    "properties": {
+      "id": {
+        "type": "integer",
+        "description": "Label id."
+      },
+      "name": {
+        "type": "string",
+        "description": "Label name."
+      },
+      "color": {
+        "type": "string",
+        "description": "Six-character hex color, without `#`."
+      },
+      "description": {
+        "anyOf": [
+          {
+            "type": "string",
+            "description": "Label description, when set."
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Label description, when set."
+      }
+    },
+    "required": [
+      "id",
+      "name",
+      "color"
+    ]
+  }
+}

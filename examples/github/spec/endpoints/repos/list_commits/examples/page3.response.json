@@ -1,0 +1,251 @@
+{
+  "status": 200,
+  "payload": [
+    {
+      "sha": "66d76e373ca8f8731d21b75e4041c0aaa8a99b84",
+      "node_id": "C_kwDOUQnPANoAKDY2ZDc2ZTM3M2NhOGY4NzMxZDIxYjc1ZTQwNDFjMGFhYThhOTliODQ",
+      "commit": {
+        "author": {
+          "name": "Claude",
+          "email": "noreply@anthropic.com",
+          "date": "2026-09-07T08:52:23Z"
+        },
+        "committer": {
+          "name": "Claude",
+          "email": "noreply@anthropic.com",
+          "date": "2026-09-07T08:52:23Z"
+        },
+        "message": "Add the Kraken example project (spec CC0, code Apache-2.0)",
+        "tree": {
+          "sha": "af9774614c6c590d583c567a61391b9201f11d5f",
+          "url": "https://api.github.com/repos/truewire-dev/truewire/git/trees/af9774614c6c590d583c567a61391b9201f11d5f"
+        },
+        "url": "https://api.github.com/repos/truewire-dev/truewire/git/commits/66d76e373ca8f8731d21b75e4041c0aaa8a99b84",
+        "comment_count": 0,
+        "verification": {
+          "verified": false,
+          "reason": "unsigned",
+          "signature": null,
+          "payload": null,
+          "verified_at": null
+        }
+      },
+      "url": "https://api.github.com/repos/truewire-dev/truewire/commits/66d76e373ca8f8731d21b75e4041c0aaa8a99b84",
+      "html_url": "https://github.com/truewire-dev/truewire/commit/66d76e373ca8f8731d21b75e4041c0aaa8a99b84",
+      "comments_url": "https://api.github.com/repos/truewire-dev/truewire/commits/66d76e373ca8f8731d21b75e4041c0aaa8a99b84/comments",
+      "author": {
+        "login": "claude",
+        "id": 81847,
+        "node_id": "MDQ6VXNlcjgxODQ3",
+        "avatar_url": "https://avatars.githubusercontent.com/u/81847?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/claude",
+        "html_url": "https://github.com/claude",
+        "followers_url": "https://api.github.com/users/claude/followers",
+        "following_url": "https://api.github.com/users/claude/following{/other_user}",
+        "gists_url": "https://api.github.com/users/claude/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/claude/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/claude/subscriptions",
+        "organizations_url": "https://api.github.com/users/claude/orgs",
+        "repos_url": "https://api.github.com/users/claude/repos",
+        "events_url": "https://api.github.com/users/claude/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/claude/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "committer": {
+        "login": "claude",
+        "id": 81847,
+        "node_id": "MDQ6VXNlcjgxODQ3",
+        "avatar_url": "https://avatars.githubusercontent.com/u/81847?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/claude",
+        "html_url": "https://github.com/claude",
+        "followers_url": "https://api.github.com/users/claude/followers",
+        "following_url": "https://api.github.com/users/claude/following{/other_user}",
+        "gists_url": "https://api.github.com/users/claude/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/claude/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/claude/subscriptions",
+        "organizations_url": "https://api.github.com/users/claude/orgs",
+        "repos_url": "https://api.github.com/users/claude/repos",
+        "events_url": "https://api.github.com/users/claude/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/claude/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "parents": [
+        {
+          "sha": "bc32ea1722c3474d3999ee0510030ea0d2b2247e",
+          "url": "https://api.github.com/repos/truewire-dev/truewire/commits/bc32ea1722c3474d3999ee0510030ea0d2b2247e",
+          "html_url": "https://github.com/truewire-dev/truewire/commit/bc32ea1722c3474d3999ee0510030ea0d2b2247e"
+        }
+      ]
+    },
+    {
+      "sha": "bc32ea1722c3474d3999ee0510030ea0d2b2247e",
+      "node_id": "C_kwDOUQnPANoAKGJjMzJlYTE3MjJjMzQ3NGQzOTk5ZWUwNTEwMDMwZWEwZDJiMjI0N2U",
+      "commit": {
+        "author": {
+          "name": "Claude",
+          "email": "noreply@anthropic.com",
+          "date": "2026-09-07T08:43:41Z"
+        },
+        "committer": {
+          "name": "Claude",
+          "email": "noreply@anthropic.com",
+          "date": "2026-09-07T08:43:41Z"
+        },
+        "message": "Split release workflows: release-truewire.yml and release-core.yml",
+        "tree": {
+          "sha": "2d6727d3dcc0aab697840b12e80392df9e2894b7",
+          "url": "https://api.github.com/repos/truewire-dev/truewire/git/trees/2d6727d3dcc0aab697840b12e80392df9e2894b7"
+        },
+        "url": "https://api.github.com/repos/truewire-dev/truewire/git/commits/bc32ea1722c3474d3999ee0510030ea0d2b2247e",
+        "comment_count": 0,
+        "verification": {
+          "verified": false,
+          "reason": "unsigned",
+          "signature": null,
+          "payload": null,
+          "verified_at": null
+        }
+      },
+      "url": "https://api.github.com/repos/truewire-dev/truewire/commits/bc32ea1722c3474d3999ee0510030ea0d2b2247e",
+      "html_url": "https://github.com/truewire-dev/truewire/commit/bc32ea1722c3474d3999ee0510030ea0d2b2247e",
+      "comments_url": "https://api.github.com/repos/truewire-dev/truewire/commits/bc32ea1722c3474d3999ee0510030ea0d2b2247e/comments",
+      "author": {
+        "login": "claude",
+        "id": 81847,
+        "node_id": "MDQ6VXNlcjgxODQ3",
+        "avatar_url": "https://avatars.githubusercontent.com/u/81847?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/claude",
+        "html_url": "https://github.com/claude",
+        "followers_url": "https://api.github.com/users/claude/followers",
+        "following_url": "https://api.github.com/users/claude/following{/other_user}",
+        "gists_url": "https://api.github.com/users/claude/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/claude/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/claude/subscriptions",
+        "organizations_url": "https://api.github.com/users/claude/orgs",
+        "repos_url": "https://api.github.com/users/claude/repos",
+        "events_url": "https://api.github.com/users/claude/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/claude/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "committer": {
+        "login": "claude",
+        "id": 81847,
+        "node_id": "MDQ6VXNlcjgxODQ3",
+        "avatar_url": "https://avatars.githubusercontent.com/u/81847?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/claude",
+        "html_url": "https://github.com/claude",
+        "followers_url": "https://api.github.com/users/claude/followers",
+        "following_url": "https://api.github.com/users/claude/following{/other_user}",
+        "gists_url": "https://api.github.com/users/claude/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/claude/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/claude/subscriptions",
+        "organizations_url": "https://api.github.com/users/claude/orgs",
+        "repos_url": "https://api.github.com/users/claude/repos",
+        "events_url": "https://api.github.com/users/claude/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/claude/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "parents": [
+        {
+          "sha": "5f00d3d2748d8ed77b234d23426b3988837a2ece",
+          "url": "https://api.github.com/repos/truewire-dev/truewire/commits/5f00d3d2748d8ed77b234d23426b3988837a2ece",
+          "html_url": "https://github.com/truewire-dev/truewire/commit/5f00d3d2748d8ed77b234d23426b3988837a2ece"
+        }
+      ]
+    },
+    {
+      "sha": "5f00d3d2748d8ed77b234d23426b3988837a2ece",
+      "node_id": "C_kwDOUQnPANoAKDVmMDBkM2QyNzQ4ZDhlZDc3YjIzNGQyMzQyNmIzOTg4ODM3YTJlY2U",
+      "commit": {
+        "author": {
+          "name": "Claude",
+          "email": "noreply@anthropic.com",
+          "date": "2026-09-07T08:43:20Z"
+        },
+        "committer": {
+          "name": "Claude",
+          "email": "noreply@anthropic.com",
+          "date": "2026-09-07T08:43:20Z"
+        },
+        "message": "One release workflow per package for PyPI Trusted Publishing",
+        "tree": {
+          "sha": "c1b53a7d7a8fb5fa461e20814c79bd9238c35472",
+          "url": "https://api.github.com/repos/truewire-dev/truewire/git/trees/c1b53a7d7a8fb5fa461e20814c79bd9238c35472"
+        },
+        "url": "https://api.github.com/repos/truewire-dev/truewire/git/commits/5f00d3d2748d8ed77b234d23426b3988837a2ece",
+        "comment_count": 0,
+        "verification": {
+          "verified": false,
+          "reason": "unsigned",
+          "signature": null,
+          "payload": null,
+          "verified_at": null
+        }
+      },
+      "url": "https://api.github.com/repos/truewire-dev/truewire/commits/5f00d3d2748d8ed77b234d23426b3988837a2ece",
+      "html_url": "https://github.com/truewire-dev/truewire/commit/5f00d3d2748d8ed77b234d23426b3988837a2ece",
+      "comments_url": "https://api.github.com/repos/truewire-dev/truewire/commits/5f00d3d2748d8ed77b234d23426b3988837a2ece/comments",
+      "author": {
+        "login": "claude",
+        "id": 81847,
+        "node_id": "MDQ6VXNlcjgxODQ3",
+        "avatar_url": "https://avatars.githubusercontent.com/u/81847?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/claude",
+        "html_url": "https://github.com/claude",
+        "followers_url": "https://api.github.com/users/claude/followers",
+        "following_url": "https://api.github.com/users/claude/following{/other_user}",
+        "gists_url": "https://api.github.com/users/claude/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/claude/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/claude/subscriptions",
+        "organizations_url": "https://api.github.com/users/claude/orgs",
+        "repos_url": "https://api.github.com/users/claude/repos",
+        "events_url": "https://api.github.com/users/claude/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/claude/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "committer": {
+        "login": "claude",
+        "id": 81847,
+        "node_id": "MDQ6VXNlcjgxODQ3",
+        "avatar_url": "https://avatars.githubusercontent.com/u/81847?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/claude",
+        "html_url": "https://github.com/claude",
+        "followers_url": "https://api.github.com/users/claude/followers",
+        "following_url": "https://api.github.com/users/claude/following{/other_user}",
+        "gists_url": "https://api.github.com/users/claude/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/claude/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/claude/subscriptions",
+        "organizations_url": "https://api.github.com/users/claude/orgs",
+        "repos_url": "https://api.github.com/users/claude/repos",
+        "events_url": "https://api.github.com/users/claude/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/claude/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "parents": [
+        {
+          "sha": "9be624eba14599756987a92c17a06c50d6f8dc28",
+          "url": "https://api.github.com/repos/truewire-dev/truewire/commits/9be624eba14599756987a92c17a06c50d6f8dc28",
+          "html_url": "https://github.com/truewire-dev/truewire/commit/9be624eba14599756987a92c17a06c50d6f8dc28"
+        }
+      ]
+    }
+  ]
+}

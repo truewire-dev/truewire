@@ -1,0 +1,94 @@
+{
+  "docs": "https://docs.github.com/en/rest/commits/commits#list-commits",
+  "meta": {
+    "public": true
+  },
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/repos/{owner}/{repo}/commits",
+    "method": "GET",
+    "description": "List commits reachable from a branch or sha, newest first. Pages are joined by `page`/`per_page`; the generated `list_commits_paged` walks them until a short page.",
+    "request": {
+      "title": "ListCommitsRequest",
+      "type": "object",
+      "description": "Which repository, an optional filter, and which page.",
+      "properties": {
+        "owner": {
+          "type": "string",
+          "description": "Account owner of the repository, case-insensitive."
+        },
+        "repo": {
+          "type": "string",
+          "description": "Repository name without the `.git` extension, case-insensitive."
+        },
+        "sha": {
+          "type": "string",
+          "description": "Branch name or commit sha to start from; the default branch when omitted."
+        },
+        "path": {
+          "type": "string",
+          "description": "Only commits touching this file path."
+        },
+        "author": {
+          "type": "string",
+          "description": "Only commits by this GitHub login or email."
+        },
+        "since": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Only commits after this instant."
+        },
+        "until": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Only commits before this instant."
+        },
+        "per_page": {
+          "type": "integer",
+          "description": "Results per page, at most 100.",
+          "default": 30,
+          "minimum": 1,
+          "maximum": 100
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number of the results to fetch, starting at 1.",
+          "default": 1,
+          "minimum": 1
+        }
+      },
+      "required": [
+        "owner",
+        "repo"
+      ]
+    },
+    "response": {
+      "title": "Commits",
+      "type": "array",
+      "description": "One page of commits.",
+      "items": {
+        "$ref": "Commit",
+        "description": "One commit."
+      }
+    }
+  },
+  "pagination": {
+    "strategy": "page",
+    "index": {
+      "parameter": "page",
+      "start": 1
+    },
+    "size": {
+      "parameter": "per_page"
+    },
+    "done": {
+      "kind": "short_page"
+    }
+  },
+  "notes": [
+    "The `page1`..`page4` examples are one real walk over the repository at 11 commits with `per_page: 3`: three full pages and a short fourth, which is what ends `list_commits_paged`."
+  ]
+}

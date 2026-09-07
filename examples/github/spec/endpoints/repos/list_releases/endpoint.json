@@ -1,0 +1,155 @@
+{
+  "docs": "https://docs.github.com/en/rest/releases/releases#list-releases",
+  "meta": {
+    "public": true
+  },
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/repos/{owner}/{repo}/releases",
+    "method": "GET",
+    "description": "List releases, newest first. Includes drafts and pre-releases the caller can see.",
+    "request": {
+      "title": "ListReleasesRequest",
+      "type": "object",
+      "description": "Which repository, and which page.",
+      "properties": {
+        "owner": {
+          "type": "string",
+          "description": "Account owner of the repository, case-insensitive."
+        },
+        "repo": {
+          "type": "string",
+          "description": "Repository name without the `.git` extension, case-insensitive."
+        },
+        "per_page": {
+          "type": "integer",
+          "description": "Results per page, at most 100.",
+          "default": 30,
+          "minimum": 1,
+          "maximum": 100
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number of the results to fetch, starting at 1.",
+          "default": 1,
+          "minimum": 1
+        }
+      },
+      "required": [
+        "owner",
+        "repo"
+      ]
+    },
+    "response": {
+      "title": "Releases",
+      "type": "array",
+      "description": "One page of releases.",
+      "items": {
+        "title": "Release",
+        "type": "object",
+        "description": "A GitHub release.",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Release id."
+          },
+          "node_id": {
+            "type": "string",
+            "description": "GraphQL node id."
+          },
+          "tag_name": {
+            "type": "string",
+            "description": "Tag the release points at."
+          },
+          "target_commitish": {
+            "type": "string",
+            "description": "Branch or sha the tag was created from."
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "Release title, when set."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Release title, when set."
+          },
+          "body": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "Release notes in Markdown, when set."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Release notes in Markdown, when set."
+          },
+          "draft": {
+            "type": "boolean",
+            "description": "Whether the release is an unpublished draft."
+          },
+          "prerelease": {
+            "type": "boolean",
+            "description": "Whether the release is marked as a pre-release."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the release object was created."
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "description": "When the release was published; absent for drafts."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the release was published; absent for drafts."
+          },
+          "html_url": {
+            "type": "string",
+            "description": "Web page of the release."
+          },
+          "author": {
+            "$ref": "SimpleUser",
+            "description": "Account that created the release."
+          }
+        },
+        "required": [
+          "id",
+          "tag_name",
+          "draft",
+          "prerelease",
+          "created_at",
+          "html_url",
+          "author"
+        ]
+      }
+    }
+  },
+  "pagination": {
+    "strategy": "page",
+    "index": {
+      "parameter": "page",
+      "start": 1
+    },
+    "size": {
+      "parameter": "per_page"
+    },
+    "done": {
+      "kind": "short_page"
+    }
+  }
+}

@@ -8,31 +8,31 @@ Status words: **exists** (working in the system Truewire was extracted from, nee
 
 ### 1. Spec format, `truewire check`, `truewire examples`
 
-Status: exists. The directory-per-endpoint format, its 18 lint rules and the paired-example coverage report are the core of the tool. The work is removing every assumption about the original monorepo's layout and making the checks read from a `truewire.toml` project root instead.
+Status: shipped in 0.1.0 (2026-09-07). The directory-per-endpoint format, its 18 lint rules and the paired-example coverage report read from a `truewire.toml` project root; nothing assumes the original monorepo's layout.
 
 Done when: `truewire check` and `truewire examples --require-verified` run against a fresh `truewire init` project with zero references to any path convention other than `truewire.toml`, and the existing rule tests pass unchanged.
 
 ### 2. Mock server from recorded examples (HTTP and WebSocket)
 
-Status: exists. The mock replays recorded examples over real HTTP and WS: subscribe and unsubscribe lifecycle, push-on-connect, push-after-RPC, binary frames, correlation ids, declared redaction, and a 409 when more than one example matches a request.
+Status: shipped in 0.1.0 (2026-09-07). The mock replays recorded examples over real HTTP and WS: subscribe and unsubscribe lifecycle, push-on-connect, push-after-RPC, binary frames, correlation ids, declared redaction, and a 409 when more than one example matches a request.
 
 Done when: `truewire mock` serves a project's examples from the CLI with a printed base URL, a generated client's test suite passes against it for both transports, and the ambiguity and unexpected-parameter responses are documented.
 
 ### 3. Python generator and `truewire-core` runtime
 
-Status: exists. The generator emits request/reply and stream endpoints, `validate` and `transport` keywords, `_paged` walkers, composed router classes and docstrings. `truewire-core` forks from the runtime the original clients use and is free to diverge.
+Status: shipped in 0.1.0 (2026-09-07); `truewire-core` is on PyPI. The generator emits request/reply and stream endpoints, `validate` and `transport` keywords, `_paged` walkers (awaitable `PaginatedResponse` for token, seek, page-with-total and page-until-short shapes), composed router classes and docstrings. Proven on `examples/kraken` (recorded WebSocket-heavy) and `examples/github` (captured live, paginated REST).
 
 Done when: `truewire generate python` produces a package that imports, type-checks under pyright strict, and passes a mock-backed test suite, for one imported OpenAPI project and one recorded WebSocket-heavy project. `truewire-core` is on PyPI.
 
 ### 4. `truewire import openapi`
 
-Status: new. Reads an OpenAPI 3.0 or 3.1 document and writes one endpoint directory per operation, mapping `parameters` and `requestBody` to the request schema, the 2xx response to the response schema, and any `examples` or `example` entries to recorded example pairs.
+Status: shipped in 0.1.0 (2026-09-07). Reads an OpenAPI 3.0 or 3.1 document and writes one endpoint directory per operation, mapping `parameters` and `requestBody` to the request schema, the 2xx response to the response schema, and any `examples` or `example` entries to recorded example pairs, declared `not_captured` where the document had none.
 
 Done when: the Swagger Petstore document imports, `truewire check` reports zero errors on the result, and the imported examples replay through the mock server against the generated client.
 
 ### 5. `truewire init` and the `truewire.toml` project layout
 
-Status: new. One project file at the root names the package, the spec directory, the output directory and the generator options. It replaces the original monorepo's per-client conventions. See ADR 0009.
+Status: shipped in 0.1.0 (2026-09-07). One project file at the root names the package, the spec directory, the output directory and the generator options; `truewire init` also writes a `pyproject.toml` so the generated client installs with `pip install -e .`. See ADR 0009.
 
 Done when: `truewire init <name>` produces a project that passes `check`, `generate` and `mock` with no edits, and every CLI command locates its inputs through `truewire.toml`.
 

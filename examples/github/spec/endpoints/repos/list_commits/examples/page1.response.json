@@ -1,0 +1,261 @@
+{
+  "status": 200,
+  "payload": [
+    {
+      "sha": "934a718509b0cfd1244db90821201afbbb728797",
+      "node_id": "C_kwDOUQnPANoAKDkzNGE3MTg1MDliMGNmZDEyNDRkYjkwODIxMjAxYWZiYmI3Mjg3OTc",
+      "commit": {
+        "author": {
+          "name": "Marcel Claramunt Bassegoda",
+          "email": "marcel@marcelc.uk",
+          "date": "2026-09-07T09:49:53Z"
+        },
+        "committer": {
+          "name": "GitHub",
+          "email": "noreply@github.com",
+          "date": "2026-09-07T09:49:53Z"
+        },
+        "message": "Release truewire 0.1.0 (#2)\n\nRelease truewire 0.1.0",
+        "tree": {
+          "sha": "f0e26f015b689753b5546331d6d5d72f226226c8",
+          "url": "https://api.github.com/repos/truewire-dev/truewire/git/trees/f0e26f015b689753b5546331d6d5d72f226226c8"
+        },
+        "url": "https://api.github.com/repos/truewire-dev/truewire/git/commits/934a718509b0cfd1244db90821201afbbb728797",
+        "comment_count": 0,
+        "verification": {
+          "verified": true,
+          "reason": "valid",
+          "signature": "-----BEGIN PGP SIGNATURE-----\n\nwsFcBAABCAAQBQJqnojBCRC1aQ7uu5UhlAAAMScQAInA/TR1ROd/eTAlM/d/oJwD\noWgzaznrWXFq9k+kJZC2hB4MA3fwnPQPU9ipsWHhGsxOecaybzV9EclHfTw65Qmi\nxk8ksFZzjNHRUrrUe9ze9MABwwVhi6LtOOsI4nQ9Or+aOQUWDpE/cJnv2N4Om8gP\npDxoiNB5rr3CzBhLOlWMo4Fy7jezR0wLC47CGirA5d6l4qb6tJDafj44I4KQrNWL\nrWUVTgsdHz7DhqKUkiY6UAKjFWZpLYqp3s1f0fb7+YINXA0zvls0QuHwiBsf8Zlu\nNLSzFqeMYN8Ug0B+rBVu+I/rk1ExRd5B9lDqsakN85ZXrKfMisZ+OZsb6pFfUGbW\nMQOxdmOGxDeklL9qQH1ChDgAFKxW3i5E+saaq4437C7kgTB5zG76NzyKLe2NL4T2\nX4Cq4Ic/lrI/YThGLPn74a1Ii496KubEEegD0Q2R28feGsv+sh3cYn0pAPfJ37XZ\n4xhTL6EbXF8jfp8l4Tb839SR+RVuq+vsRqc6fGMNQJ3H1LabXq5cLezTAbZiV3Lg\nSkSTtfjJJXAkHgK12QYn9JIYRBjLGQdIBb94I1++3JnmuX2W7mcoXHPAEtA5f9xf\nzwRWlSmcCQYVinfLKBFCkBgEfghe2DwloBY/0zvKroE6DV60KQeNQfZNQAOC9VGn\n4PMZopnKOgghHGqIisFz\n=PUS4\n-----END PGP SIGNATURE-----\n",
+          "payload": "tree f0e26f015b689753b5546331d6d5d72f226226c8\nparent 7c7addbce7c24b7246e190d1d453963fdb4cff8b\nparent 127d254f9b5525b5ef47d6dc8742a5794d4fcec6\nauthor Marcel Claramunt Bassegoda <marcel@marcelc.uk> 1788774593 +0200\ncommitter GitHub <noreply@github.com> 1788774593 +0200\n\nRelease truewire 0.1.0 (#2)\n\nRelease truewire 0.1.0",
+          "verified_at": "2026-09-07T09:49:53Z"
+        }
+      },
+      "url": "https://api.github.com/repos/truewire-dev/truewire/commits/934a718509b0cfd1244db90821201afbbb728797",
+      "html_url": "https://github.com/truewire-dev/truewire/commit/934a718509b0cfd1244db90821201afbbb728797",
+      "comments_url": "https://api.github.com/repos/truewire-dev/truewire/commits/934a718509b0cfd1244db90821201afbbb728797/comments",
+      "author": {
+        "login": "marciclabas",
+        "id": 77667923,
+        "node_id": "MDQ6VXNlcjc3NjY3OTIz",
+        "avatar_url": "https://avatars.githubusercontent.com/u/77667923?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/marciclabas",
+        "html_url": "https://github.com/marciclabas",
+        "followers_url": "https://api.github.com/users/marciclabas/followers",
+        "following_url": "https://api.github.com/users/marciclabas/following{/other_user}",
+        "gists_url": "https://api.github.com/users/marciclabas/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/marciclabas/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/marciclabas/subscriptions",
+        "organizations_url": "https://api.github.com/users/marciclabas/orgs",
+        "repos_url": "https://api.github.com/users/marciclabas/repos",
+        "events_url": "https://api.github.com/users/marciclabas/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/marciclabas/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "committer": {
+        "login": "web-flow",
+        "id": 19864447,
+        "node_id": "MDQ6VXNlcjE5ODY0NDQ3",
+        "avatar_url": "https://avatars.githubusercontent.com/u/19864447?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/web-flow",
+        "html_url": "https://github.com/web-flow",
+        "followers_url": "https://api.github.com/users/web-flow/followers",
+        "following_url": "https://api.github.com/users/web-flow/following{/other_user}",
+        "gists_url": "https://api.github.com/users/web-flow/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/web-flow/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/web-flow/subscriptions",
+        "organizations_url": "https://api.github.com/users/web-flow/orgs",
+        "repos_url": "https://api.github.com/users/web-flow/repos",
+        "events_url": "https://api.github.com/users/web-flow/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/web-flow/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "parents": [
+        {
+          "sha": "7c7addbce7c24b7246e190d1d453963fdb4cff8b",
+          "url": "https://api.github.com/repos/truewire-dev/truewire/commits/7c7addbce7c24b7246e190d1d453963fdb4cff8b",
+          "html_url": "https://github.com/truewire-dev/truewire/commit/7c7addbce7c24b7246e190d1d453963fdb4cff8b"
+        },
+        {
+          "sha": "127d254f9b5525b5ef47d6dc8742a5794d4fcec6",
+          "url": "https://api.github.com/repos/truewire-dev/truewire/commits/127d254f9b5525b5ef47d6dc8742a5794d4fcec6",
+          "html_url": "https://github.com/truewire-dev/truewire/commit/127d254f9b5525b5ef47d6dc8742a5794d4fcec6"
+        }
+      ]
+    },
+    {
+      "sha": "7c7addbce7c24b7246e190d1d453963fdb4cff8b",
+      "node_id": "C_kwDOUQnPANoAKDdjN2FkZGJjZTdjMjRiNzI0NmUxOTBkMWQ0NTM5NjNmZGI0Y2ZmOGI",
+      "commit": {
+        "author": {
+          "name": "Marcel Claramunt Bassegoda",
+          "email": "marcel@marcelc.uk",
+          "date": "2026-09-07T09:48:20Z"
+        },
+        "committer": {
+          "name": "GitHub",
+          "email": "noreply@github.com",
+          "date": "2026-09-07T09:48:20Z"
+        },
+        "message": "Release truewire-core 0.1.0 (#1)\n\nRelease truewire-core 0.1.0",
+        "tree": {
+          "sha": "a536c04b72d8826681520c13a0773d485283c237",
+          "url": "https://api.github.com/repos/truewire-dev/truewire/git/trees/a536c04b72d8826681520c13a0773d485283c237"
+        },
+        "url": "https://api.github.com/repos/truewire-dev/truewire/git/commits/7c7addbce7c24b7246e190d1d453963fdb4cff8b",
+        "comment_count": 0,
+        "verification": {
+          "verified": true,
+          "reason": "valid",
+          "signature": "-----BEGIN PGP SIGNATURE-----\n\nwsFcBAABCAAQBQJqnohkCRC1aQ7uu5UhlAAA1dgQAFNPym9EdJqBbSRU/v3peLPN\nRkGmkGv8C6iDGIcagRZYyc7S2uUEFDa8Ieba0y6qVVbw2hsBbWhU+g7DoDV5hfBu\n7GsWwVUs8JAcZVstIMrhy0bZDFTTwDr72xoh+zmkErhZpBaCtO7Tj6khzr8LefVw\n4LrZNHk7sVehFaXp2M6caWEBEj83cNiTrQQ9pR85t86uXBLElSbQrnF5ZfxjvWzC\nHh+sBXgk9KRK7AIYFVvqkag7GRPgmnL9LPc1QwL0o7CEaU1XRmKxdtHKJyhUR4/A\nWa2Yfnr/O/hPNzYg7+M/zWDHoRH8mqVt8AoxgNOc58EUHyEJ3vRkcOunLm6coSbp\nT4uzgA4oFeLPYufvLS8N8gUCUxPEKozBYsBWw/Z8dMPheIKoRzoGQXGBef+HPMov\nnzAbHMnqftdq8GvEB11yGnQfObjwT7K9NQB9NdnhCWnCWTAMI9MoP2R+uFfr4c4P\nQU+6RpNjSXO3S4HgSQC7LLZL7+TcVMbqpzkNUp9GgwAZ/ErVnQrVygmozGBer1dN\nzmuvFrexxnxmd/lahFYkC7gm0ALmxQY9ntzT7O1d9MtDKXEjFRNgk5bHWrVUZ6C0\nwOOxgZwShFgHkKg+tjQHp8cKY8l1xdVyGweEDLlZUPVQqJGZCBRJq11U4Vt7jAjm\nSVqqiHlOszs94ruNYPVH\n=8tO5\n-----END PGP SIGNATURE-----\n",
+          "payload": "tree a536c04b72d8826681520c13a0773d485283c237\nparent 3565a0d387d4b48f39d3a6afed0e46fac8c0da13\nparent e424863368aa7bb654c954540004bffa87bc7733\nauthor Marcel Claramunt Bassegoda <marcel@marcelc.uk> 1788774500 +0200\ncommitter GitHub <noreply@github.com> 1788774500 +0200\n\nRelease truewire-core 0.1.0 (#1)\n\nRelease truewire-core 0.1.0",
+          "verified_at": "2026-09-07T09:48:21Z"
+        }
+      },
+      "url": "https://api.github.com/repos/truewire-dev/truewire/commits/7c7addbce7c24b7246e190d1d453963fdb4cff8b",
+      "html_url": "https://github.com/truewire-dev/truewire/commit/7c7addbce7c24b7246e190d1d453963fdb4cff8b",
+      "comments_url": "https://api.github.com/repos/truewire-dev/truewire/commits/7c7addbce7c24b7246e190d1d453963fdb4cff8b/comments",
+      "author": {
+        "login": "marciclabas",
+        "id": 77667923,
+        "node_id": "MDQ6VXNlcjc3NjY3OTIz",
+        "avatar_url": "https://avatars.githubusercontent.com/u/77667923?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/marciclabas",
+        "html_url": "https://github.com/marciclabas",
+        "followers_url": "https://api.github.com/users/marciclabas/followers",
+        "following_url": "https://api.github.com/users/marciclabas/following{/other_user}",
+        "gists_url": "https://api.github.com/users/marciclabas/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/marciclabas/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/marciclabas/subscriptions",
+        "organizations_url": "https://api.github.com/users/marciclabas/orgs",
+        "repos_url": "https://api.github.com/users/marciclabas/repos",
+        "events_url": "https://api.github.com/users/marciclabas/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/marciclabas/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "committer": {
+        "login": "web-flow",
+        "id": 19864447,
+        "node_id": "MDQ6VXNlcjE5ODY0NDQ3",
+        "avatar_url": "https://avatars.githubusercontent.com/u/19864447?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/web-flow",
+        "html_url": "https://github.com/web-flow",
+        "followers_url": "https://api.github.com/users/web-flow/followers",
+        "following_url": "https://api.github.com/users/web-flow/following{/other_user}",
+        "gists_url": "https://api.github.com/users/web-flow/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/web-flow/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/web-flow/subscriptions",
+        "organizations_url": "https://api.github.com/users/web-flow/orgs",
+        "repos_url": "https://api.github.com/users/web-flow/repos",
+        "events_url": "https://api.github.com/users/web-flow/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/web-flow/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "parents": [
+        {
+          "sha": "3565a0d387d4b48f39d3a6afed0e46fac8c0da13",
+          "url": "https://api.github.com/repos/truewire-dev/truewire/commits/3565a0d387d4b48f39d3a6afed0e46fac8c0da13",
+          "html_url": "https://github.com/truewire-dev/truewire/commit/3565a0d387d4b48f39d3a6afed0e46fac8c0da13"
+        },
+        {
+          "sha": "e424863368aa7bb654c954540004bffa87bc7733",
+          "url": "https://api.github.com/repos/truewire-dev/truewire/commits/e424863368aa7bb654c954540004bffa87bc7733",
+          "html_url": "https://github.com/truewire-dev/truewire/commit/e424863368aa7bb654c954540004bffa87bc7733"
+        }
+      ]
+    },
+    {
+      "sha": "127d254f9b5525b5ef47d6dc8742a5794d4fcec6",
+      "node_id": "C_kwDOUQnPANoAKDEyN2QyNTRmOWI1NTI1YjVlZjQ3ZDZkYzg3NDJhNTc5NGQ0ZmNlYzY",
+      "commit": {
+        "author": {
+          "name": "Truewire CEO",
+          "email": "marci.clabas@gmail.com",
+          "date": "2026-09-07T09:47:03Z"
+        },
+        "committer": {
+          "name": "Truewire CEO",
+          "email": "marci.clabas@gmail.com",
+          "date": "2026-09-07T09:47:03Z"
+        },
+        "message": "Release truewire 0.1.0\n\nCo-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01VzFz3bSjxtpXjWmaffrexN",
+        "tree": {
+          "sha": "af17e09492fb209c15d1f9c567e1f5a59cc09d25",
+          "url": "https://api.github.com/repos/truewire-dev/truewire/git/trees/af17e09492fb209c15d1f9c567e1f5a59cc09d25"
+        },
+        "url": "https://api.github.com/repos/truewire-dev/truewire/git/commits/127d254f9b5525b5ef47d6dc8742a5794d4fcec6",
+        "comment_count": 0,
+        "verification": {
+          "verified": false,
+          "reason": "unknown_key",
+          "signature": "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgrLzsfFISF4by8Q+FKz27YpkK1USsBB+m\namu1QkJnbDsAAAADZ2l0AAAAAAAAAAZzaGE1MTIAAABTAAAAC3NzaC1lZDI1NTE5AAAAQKxtMJIG\nJd4ZUKprSDnyKSXATRpsBC1CJW6wRYAmgvu6R5STHbvdsxBaBIAnEM+3F/EyJkRHAxX3a+sizn9r\n1ws=\n-----END SSH SIGNATURE-----",
+          "payload": "tree af17e09492fb209c15d1f9c567e1f5a59cc09d25\nparent 3565a0d387d4b48f39d3a6afed0e46fac8c0da13\nauthor Truewire CEO <marci.clabas@gmail.com> 1788774423 +0000\ncommitter Truewire CEO <marci.clabas@gmail.com> 1788774423 +0000\n\nRelease truewire 0.1.0\n\nCo-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01VzFz3bSjxtpXjWmaffrexN\n",
+          "verified_at": null
+        }
+      },
+      "url": "https://api.github.com/repos/truewire-dev/truewire/commits/127d254f9b5525b5ef47d6dc8742a5794d4fcec6",
+      "html_url": "https://github.com/truewire-dev/truewire/commit/127d254f9b5525b5ef47d6dc8742a5794d4fcec6",
+      "comments_url": "https://api.github.com/repos/truewire-dev/truewire/commits/127d254f9b5525b5ef47d6dc8742a5794d4fcec6/comments",
+      "author": {
+        "login": "marciclabas",
+        "id": 77667923,
+        "node_id": "MDQ6VXNlcjc3NjY3OTIz",
+        "avatar_url": "https://avatars.githubusercontent.com/u/77667923?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/marciclabas",
+        "html_url": "https://github.com/marciclabas",
+        "followers_url": "https://api.github.com/users/marciclabas/followers",
+        "following_url": "https://api.github.com/users/marciclabas/following{/other_user}",
+        "gists_url": "https://api.github.com/users/marciclabas/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/marciclabas/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/marciclabas/subscriptions",
+        "organizations_url": "https://api.github.com/users/marciclabas/orgs",
+        "repos_url": "https://api.github.com/users/marciclabas/repos",
+        "events_url": "https://api.github.com/users/marciclabas/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/marciclabas/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "committer": {
+        "login": "marciclabas",
+        "id": 77667923,
+        "node_id": "MDQ6VXNlcjc3NjY3OTIz",
+        "avatar_url": "https://avatars.githubusercontent.com/u/77667923?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/marciclabas",
+        "html_url": "https://github.com/marciclabas",
+        "followers_url": "https://api.github.com/users/marciclabas/followers",
+        "following_url": "https://api.github.com/users/marciclabas/following{/other_user}",
+        "gists_url": "https://api.github.com/users/marciclabas/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/marciclabas/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/marciclabas/subscriptions",
+        "organizations_url": "https://api.github.com/users/marciclabas/orgs",
+        "repos_url": "https://api.github.com/users/marciclabas/repos",
+        "events_url": "https://api.github.com/users/marciclabas/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/marciclabas/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "parents": [
+        {
+          "sha": "3565a0d387d4b48f39d3a6afed0e46fac8c0da13",
+          "url": "https://api.github.com/repos/truewire-dev/truewire/commits/3565a0d387d4b48f39d3a6afed0e46fac8c0da13",
+          "html_url": "https://github.com/truewire-dev/truewire/commit/3565a0d387d4b48f39d3a6afed0e46fac8c0da13"
+        }
+      ]
+    }
+  ]
+}

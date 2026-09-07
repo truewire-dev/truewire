@@ -1,0 +1,19 @@
+[project]
+name = "github"
+
+[spec]
+dir = "spec"
+
+[cores.default]
+meta = { type = "object", properties = { public = { type = "boolean" } }, additionalProperties = false }
+
+[python]
+package = "github"
+src = "src"
+name = "GitHub"
+
+[python.cores.root]
+base = "github.core:ClientBase"
+
+[python.cores.default]
+base = "github.core:Endpoint"

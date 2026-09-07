@@ -1,0 +1,5 @@
+{
+  "description": "Issues and, through the same list, pull requests.",
+  "upstream": "https://docs.github.com/en/rest/issues",
+  "core": "default"
+}

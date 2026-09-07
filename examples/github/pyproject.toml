@@ -1,0 +1,16 @@
+[project]
+name = "github"
+version = "0.1.0"
+description = "Typed client generated with Truewire."
+requires-python = ">=3.11"
+dependencies = ["truewire-core>=0.1.0"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+github = ["py.typed"]

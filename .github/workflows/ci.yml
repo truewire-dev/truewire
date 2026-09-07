@@ -24,3 +24,25 @@ jobs:
         run: .venv/bin/python -m pytest packages/core-python/test -q
       - name: Toolchain tests
         run: .venv/bin/python -m pytest packages/truewire/test -q
+
+  examples:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        example: [kraken, github]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - name: Install
+        run: |
+          uv venv --python 3.12 .venv
+          uv pip install --python .venv/bin/python -e packages/core-python[dev] -e 'packages/truewire[dev]'
+      - name: Check
+        working-directory: examples/${{ matrix.example }}
+        run: ../../.venv/bin/truewire check
+      - name: Standards
+        working-directory: examples/${{ matrix.example }}
+        run: ../../.venv/bin/truewire standards
+      - name: Test
+        working-directory: examples/${{ matrix.example }}
+        run: PYTHONPATH=src ../../.venv/bin/python -m pytest -q

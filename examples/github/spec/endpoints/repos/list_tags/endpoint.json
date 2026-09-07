@@ -1,0 +1,96 @@
+{
+  "docs": "https://docs.github.com/en/rest/repos/repos#list-repository-tags",
+  "meta": {
+    "public": true
+  },
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/repos/{owner}/{repo}/tags",
+    "method": "GET",
+    "description": "List repository tags, newest first.",
+    "request": {
+      "title": "ListTagsRequest",
+      "type": "object",
+      "description": "Which repository, and which page.",
+      "properties": {
+        "owner": {
+          "type": "string",
+          "description": "Account owner of the repository, case-insensitive."
+        },
+        "repo": {
+          "type": "string",
+          "description": "Repository name without the `.git` extension, case-insensitive."
+        },
+        "per_page": {
+          "type": "integer",
+          "description": "Results per page, at most 100.",
+          "default": 30,
+          "minimum": 1,
+          "maximum": 100
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number of the results to fetch, starting at 1.",
+          "default": 1,
+          "minimum": 1
+        }
+      },
+      "required": [
+        "owner",
+        "repo"
+      ]
+    },
+    "response": {
+      "title": "Tags",
+      "type": "array",
+      "description": "One page of tags.",
+      "items": {
+        "title": "Tag",
+        "type": "object",
+        "description": "A git tag and the commit it points at.",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Tag name."
+          },
+          "zipball_url": {
+            "type": "string",
+            "description": "Zip archive of the tagged tree."
+          },
+          "tarball_url": {
+            "type": "string",
+            "description": "Tar archive of the tagged tree."
+          },
+          "commit": {
+            "$ref": "CommitRef",
+            "description": "Tagged commit."
+          },
+          "node_id": {
+            "type": "string",
+            "description": "GraphQL node id."
+          }
+        },
+        "required": [
+          "name",
+          "commit"
+        ]
+      }
+    }
+  },
+  "pagination": {
+    "strategy": "page",
+    "index": {
+      "parameter": "page",
+      "start": 1
+    },
+    "size": {
+      "parameter": "per_page"
+    },
+    "done": {
+      "kind": "short_page"
+    }
+  }
+}

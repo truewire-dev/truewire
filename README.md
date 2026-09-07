@@ -69,6 +69,7 @@ truewire mcp --project petstore --new base_url=https://petstore.example.com/v1
 | Python generator and `truewire-core` | `truewire generate python` emits async endpoint methods with typed `TypedDict` responses, `validate` and `transport` keywords, `_paged` walkers, and router classes with docstrings. `truewire-core` is the small MIT runtime: HTTP, WebSocket streams and RPC, validation, paging, timestamps, errors. |
 | Standards | `truewire standards` runs the checks that guard a client's public surface: docstring shape, duplicate schemas, secret placeholders in examples, router coverage, no `__call__` classes. |
 | Docs | `truewire docs check` type-checks every code block in your README and docs against the generated package, so an example that no longer compiles fails CI. |
+| Examples | `examples/kraken`: 75 endpoints over REST and WebSocket, hand-written core, 63 replay tests. `examples/github`: the GitHub REST API captured live, page-walked, 14 tests. Both kept green in CI. |
 | Agent skills | Staged skill files (discover, spec, implement, document, review) so a coding agent can take a docs URL and produce a verified spec, a mock, a client and checked docs. |
 
 ## How it compares

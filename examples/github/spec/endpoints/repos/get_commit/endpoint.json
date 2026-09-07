@@ -1,0 +1,187 @@
+{
+  "docs": "https://docs.github.com/en/rest/commits/commits#get-a-commit",
+  "meta": {
+    "public": true
+  },
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/repos/{owner}/{repo}/commits/{ref}",
+    "method": "GET",
+    "description": "Get one commit with its diff statistics and changed files.",
+    "request": {
+      "title": "GetCommitRequest",
+      "type": "object",
+      "description": "Which commit.",
+      "properties": {
+        "owner": {
+          "type": "string",
+          "description": "Account owner of the repository, case-insensitive."
+        },
+        "repo": {
+          "type": "string",
+          "description": "Repository name without the `.git` extension, case-insensitive."
+        },
+        "ref": {
+          "type": "string",
+          "description": "Commit sha, branch name or tag name."
+        }
+      },
+      "required": [
+        "owner",
+        "repo",
+        "ref"
+      ]
+    },
+    "response": {
+      "title": "CommitDetail",
+      "type": "object",
+      "description": "A commit with diff statistics and files.",
+      "properties": {
+        "sha": {
+          "type": "string",
+          "description": "Commit sha."
+        },
+        "node_id": {
+          "type": "string",
+          "description": "GraphQL node id."
+        },
+        "html_url": {
+          "type": "string",
+          "description": "Web page of the commit."
+        },
+        "commit": {
+          "$ref": "GitCommit",
+          "description": "The underlying git commit."
+        },
+        "author": {
+          "anyOf": [
+            {
+              "$ref": "SimpleUser",
+              "description": "GitHub account matched to the author, when known."
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "GitHub account matched to the author, when known."
+        },
+        "committer": {
+          "anyOf": [
+            {
+              "$ref": "SimpleUser",
+              "description": "GitHub account matched to the committer, when known."
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "GitHub account matched to the committer, when known."
+        },
+        "parents": {
+          "title": "CommitParents",
+          "type": "array",
+          "description": "Parent commits.",
+          "items": {
+            "$ref": "CommitRef",
+            "description": "One parent."
+          }
+        },
+        "stats": {
+          "title": "CommitStats",
+          "type": "object",
+          "description": "Line counts over the whole diff.",
+          "properties": {
+            "additions": {
+              "type": "integer",
+              "description": "Lines added."
+            },
+            "deletions": {
+              "type": "integer",
+              "description": "Lines deleted."
+            },
+            "total": {
+              "type": "integer",
+              "description": "Lines added plus deleted."
+            }
+          },
+          "required": [
+            "additions",
+            "deletions",
+            "total"
+          ]
+        },
+        "files": {
+          "title": "CommitFiles",
+          "type": "array",
+          "description": "Files changed by the commit.",
+          "items": {
+            "title": "CommitFile",
+            "type": "object",
+            "description": "One changed file.",
+            "properties": {
+              "sha": {
+                "type": "string",
+                "description": "Blob sha after the change."
+              },
+              "filename": {
+                "type": "string",
+                "description": "Path of the file."
+              },
+              "status": {
+                "type": "string",
+                "description": "What happened to the file.",
+                "enum": [
+                  "added",
+                  "removed",
+                  "modified",
+                  "renamed",
+                  "copied",
+                  "changed",
+                  "unchanged"
+                ]
+              },
+              "additions": {
+                "type": "integer",
+                "description": "Lines added."
+              },
+              "deletions": {
+                "type": "integer",
+                "description": "Lines deleted."
+              },
+              "changes": {
+                "type": "integer",
+                "description": "Lines added plus deleted."
+              },
+              "blob_url": {
+                "type": "string",
+                "description": "Web page of the blob."
+              },
+              "patch": {
+                "type": "string",
+                "description": "Unified diff hunk; absent for binary or very large files."
+              }
+            },
+            "required": [
+              "sha",
+              "filename",
+              "status",
+              "additions",
+              "deletions",
+              "changes"
+            ]
+          }
+        }
+      },
+      "required": [
+        "sha",
+        "commit",
+        "parents",
+        "stats",
+        "files"
+      ]
+    }
+  }
+}

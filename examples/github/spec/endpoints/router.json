@@ -1,0 +1,5 @@
+{
+  "description": "GitHub REST API, repository-scoped endpoints: repositories, commits, tags, releases and issues. Every recorded example is a live capture from api.github.com against truewire-dev/truewire.",
+  "upstream": "https://docs.github.com/en/rest",
+  "core": "root"
+}

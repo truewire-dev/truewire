@@ -1,0 +1,10 @@
+{
+  "description": "Second closed pull request",
+  "request": {
+    "owner": "truewire-dev",
+    "repo": "truewire",
+    "state": "all",
+    "per_page": 1,
+    "page": 2
+  }
+}

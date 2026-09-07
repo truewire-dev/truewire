@@ -1,0 +1,109 @@
+{
+  "status": 200,
+  "payload": {
+    "sha": "934a718509b0cfd1244db90821201afbbb728797",
+    "node_id": "C_kwDOUQnPANoAKDkzNGE3MTg1MDliMGNmZDEyNDRkYjkwODIxMjAxYWZiYmI3Mjg3OTc",
+    "commit": {
+      "author": {
+        "name": "Marcel Claramunt Bassegoda",
+        "email": "marcel@marcelc.uk",
+        "date": "2026-09-07T09:49:53Z"
+      },
+      "committer": {
+        "name": "GitHub",
+        "email": "noreply@github.com",
+        "date": "2026-09-07T09:49:53Z"
+      },
+      "message": "Release truewire 0.1.0 (#2)\n\nRelease truewire 0.1.0",
+      "tree": {
+        "sha": "f0e26f015b689753b5546331d6d5d72f226226c8",
+        "url": "https://api.github.com/repos/truewire-dev/truewire/git/trees/f0e26f015b689753b5546331d6d5d72f226226c8"
+      },
+      "url": "https://api.github.com/repos/truewire-dev/truewire/git/commits/934a718509b0cfd1244db90821201afbbb728797",
+      "comment_count": 0,
+      "verification": {
+        "verified": true,
+        "reason": "valid",
+        "signature": "-----BEGIN PGP SIGNATURE-----\n\nwsFcBAABCAAQBQJqnojBCRC1aQ7uu5UhlAAAMScQAInA/TR1ROd/eTAlM/d/oJwD\noWgzaznrWXFq9k+kJZC2hB4MA3fwnPQPU9ipsWHhGsxOecaybzV9EclHfTw65Qmi\nxk8ksFZzjNHRUrrUe9ze9MABwwVhi6LtOOsI4nQ9Or+aOQUWDpE/cJnv2N4Om8gP\npDxoiNB5rr3CzBhLOlWMo4Fy7jezR0wLC47CGirA5d6l4qb6tJDafj44I4KQrNWL\nrWUVTgsdHz7DhqKUkiY6UAKjFWZpLYqp3s1f0fb7+YINXA0zvls0QuHwiBsf8Zlu\nNLSzFqeMYN8Ug0B+rBVu+I/rk1ExRd5B9lDqsakN85ZXrKfMisZ+OZsb6pFfUGbW\nMQOxdmOGxDeklL9qQH1ChDgAFKxW3i5E+saaq4437C7kgTB5zG76NzyKLe2NL4T2\nX4Cq4Ic/lrI/YThGLPn74a1Ii496KubEEegD0Q2R28feGsv+sh3cYn0pAPfJ37XZ\n4xhTL6EbXF8jfp8l4Tb839SR+RVuq+vsRqc6fGMNQJ3H1LabXq5cLezTAbZiV3Lg\nSkSTtfjJJXAkHgK12QYn9JIYRBjLGQdIBb94I1++3JnmuX2W7mcoXHPAEtA5f9xf\nzwRWlSmcCQYVinfLKBFCkBgEfghe2DwloBY/0zvKroE6DV60KQeNQfZNQAOC9VGn\n4PMZopnKOgghHGqIisFz\n=PUS4\n-----END PGP SIGNATURE-----\n",
+        "payload": "tree f0e26f015b689753b5546331d6d5d72f226226c8\nparent 7c7addbce7c24b7246e190d1d453963fdb4cff8b\nparent 127d254f9b5525b5ef47d6dc8742a5794d4fcec6\nauthor Marcel Claramunt Bassegoda <marcel@marcelc.uk> 1788774593 +0200\ncommitter GitHub <noreply@github.com> 1788774593 +0200\n\nRelease truewire 0.1.0 (#2)\n\nRelease truewire 0.1.0",
+        "verified_at": "2026-09-07T09:49:53Z"
+      }
+    },
+    "url": "https://api.github.com/repos/truewire-dev/truewire/commits/934a718509b0cfd1244db90821201afbbb728797",
+    "html_url": "https://github.com/truewire-dev/truewire/commit/934a718509b0cfd1244db90821201afbbb728797",
+    "comments_url": "https://api.github.com/repos/truewire-dev/truewire/commits/934a718509b0cfd1244db90821201afbbb728797/comments",
+    "author": {
+      "login": "marciclabas",
+      "id": 77667923,
+      "node_id": "MDQ6VXNlcjc3NjY3OTIz",
+      "avatar_url": "https://avatars.githubusercontent.com/u/77667923?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/marciclabas",
+      "html_url": "https://github.com/marciclabas",
+      "followers_url": "https://api.github.com/users/marciclabas/followers",
+      "following_url": "https://api.github.com/users/marciclabas/following{/other_user}",
+      "gists_url": "https://api.github.com/users/marciclabas/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/marciclabas/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/marciclabas/subscriptions",
+      "organizations_url": "https://api.github.com/users/marciclabas/orgs",
+      "repos_url": "https://api.github.com/users/marciclabas/repos",
+      "events_url": "https://api.github.com/users/marciclabas/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/marciclabas/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "committer": {
+      "login": "web-flow",
+      "id": 19864447,
+      "node_id": "MDQ6VXNlcjE5ODY0NDQ3",
+      "avatar_url": "https://avatars.githubusercontent.com/u/19864447?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/web-flow",
+      "html_url": "https://github.com/web-flow",
+      "followers_url": "https://api.github.com/users/web-flow/followers",
+      "following_url": "https://api.github.com/users/web-flow/following{/other_user}",
+      "gists_url": "https://api.github.com/users/web-flow/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/web-flow/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/web-flow/subscriptions",
+      "organizations_url": "https://api.github.com/users/web-flow/orgs",
+      "repos_url": "https://api.github.com/users/web-flow/repos",
+      "events_url": "https://api.github.com/users/web-flow/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/web-flow/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "parents": [
+      {
+        "sha": "7c7addbce7c24b7246e190d1d453963fdb4cff8b",
+        "url": "https://api.github.com/repos/truewire-dev/truewire/commits/7c7addbce7c24b7246e190d1d453963fdb4cff8b",
+        "html_url": "https://github.com/truewire-dev/truewire/commit/7c7addbce7c24b7246e190d1d453963fdb4cff8b"
+      },
+      {
+        "sha": "127d254f9b5525b5ef47d6dc8742a5794d4fcec6",
+        "url": "https://api.github.com/repos/truewire-dev/truewire/commits/127d254f9b5525b5ef47d6dc8742a5794d4fcec6",
+        "html_url": "https://github.com/truewire-dev/truewire/commit/127d254f9b5525b5ef47d6dc8742a5794d4fcec6"
+      }
+    ],
+    "stats": {
+      "total": 11,
+      "additions": 11,
+      "deletions": 0
+    },
+    "files": [
+      {
+        "sha": "18b7a56edba43d8efbf559509038a8595bd5ff18",
+        "filename": "packages/truewire/CHANGELOG.md",
+        "status": "added",
+        "additions": 11,
+        "deletions": 0,
+        "changes": 11,
+        "blob_url": "https://github.com/truewire-dev/truewire/blob/934a718509b0cfd1244db90821201afbbb728797/packages%2Ftruewire%2FCHANGELOG.md",
+        "raw_url": "https://github.com/truewire-dev/truewire/raw/934a718509b0cfd1244db90821201afbbb728797/packages%2Ftruewire%2FCHANGELOG.md",
+        "contents_url": "https://api.github.com/repos/truewire-dev/truewire/contents/packages%2Ftruewire%2FCHANGELOG.md?ref=934a718509b0cfd1244db90821201afbbb728797",
+        "patch": "@@ -0,0 +1,11 @@\n+# Changelog\n+\n+## 0.1.0 (2026-09-07)\n+\n+First release. `truewire init | import openapi | check | examples | surface | generate python |\n+mock | mcp | standards | docs`: a directory-per-endpoint spec format with an 18-rule linter,\n+recorded-example coverage with honest `unverified` reasons, an HTTP and WebSocket mock server\n+that replays recorded examples, a Python generator with runtime validation and pagination\n+walkers, an OpenAPI 3.0/3.1 importer, and an MCP server that exposes a project's endpoints\n+as tools. `init` writes a `pyproject.toml` so the generated client installs with\n+`pip install -e .`."
+      }
+    ]
+  }
+}

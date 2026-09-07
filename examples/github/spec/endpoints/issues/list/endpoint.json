@@ -1,0 +1,281 @@
+{
+  "docs": "https://docs.github.com/en/rest/issues/issues#list-repository-issues",
+  "meta": {
+    "public": true
+  },
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/repos/{owner}/{repo}/issues",
+    "method": "GET",
+    "description": "List issues in a repository. GitHub returns pull requests here too; a row with `pull_request` set is one.",
+    "request": {
+      "title": "ListIssuesRequest",
+      "type": "object",
+      "description": "Which repository, which issues, and which page.",
+      "properties": {
+        "owner": {
+          "type": "string",
+          "description": "Account owner of the repository, case-insensitive."
+        },
+        "repo": {
+          "type": "string",
+          "description": "Repository name without the `.git` extension, case-insensitive."
+        },
+        "state": {
+          "type": "string",
+          "description": "Issue state to include.",
+          "enum": [
+            "open",
+            "closed",
+            "all"
+          ],
+          "default": "open"
+        },
+        "labels": {
+          "type": "string",
+          "description": "Comma-separated label names; every one must match."
+        },
+        "sort": {
+          "type": "string",
+          "description": "Sort key.",
+          "enum": [
+            "created",
+            "updated",
+            "comments"
+          ],
+          "default": "created"
+        },
+        "direction": {
+          "type": "string",
+          "description": "Sort direction.",
+          "enum": [
+            "asc",
+            "desc"
+          ],
+          "default": "desc"
+        },
+        "since": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Only issues updated at or after this instant."
+        },
+        "per_page": {
+          "type": "integer",
+          "description": "Results per page, at most 100.",
+          "default": 30,
+          "minimum": 1,
+          "maximum": 100
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number of the results to fetch, starting at 1.",
+          "default": 1,
+          "minimum": 1
+        }
+      },
+      "required": [
+        "owner",
+        "repo"
+      ]
+    },
+    "response": {
+      "title": "Issues",
+      "type": "array",
+      "description": "One page of issues.",
+      "items": {
+        "title": "Issue",
+        "type": "object",
+        "description": "An issue, or a pull request seen as one.",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Issue id."
+          },
+          "node_id": {
+            "type": "string",
+            "description": "GraphQL node id."
+          },
+          "number": {
+            "type": "integer",
+            "description": "Issue number within the repository."
+          },
+          "title": {
+            "type": "string",
+            "description": "Title."
+          },
+          "state": {
+            "type": "string",
+            "description": "Open or closed.",
+            "enum": [
+              "open",
+              "closed"
+            ]
+          },
+          "state_reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "Why the issue is in its state, when GitHub recorded one.",
+                "enum": [
+                  "completed",
+                  "not_planned",
+                  "reopened",
+                  "duplicate"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why the issue is in its state, when GitHub recorded one."
+          },
+          "locked": {
+            "type": "boolean",
+            "description": "Whether the conversation is locked."
+          },
+          "user": {
+            "anyOf": [
+              {
+                "$ref": "SimpleUser",
+                "description": "Author, when the account still exists."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Author, when the account still exists."
+          },
+          "labels": {
+            "title": "Labels",
+            "type": "array",
+            "description": "Labels on the issue.",
+            "items": {
+              "$ref": "Label",
+              "description": "One label."
+            }
+          },
+          "comments": {
+            "type": "integer",
+            "description": "Number of comments."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the issue was opened."
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the issue last changed."
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "description": "When the issue was closed; null while open."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the issue was closed; null while open."
+          },
+          "body": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "Body in Markdown, when set."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Body in Markdown, when set."
+          },
+          "html_url": {
+            "type": "string",
+            "description": "Web page of the issue."
+          },
+          "author_association": {
+            "type": "string",
+            "description": "How the author relates to the repository.",
+            "enum": [
+              "COLLABORATOR",
+              "CONTRIBUTOR",
+              "FIRST_TIMER",
+              "FIRST_TIME_CONTRIBUTOR",
+              "MANNEQUIN",
+              "MEMBER",
+              "NONE",
+              "OWNER"
+            ]
+          },
+          "pull_request": {
+            "title": "IssuePullRequest",
+            "type": "object",
+            "description": "Present when the row is a pull request.",
+            "properties": {
+              "url": {
+                "type": "string",
+                "description": "API URL of the pull request."
+              },
+              "html_url": {
+                "type": "string",
+                "description": "Web page of the pull request."
+              },
+              "merged_at": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "When the pull request was merged; null if not merged."
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "When the pull request was merged; null if not merged."
+              }
+            },
+            "required": [
+              "url",
+              "html_url"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "number",
+          "title",
+          "state",
+          "locked",
+          "labels",
+          "comments",
+          "created_at",
+          "updated_at",
+          "html_url"
+        ]
+      }
+    }
+  },
+  "pagination": {
+    "strategy": "page",
+    "index": {
+      "parameter": "page",
+      "start": 1
+    },
+    "size": {
+      "parameter": "per_page"
+    },
+    "done": {
+      "kind": "short_page"
+    }
+  },
+  "notes": [
+    "The `page1`..`page3` examples are one real walk with `per_page: 1` over a repository with two merged pull requests and no issues: two full pages and an empty third. `short_page` ends the walk on the empty page, so a walk over an exact multiple of the page size costs one extra request."
+  ]
+}

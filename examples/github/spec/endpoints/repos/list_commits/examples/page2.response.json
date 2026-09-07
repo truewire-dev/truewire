@@ -1,0 +1,251 @@
+{
+  "status": 200,
+  "payload": [
+    {
+      "sha": "e424863368aa7bb654c954540004bffa87bc7733",
+      "node_id": "C_kwDOUQnPANoAKGU0MjQ4NjMzNjhhYTdiYjY1NGM5NTQ1NDAwMDRiZmZhODdiYzc3MzM",
+      "commit": {
+        "author": {
+          "name": "Truewire CEO",
+          "email": "marci.clabas@gmail.com",
+          "date": "2026-09-07T09:46:41Z"
+        },
+        "committer": {
+          "name": "Truewire CEO",
+          "email": "marci.clabas@gmail.com",
+          "date": "2026-09-07T09:46:41Z"
+        },
+        "message": "Release truewire-core 0.1.0\n\nCo-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01VzFz3bSjxtpXjWmaffrexN",
+        "tree": {
+          "sha": "a536c04b72d8826681520c13a0773d485283c237",
+          "url": "https://api.github.com/repos/truewire-dev/truewire/git/trees/a536c04b72d8826681520c13a0773d485283c237"
+        },
+        "url": "https://api.github.com/repos/truewire-dev/truewire/git/commits/e424863368aa7bb654c954540004bffa87bc7733",
+        "comment_count": 0,
+        "verification": {
+          "verified": false,
+          "reason": "unknown_key",
+          "signature": "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgrLzsfFISF4by8Q+FKz27YpkK1USsBB+m\namu1QkJnbDsAAAADZ2l0AAAAAAAAAAZzaGE1MTIAAABTAAAAC3NzaC1lZDI1NTE5AAAAQI+jWsDN\nCc8tIq/nOcrbhGRoe1Iqo27dx1fdpkAPZn8BYgd/slomSwMFFS1bdi9G3GlggAdb2iHAmO1wBCiX\nIQg=\n-----END SSH SIGNATURE-----",
+          "payload": "tree a536c04b72d8826681520c13a0773d485283c237\nparent 3565a0d387d4b48f39d3a6afed0e46fac8c0da13\nauthor Truewire CEO <marci.clabas@gmail.com> 1788774401 +0000\ncommitter Truewire CEO <marci.clabas@gmail.com> 1788774401 +0000\n\nRelease truewire-core 0.1.0\n\nCo-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01VzFz3bSjxtpXjWmaffrexN\n",
+          "verified_at": null
+        }
+      },
+      "url": "https://api.github.com/repos/truewire-dev/truewire/commits/e424863368aa7bb654c954540004bffa87bc7733",
+      "html_url": "https://github.com/truewire-dev/truewire/commit/e424863368aa7bb654c954540004bffa87bc7733",
+      "comments_url": "https://api.github.com/repos/truewire-dev/truewire/commits/e424863368aa7bb654c954540004bffa87bc7733/comments",
+      "author": {
+        "login": "marciclabas",
+        "id": 77667923,
+        "node_id": "MDQ6VXNlcjc3NjY3OTIz",
+        "avatar_url": "https://avatars.githubusercontent.com/u/77667923?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/marciclabas",
+        "html_url": "https://github.com/marciclabas",
+        "followers_url": "https://api.github.com/users/marciclabas/followers",
+        "following_url": "https://api.github.com/users/marciclabas/following{/other_user}",
+        "gists_url": "https://api.github.com/users/marciclabas/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/marciclabas/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/marciclabas/subscriptions",
+        "organizations_url": "https://api.github.com/users/marciclabas/orgs",
+        "repos_url": "https://api.github.com/users/marciclabas/repos",
+        "events_url": "https://api.github.com/users/marciclabas/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/marciclabas/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "committer": {
+        "login": "marciclabas",
+        "id": 77667923,
+        "node_id": "MDQ6VXNlcjc3NjY3OTIz",
+        "avatar_url": "https://avatars.githubusercontent.com/u/77667923?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/marciclabas",
+        "html_url": "https://github.com/marciclabas",
+        "followers_url": "https://api.github.com/users/marciclabas/followers",
+        "following_url": "https://api.github.com/users/marciclabas/following{/other_user}",
+        "gists_url": "https://api.github.com/users/marciclabas/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/marciclabas/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/marciclabas/subscriptions",
+        "organizations_url": "https://api.github.com/users/marciclabas/orgs",
+        "repos_url": "https://api.github.com/users/marciclabas/repos",
+        "events_url": "https://api.github.com/users/marciclabas/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/marciclabas/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "parents": [
+        {
+          "sha": "3565a0d387d4b48f39d3a6afed0e46fac8c0da13",
+          "url": "https://api.github.com/repos/truewire-dev/truewire/commits/3565a0d387d4b48f39d3a6afed0e46fac8c0da13",
+          "html_url": "https://github.com/truewire-dev/truewire/commit/3565a0d387d4b48f39d3a6afed0e46fac8c0da13"
+        }
+      ]
+    },
+    {
+      "sha": "3565a0d387d4b48f39d3a6afed0e46fac8c0da13",
+      "node_id": "C_kwDOUQnPANoAKDM1NjVhMGQzODdkNGI0OGYzOWQzYTZhZmVkMGU0NmZhYzhjMGRhMTM",
+      "commit": {
+        "author": {
+          "name": "Truewire CEO",
+          "email": "marci.clabas@gmail.com",
+          "date": "2026-09-07T09:45:34Z"
+        },
+        "committer": {
+          "name": "Truewire CEO",
+          "email": "marci.clabas@gmail.com",
+          "date": "2026-09-07T09:45:34Z"
+        },
+        "message": "Release on merge of release/<pkg> pull requests\n\nBoth release workflows now trigger on a merged pull request from\nrelease/core or release/truewire instead of a pushed tag. They skip\nversions already on PyPI, run the package's tests, build with uv,\npublish through Trusted Publishing, push the version tag and create\nthe GitHub release with generated notes plus the pull request body.\nCONTRIBUTING documents the flow.\n\nCo-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01VzFz3bSjxtpXjWmaffrexN",
+        "tree": {
+          "sha": "334921a27f4789cbed60fded638dcbba6c7a4555",
+          "url": "https://api.github.com/repos/truewire-dev/truewire/git/trees/334921a27f4789cbed60fded638dcbba6c7a4555"
+        },
+        "url": "https://api.github.com/repos/truewire-dev/truewire/git/commits/3565a0d387d4b48f39d3a6afed0e46fac8c0da13",
+        "comment_count": 0,
+        "verification": {
+          "verified": false,
+          "reason": "unknown_key",
+          "signature": "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgrLzsfFISF4by8Q+FKz27YpkK1USsBB+m\namu1QkJnbDsAAAADZ2l0AAAAAAAAAAZzaGE1MTIAAABTAAAAC3NzaC1lZDI1NTE5AAAAQD9sdTkh\nyjbXh/ggNBy/rL/wFiBk5uYcjMO5upfBxVsziDiqnds3B8VBJCmnrsRb/vHVVc9fB+J3YduQb/DB\naAI=\n-----END SSH SIGNATURE-----",
+          "payload": "tree 334921a27f4789cbed60fded638dcbba6c7a4555\nparent 9d91c4085cb5886b6d8e962f286c060d12201dd6\nauthor Truewire CEO <marci.clabas@gmail.com> 1788774334 +0000\ncommitter Truewire CEO <marci.clabas@gmail.com> 1788774334 +0000\n\nRelease on merge of release/<pkg> pull requests\n\nBoth release workflows now trigger on a merged pull request from\nrelease/core or release/truewire instead of a pushed tag. They skip\nversions already on PyPI, run the package's tests, build with uv,\npublish through Trusted Publishing, push the version tag and create\nthe GitHub release with generated notes plus the pull request body.\nCONTRIBUTING documents the flow.\n\nCo-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01VzFz3bSjxtpXjWmaffrexN\n",
+          "verified_at": null
+        }
+      },
+      "url": "https://api.github.com/repos/truewire-dev/truewire/commits/3565a0d387d4b48f39d3a6afed0e46fac8c0da13",
+      "html_url": "https://github.com/truewire-dev/truewire/commit/3565a0d387d4b48f39d3a6afed0e46fac8c0da13",
+      "comments_url": "https://api.github.com/repos/truewire-dev/truewire/commits/3565a0d387d4b48f39d3a6afed0e46fac8c0da13/comments",
+      "author": {
+        "login": "marciclabas",
+        "id": 77667923,
+        "node_id": "MDQ6VXNlcjc3NjY3OTIz",
+        "avatar_url": "https://avatars.githubusercontent.com/u/77667923?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/marciclabas",
+        "html_url": "https://github.com/marciclabas",
+        "followers_url": "https://api.github.com/users/marciclabas/followers",
+        "following_url": "https://api.github.com/users/marciclabas/following{/other_user}",
+        "gists_url": "https://api.github.com/users/marciclabas/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/marciclabas/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/marciclabas/subscriptions",
+        "organizations_url": "https://api.github.com/users/marciclabas/orgs",
+        "repos_url": "https://api.github.com/users/marciclabas/repos",
+        "events_url": "https://api.github.com/users/marciclabas/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/marciclabas/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "committer": {
+        "login": "marciclabas",
+        "id": 77667923,
+        "node_id": "MDQ6VXNlcjc3NjY3OTIz",
+        "avatar_url": "https://avatars.githubusercontent.com/u/77667923?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/marciclabas",
+        "html_url": "https://github.com/marciclabas",
+        "followers_url": "https://api.github.com/users/marciclabas/followers",
+        "following_url": "https://api.github.com/users/marciclabas/following{/other_user}",
+        "gists_url": "https://api.github.com/users/marciclabas/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/marciclabas/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/marciclabas/subscriptions",
+        "organizations_url": "https://api.github.com/users/marciclabas/orgs",
+        "repos_url": "https://api.github.com/users/marciclabas/repos",
+        "events_url": "https://api.github.com/users/marciclabas/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/marciclabas/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "parents": [
+        {
+          "sha": "9d91c4085cb5886b6d8e962f286c060d12201dd6",
+          "url": "https://api.github.com/repos/truewire-dev/truewire/commits/9d91c4085cb5886b6d8e962f286c060d12201dd6",
+          "html_url": "https://github.com/truewire-dev/truewire/commit/9d91c4085cb5886b6d8e962f286c060d12201dd6"
+        }
+      ]
+    },
+    {
+      "sha": "9d91c4085cb5886b6d8e962f286c060d12201dd6",
+      "node_id": "C_kwDOUQnPANoAKDlkOTFjNDA4NWNiNTg4NmI2ZDhlOTYyZjI4NmMwNjBkMTIyMDFkZDY",
+      "commit": {
+        "author": {
+          "name": "Truewire CEO",
+          "email": "marci.clabas@gmail.com",
+          "date": "2026-09-07T09:26:19Z"
+        },
+        "committer": {
+          "name": "Truewire CEO",
+          "email": "marci.clabas@gmail.com",
+          "date": "2026-09-07T09:26:19Z"
+        },
+        "message": "init writes pyproject.toml; ruff and truewire-core become dependencies\n\n- truewire init now writes a pyproject.toml (src layout, depends on\n  truewire-core) so pip install -e . makes the generated client importable,\n  as the README quickstart shows.\n- ruff moves from the dev extra to the runtime dependencies so generated\n  files are always formatted.\n- truewire depends on truewire-core: generation imports the target package,\n  which imports the runtime.\n- Add a root .gitignore.\n\nCo-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01VzFz3bSjxtpXjWmaffrexN",
+        "tree": {
+          "sha": "bbab3896d5ed79f8a2d894da660f9548b9816283",
+          "url": "https://api.github.com/repos/truewire-dev/truewire/git/trees/bbab3896d5ed79f8a2d894da660f9548b9816283"
+        },
+        "url": "https://api.github.com/repos/truewire-dev/truewire/git/commits/9d91c4085cb5886b6d8e962f286c060d12201dd6",
+        "comment_count": 0,
+        "verification": {
+          "verified": false,
+          "reason": "unknown_key",
+          "signature": "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgrLzsfFISF4by8Q+FKz27YpkK1USsBB+m\namu1QkJnbDsAAAADZ2l0AAAAAAAAAAZzaGE1MTIAAABTAAAAC3NzaC1lZDI1NTE5AAAAQF/o6Qrl\nxuJX3jQ2Iki+tZ3UiC9PEfIFudQqtIxD03gW3GTo3qZ6+nQ0NP3hPRWtBkCYIfYtnIpGX+RDs+z3\nVAA=\n-----END SSH SIGNATURE-----",
+          "payload": "tree bbab3896d5ed79f8a2d894da660f9548b9816283\nparent 66d76e373ca8f8731d21b75e4041c0aaa8a99b84\nauthor Truewire CEO <marci.clabas@gmail.com> 1788773179 +0000\ncommitter Truewire CEO <marci.clabas@gmail.com> 1788773179 +0000\n\ninit writes pyproject.toml; ruff and truewire-core become dependencies\n\n- truewire init now writes a pyproject.toml (src layout, depends on\n  truewire-core) so pip install -e . makes the generated client importable,\n  as the README quickstart shows.\n- ruff moves from the dev extra to the runtime dependencies so generated\n  files are always formatted.\n- truewire depends on truewire-core: generation imports the target package,\n  which imports the runtime.\n- Add a root .gitignore.\n\nCo-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01VzFz3bSjxtpXjWmaffrexN\n",
+          "verified_at": null
+        }
+      },
+      "url": "https://api.github.com/repos/truewire-dev/truewire/commits/9d91c4085cb5886b6d8e962f286c060d12201dd6",
+      "html_url": "https://github.com/truewire-dev/truewire/commit/9d91c4085cb5886b6d8e962f286c060d12201dd6",
+      "comments_url": "https://api.github.com/repos/truewire-dev/truewire/commits/9d91c4085cb5886b6d8e962f286c060d12201dd6/comments",
+      "author": {
+        "login": "marciclabas",
+        "id": 77667923,
+        "node_id": "MDQ6VXNlcjc3NjY3OTIz",
+        "avatar_url": "https://avatars.githubusercontent.com/u/77667923?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/marciclabas",
+        "html_url": "https://github.com/marciclabas",
+        "followers_url": "https://api.github.com/users/marciclabas/followers",
+        "following_url": "https://api.github.com/users/marciclabas/following{/other_user}",
+        "gists_url": "https://api.github.com/users/marciclabas/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/marciclabas/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/marciclabas/subscriptions",
+        "organizations_url": "https://api.github.com/users/marciclabas/orgs",
+        "repos_url": "https://api.github.com/users/marciclabas/repos",
+        "events_url": "https://api.github.com/users/marciclabas/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/marciclabas/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "committer": {
+        "login": "marciclabas",
+        "id": 77667923,
+        "node_id": "MDQ6VXNlcjc3NjY3OTIz",
+        "avatar_url": "https://avatars.githubusercontent.com/u/77667923?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/marciclabas",
+        "html_url": "https://github.com/marciclabas",
+        "followers_url": "https://api.github.com/users/marciclabas/followers",
+        "following_url": "https://api.github.com/users/marciclabas/following{/other_user}",
+        "gists_url": "https://api.github.com/users/marciclabas/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/marciclabas/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/marciclabas/subscriptions",
+        "organizations_url": "https://api.github.com/users/marciclabas/orgs",
+        "repos_url": "https://api.github.com/users/marciclabas/repos",
+        "events_url": "https://api.github.com/users/marciclabas/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/marciclabas/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "parents": [
+        {
+          "sha": "66d76e373ca8f8731d21b75e4041c0aaa8a99b84",
+          "url": "https://api.github.com/repos/truewire-dev/truewire/commits/66d76e373ca8f8731d21b75e4041c0aaa8a99b84",
+          "html_url": "https://github.com/truewire-dev/truewire/commit/66d76e373ca8f8731d21b75e4041c0aaa8a99b84"
+        }
+      ]
+    }
+  ]
+}

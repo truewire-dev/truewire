@@ -1,0 +1,5 @@
+{
+  "description": "Repositories: metadata, commits, tags and releases.",
+  "upstream": "https://docs.github.com/en/rest/repos",
+  "core": "default"
+}

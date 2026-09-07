@@ -71,7 +71,7 @@ truewire mcp --project petstore --new base_url=https://petstore.example.com/v1
 | Standards | `truewire standards` runs the checks that guard a client's public surface: docstring shape, duplicate schemas, secret placeholders in examples, router coverage, no `__call__` classes. |
 | Docs | `truewire docs check` type-checks every code block in your README and docs against the generated package, so an example that no longer compiles fails CI. |
 | Examples | `examples/kraken`: 75 endpoints over REST and WebSocket, hand-written core, 63 replay tests. `examples/github`: the GitHub REST API captured live, page-walked, 14 tests. Both kept green in CI. |
-| Agent-native | Every gate is a CLI command with a plain result (`check`, `examples --require-verified`, `surface`, `standards`, `docs check`), and `capture`, `mock` and `mcp` need no human in the loop, so a coding agent can take a docs URL and drive a project to a verified spec, a mock, a client and checked docs. Packaged skill files for that workflow are on the roadmap (item 8). |
+| Agent-native | Every gate is a CLI command with a plain result (`check`, `examples --require-verified`, `surface`, `standards`, `docs check`), and `capture`, `mock` and `mcp` need no human in the loop, so a coding agent can take a docs URL and drive a project to a verified spec, a mock, a client and checked docs. Six skill files for that workflow (discover, spec, core, implement, docs, review) live in [`.agents/skills/`](.agents/skills/README.md). |
 
 ## How it compares
 

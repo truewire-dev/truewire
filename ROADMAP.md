@@ -52,7 +52,7 @@ Done when: `truewire mcp` exposes a project's request/reply endpoints as tools, 
 
 ### 8. Agent skills, generalized
 
-Status: exists, needs generalizing. The staged skills (discover, core, spec, implement, docs, review, release) were written for one family of APIs. They need to lose that vocabulary and work from a docs URL for any API.
+Status: written (2026-09-07), not yet proven by an agent run. `.agents/skills/` holds six skills (discover, spec, core, implement, docs, review) written for any API and built around the CLI gates; the crypto-specific originals were not ported.
 
 Done when: an agent given only a public docs URL and the skills produces a project that passes `check`, `examples --require-verified` (with honest `unverified` declarations), `generate` and a mock-backed test run, on an API outside the original domain.
 

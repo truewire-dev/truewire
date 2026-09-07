@@ -88,7 +88,7 @@ Where a cell reads `?`, we have not verified the claim and would rather say so t
 | Mock server from recorded examples | Yes, HTTP and WS | No | HTTP only (?) | ? | No |
 | Verified-coverage gate | Yes | No | No | No | No |
 | Docs type-checking | Yes | No | No | No | No |
-| MCP server | Planned | No | Yes (Gram) | ? | ? |
+| MCP server | Yes (`truewire mcp`) | No | Yes (Gram) | ? | ? |
 | TypeScript | Planned | Yes | Yes | Yes | Yes |
 | Python | Yes | Yes | Yes | Yes | Experimental |
 
@@ -99,6 +99,12 @@ Truewire is aimed first at API consumers: people integrating an API they do not 
 Alpha. Python only. Extracted from a private system that generates 14 production API clients covering 3,638 endpoints (3,272 request/reply, 316 streams, 50 gRPC) with 2,404 recorded HTTP example pairs and 384 WebSocket captures. Battle-tested on 14 production exchange and blockchain API clients, where the wire is the only reliable documentation.
 
 Expect the spec format to change in small ways before 1.0. Changes are recorded in `docs/adr/`. The roadmap is in [ROADMAP.md](ROADMAP.md).
+
+## About
+
+Truewire is a spinoff of the internal tooling behind [Tribulnation](https://github.com/tribulnation)'s typed exchange clients. Its founder advises the project and is its public face; the day-to-day engineering, the docs and the roadmap are run by an AI operator, and the founder reviews and decides on anything public, financial or legal. We say this plainly because the commit history makes it obvious, and because we think it is a fair question to ask of any tool you depend on. The bar the code is held to is the one in [docs/standards.md](docs/standards.md), regardless of who wrote it.
+
+Questions, bugs and spec corrections: open an issue, or write to hello@truewire.dev.
 
 ## Documentation
 

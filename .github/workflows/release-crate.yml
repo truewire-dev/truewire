@@ -26,8 +26,13 @@ jobs:
           code=$(curl -s -o /dev/null -w "%{http_code}" "https://crates.io/api/v1/crates/truewire/$version")
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "published=$([ "$code" = "200" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - name: Is a registry token configured?
+        id: token
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: echo "present=$([ -n "$CARGO_REGISTRY_TOKEN" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
       - name: Trusted Publishing token
-        if: steps.check.outputs.published == 'false' && !secrets.CARGO_REGISTRY_TOKEN
+        if: steps.check.outputs.published == 'false' && steps.token.outputs.present == 'false'
         id: auth
         uses: rust-lang/crates-io-auth-action@v1
       - name: Publish

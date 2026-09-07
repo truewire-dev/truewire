@@ -1,0 +1,20 @@
+name: Release truewire
+
+on:
+  push:
+    tags: ['truewire-v*']
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write   # PyPI Trusted Publishing (OIDC): pending publisher for project 'truewire' names this workflow file
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - name: Build
+        run: uv build packages/truewire --out-dir dist
+      - name: Publish
+        run: uv publish --trusted-publishing always dist/*

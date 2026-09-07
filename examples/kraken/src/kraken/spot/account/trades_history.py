@@ -198,7 +198,7 @@ class TradesHistory(RpcEndpoint):
       total = int(total) if total is not None else None
       if total is None or (total_seen is not None and total != total_seen):
         raise LogicError(
-          f'`trades_history_paged` needs a `total` on every page. The venue omitted it here, or reported a value ({total}) that disagrees with an earlier page of this same walk ({total_seen}); retry the whole walk from the start.'
+          f'`trades_history_paged` needs a `total` on every page. The API omitted it here, or reported a value ({total}) that disagrees with an earlier page of this same walk ({total_seen}); retry the whole walk from the start.'
         )
       total_seen = total
       if pages * (limit if limit is not None else 50) >= total:

@@ -9,42 +9,74 @@ description: Write or extend a Truewire spec (endpoint.json per endpoint, router
 
 `spec/endpoints/**/endpoint.json` for every row of `spec/inventory.md`, `router.json` for
 every group, shared shapes in `spec/schemas.json`, and `truewire check` reporting zero
-errors and zero violations. Read `docs/spec/authoring.md` once before starting; every rule
-there has a reason and `check` enforces most of them.
+errors and zero violations. Read `docs/spec/authoring.md` once; for a plain JSON REST API
+the rules that matter are 0, 1, 2, 3, 5, 7, 8, 14 and 16, and the rest are for wire
+formats and windows you may never meet.
+
+## The shape of one endpoint
+
+Every key an `endpoint.json` can carry, so you never have to read the loader:
+
+```jsonc
+{
+  "docs": "https://docs.example.com/reference/pulls#list",
+  "meta": {"public": true},                 // what the core reads; schema in truewire.toml [cores.<name>].meta
+  "spec": {
+    "kind": "rpc", "transports": ["http"], "path": "/repos/{owner}/{repo}/pulls", "method": "GET",
+    "description": "List pull requests, newest first.",
+    "request": {"title": "ListPullsRequest", "type": "object", "required": ["owner", "repo"],
+      "properties": {
+        "owner": {"type": "string", "description": "Account owner."},
+        "repo": {"type": "string", "description": "Repository name."},
+        "state": {"type": "string", "enum": ["open", "closed", "all"], "default": "open", "description": "Which pulls."},
+        "per_page": {"type": "integer", "default": 30, "minimum": 1, "maximum": 100, "description": "Rows per page."},
+        "page": {"type": "integer", "default": 1, "minimum": 1, "description": "Page index, from 1."}}},
+    "response": {"title": "Pulls", "type": "array", "description": "One page.", "items": {"$ref": "PullRequest", "description": "One pull request."}}
+  },
+  "pagination": {"strategy": "page", "index": {"parameter": "page", "start": 1},
+                 "size": {"parameter": "per_page"}, "done": {"kind": "short_page"}},
+  "envelope": {"payload": "data"},          // only when the core unwraps a wrapper; omit otherwise
+  "redacted": ["signature", "nonce"],       // request keys the transport injects; omit when none
+  "unverified": {"reason": "requires_state", "detail": "needs an open pull request; none exist"},
+  "notes": ["`state` enum from the docs page above.", "Docs were unreachable; schema from prior knowledge, confirmed by the page1 recording."]
+}
+```
+
+`notes` is a list of strings. `unverified.reason` is one of `missing_credentials`,
+`program_enrollment`, `unsafe`, `requires_state`, `runtime_error`, `not_captured`. An
+array response needs no title on the array's items beyond the `$ref` or an inline titled
+object. Response fields you do not declare pass through unchecked: declare what a caller
+reads, and say in `notes` that the schema is a subset.
 
 ## Steps
 
 1. **Start the project.** `truewire init <name> --base-url <url>` if there is no
-   `truewire.toml`. If the inventory found an OpenAPI document: `truewire import openapi
-   <doc>`; then treat the imported tree as a draft, not a result. The importer declares
-   `unverified: not_captured` on every endpoint the document gave no example for.
-2. **Routers first.** `spec/endpoints/router.json` names the root core; each group
-   directory gets a `router.json` with `description`, `upstream` and `core` (the core its
-   endpoints share, usually `default`). A directory is a group or a leaf, never both.
-3. **One endpoint at a time.** For each inventory row write `endpoint.json`:
-   - `docs`: the row's URL. `meta`: what the core needs (`{"public": true}` or the
-     project's own keys, declared in `truewire.toml`).
-   - `spec.kind` `rpc` (request/reply, over `http`, `ws` or both) or `stream`; `path`
-     with `{name}` placeholders for path parameters, `method` for HTTP.
-   - `request`: a titled object; one property per parameter with a `description`; path
-     placeholders and required parameters in `required`.
-   - `response`: exactly what the core hands back. If the core unwraps an envelope, declare
-     `envelope` and describe the unwrapped value. Title every object, describe every
-     property, use `anyOf` for unions and nullables, `enum` only for documented closed sets.
-   - Wire formats: `decimal-string`, `integer-string`, `boolean-string`, `epoch-seconds`,
-     `epoch-millis`, `epoch-micros`, `epoch-nanos`, `date-time`, `date`. The inventory's
-     notes say which; a recording confirms.
-   - `pagination`: a declared block (`page`, `token`, `offset`, `window`, `seek`) naming
-     real request parameters and how the walk ends. Never inferred from parameter names.
-   - `redacted`: request keys the transport injects (signatures, nonces) so the mock ignores
-     them.
-   - `unverified`: reason and detail, for every row the inventory marked unrecordable.
-   - `notes`: every judgement call, with its source.
-4. **Share what repeats.** A shape used by two or more endpoints goes into
+   `truewire.toml`. If the inventory chose to import an OpenAPI document: `truewire import
+   openapi <doc>`; then treat the imported tree as a draft, not a result (the importer
+   declares `unverified: not_captured` where the document had no example). To start from a
+   registry spec instead: `truewire import registry <name>`.
+2. **Routers.** `truewire init` wrote `spec/endpoints/router.json` with `"core": "root"`.
+   Each group directory gets its own `router.json` with `description`, `upstream` and
+   `"core": "default"` (the core `init` declared) unless you added a core in
+   `truewire.toml`. A directory is a group or a leaf, never both.
+3. **Directory is the API.** `spec/endpoints/<group>/<name>/endpoint.json` becomes
+   `client.<group>.<name>(...)`, the capture path `<group>.<name>`, and the test id. Choose
+   names you want to type.
+4. **One endpoint at a time**, following the shape above. Wire formats when the value is
+   not what its JSON type says: `decimal-string`, `integer-string`, `boolean-string`,
+   `epoch-seconds`, `epoch-millis`, `epoch-micros`, `epoch-nanos`, `date-time`, `date`.
+   Unions and nullables are `anyOf`. `enum` only for documented closed sets. Every object
+   titled, every property described.
+5. **Pagination, declared.** For `page`/`per_page` APIs with no total in the body (GitHub
+   and most REST APIs): `short_page` ends the walk on the first page shorter than
+   `per_page`; give `per_page` its documented `default` so a caller who omits it still
+   gets a walk that stops on a short page instead of only on an empty one. `empty` is the
+   alternative when the API pads pages. `token`, `offset`, `window`, `seek` are in rule 8.
+6. **Share what repeats.** A shape used by two or more endpoints goes into
    `spec/schemas.json` and is referenced as `{"$ref": "Name"}`.
-5. **Run the gate after each group.** `truewire check` (or `truewire check --path
-   spec/endpoints/<group>` for one group). Fix every error and every violation; a warning
-   is a decision to record in `notes`, not to ignore.
+7. **Run the gate after each group.** `truewire check` (or `truewire check --path
+   spec/endpoints/<group>`). Fix every error and every violation; a warning is a decision
+   to record in `notes`, not to ignore.
 
 ## Done when
 
@@ -59,3 +91,4 @@ there has a reason and `check` enforces most of them.
   decides what the API actually sends.
 - Do not describe error responses; errors belong to the core.
 - Do not put a value you have not seen in the docs or on the wire into an `enum`.
+- Do not write `upstream.md` files unless the project already uses them; they are optional.

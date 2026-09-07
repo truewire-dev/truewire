@@ -1,11 +1,15 @@
-"""`truewire import`: seed a project's spec from another format. Only OpenAPI today."""
+"""`truewire import`: seed a project's spec from an OpenAPI document or a registry spec."""
 from pathlib import Path
 
 import typer
 
 from .common import PROJECT_OPTION, resolve_project
 
-app = typer.Typer(help="Seed a project's spec from another format.")
+app = typer.Typer(help="Seed a project's spec from an OpenAPI document or the registry.")
+
+from .import_registry import registry  # noqa: E402
+
+app.command('registry')(registry)
 
 
 @app.command('openapi')

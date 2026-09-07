@@ -85,7 +85,11 @@ def examples(
       endpoint_path = item.endpoint_path
       endpoint = item.endpoint
       kind = item.kind
-      meta = endpoint.meta or (endpoint.openapi.security if endpoint.openapi is not None else None)
+      # "Public" means the endpoint declares `meta.public: true`, or declares no `meta` and
+      # no OpenAPI security at all; any other `meta` counts as authenticated. `meta` is
+      # free-form per project, so `public` is the one key this report reads.
+      declared = endpoint.meta or (endpoint.openapi.security if endpoint.openapi is not None else None)
+      meta = declared and not (isinstance(endpoint.meta, dict) and endpoint.meta.get('public') is True)
       totals['all'] += 1
       totals[kind] += 1
       totals['request_files'] += len(item.request_files)

@@ -2259,6 +2259,18 @@ class TestPagedResponsePageExhausted:
     assert yielded == [[1], [2]]
     assert [call['page'] for call in calls] == [1, 2, 3]
 
+  def test_documented_default_size_ends_the_walk_on_a_short_page(self, generator: Generator):
+    """With `per_page` omitted but its documented default declared, a page shorter than
+    that default is short (authoring rule 8), so the walk stops without an extra request."""
+    source = generator.paged_response_method(
+      paged_endpoint(PAGE_SHORT_BARE, size_default=3),
+      method_name='orders', header=paged_header(kwargs=['page', 'page_size']),
+      rows_type='int',
+    ) or ''
+    yielded, calls = walk_response(source, [[1, 2, 3], [4]])
+    assert yielded == [[1, 2, 3], [4]]
+    assert [call['page'] for call in calls] == [1, 2]
+
   def test_short_page_without_a_size_is_refused(self, generator: Generator):
     with pytest.raises(ValueError):
       generator.paged_response_method(

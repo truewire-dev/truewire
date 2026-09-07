@@ -3793,6 +3793,15 @@ class Generator:
       rows_local = self.paged_local('rows', {*taken, response})
       rows_read = [f'{rows_local} = {response}']
     exhausted = self.paged_rows_exhausted(rows=rows_local, size=size, done_kind=done.kind)
+    # A `short_page` walk whose caller omitted the size still knows when a page is short
+    # once the API documents its default page size (`default` on the size parameter,
+    # authoring rule 8): measure against that instead of waiting for an empty page.
+    default = self.paged_size_default(endpoint) if done.kind == 'short_page' else None
+    if size is not None and default is not None and not self.paged_always_set(size):
+      exhausted = (
+        f'if not {rows_local} or len({rows_local}) < '
+        f'({size.name} if {size.name} is not None else {default}):'
+      )
 
     inner = Function(
       name='next', asyn=True, method=False,

@@ -143,7 +143,7 @@ class List(Endpoint):
       )
       rows = response
       rows = list(rows) if rows is not None else []
-      if not rows or (per_page is not None and len(rows) < per_page):
+      if not rows or len(rows) < (per_page if per_page is not None else 30):
         return rows, None
       return rows, page + 1
 

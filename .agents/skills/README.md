@@ -15,9 +15,10 @@ OpenAPI document, with or without credentials.
 | `review` | a finished project | a review against `docs/standards.md` | `truewire standards` |
 
 The order is the order of the table. Every step ends with a command whose exit code says
-whether the step is done; an agent never decides that for itself. The skills are written
-from the process that built `examples/github` and `examples/kraken`; the first end-to-end
-run by an agent loading only these files is roadmap item 8's remaining "done when".
+whether the step is done; an agent never decides that for itself. The skills were written
+from the process that built `examples/github` and `examples/kraken`, then proven by an
+agent loading only these files on three GitHub endpoints not in the repository; its
+findings shaped the current text.
 
 Rules that hold across all six:
 

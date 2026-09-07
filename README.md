@@ -51,7 +51,7 @@ async with Petstore.new(base_url='http://127.0.0.1:8321') as client:
   pet = await client.pets.get_pet(pet_id=42)   # served from spec/endpoints/pets/get_pet/examples/
 ```
 
-The full CLI is `truewire init | import | capture | check | examples | surface | generate | mock | mcp | standards | docs`. Run `truewire --help` for each command.
+The full CLI is `truewire init | import | capture | check | examples | surface | generate | mock | mcp | standards | docs`. Run `truewire --help` for each command. `truewire import registry github` starts a project from a spec in the [registry](https://github.com/truewire-dev/registry) instead of a document.
 
 Hand the same endpoints to an agent as MCP tools, one per endpoint, answered through the generated client:
 

@@ -33,9 +33,11 @@ def capture(
 ):
   """Call one endpoint against the live API and record the pair under its `examples/`.
 
-  `truewire capture repos.list_commits --request '{"owner": "o", "repo": "r", "per_page": 3}' --id page1`
+  `truewire capture repos.list_commits --request '{"owner": "o", "repo": "r", "per_page": 3, "page": 1}' --id page1`
   writes `page1.request.json` and `page1.response.json` beside the endpoint's spec and
-  runs `truewire check` on them. A non-2xx answer is printed and nothing is written:
+  runs `truewire check` on them. Record a paginated walk with every page index explicit,
+  `page: 1` included: the generated `_paged` walk sends it, and the mock server matches
+  the whole request. A non-2xx answer is printed and nothing is written:
   examples record what the API does on success; errors belong to the client core.
   """
   from truewire.examples import run_example_request

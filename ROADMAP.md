@@ -40,9 +40,9 @@ Done when: `truewire init <name>` produces a project that passes `check`, `gener
 
 ### 6. Registry of specs
 
-Status: new. A separate repository, one directory per API, CC0-licensed, so a consumer can `truewire import registry <api>` and start from a verified spec rather than from a docs page. Seeded with the 14 clients' specs if their owner agrees.
+Status: shipped (2026-09-07), two specs in. [truewire-dev/registry](https://github.com/truewire-dev/registry) holds one directory per API, CC0, checked in CI; `truewire import registry <name>` copies a spec and its core metadata into a project. Seeded with `github` and `kraken`; the remaining specs from the original corpus follow as their owner releases them.
 
-Done when: the registry repository exists with a documented layout, at least ten specs pass `truewire check` in CI there, and the import command pulls one by name.
+Done when: the registry repository exists with a documented layout, at least ten specs pass `truewire check` in CI there, and the import command pulls one by name. (Layout and import: done. Ten specs: two so far.)
 
 ### 7. MCP server from any spec (`truewire mcp`)
 
@@ -52,7 +52,7 @@ Done when: `truewire mcp` exposes a project's request/reply endpoints as tools, 
 
 ### 8. Agent skills, generalized
 
-Status: written (2026-09-07), not yet proven by an agent run. `.agents/skills/` holds six skills (discover, spec, core, implement, docs, review) written for any API and built around the CLI gates; the crypto-specific originals were not ported.
+Status: shipped (2026-09-07). `.agents/skills/` holds six skills (discover, spec, core, implement, docs, review) written for any API and built around the CLI gates. Proven the same day: an agent loading only these files took three GitHub REST endpoints it had not seen in the repository (pulls, branches, contents) to every gate green, and its 40 findings were folded back into the files.
 
 Done when: an agent given only a public docs URL and the skills produces a project that passes `check`, `examples --require-verified` (with honest `unverified` declarations), `generate` and a mock-backed test run, on an API outside the original domain.
 

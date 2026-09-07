@@ -28,4 +28,4 @@ jobs:
         working-directory: crates/truewire
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish --locked --allow-dirty
+        run: cargo publish --allow-dirty

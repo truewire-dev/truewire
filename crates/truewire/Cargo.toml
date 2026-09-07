@@ -1,0 +1,11 @@
+[package]
+name = "truewire"
+version = "0.0.1"
+edition = "2021"
+description = "Reserved for the Truewire Rust runtime: typed clients, true to the wire. See https://truewire.dev"
+license = "MIT"
+repository = "https://github.com/truewire-dev/truewire"
+homepage = "https://truewire.dev"
+readme = "README.md"
+keywords = ["api", "client", "codegen", "websocket"]
+categories = ["api-bindings"]

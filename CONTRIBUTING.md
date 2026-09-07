@@ -87,3 +87,17 @@ Agent-written PRs get the same review as any other: tests, a read of the diff, a
 ## Reporting problems
 
 Open an issue with the spec (or a minimal `endpoint.json`), the command you ran, and what you expected. For a wrong generated type, include the recorded example that shows the real wire shape. That example is usually the whole fix.
+
+## Releasing
+
+Each package releases from its own pull request, merged into `main`:
+
+1. Branch `release/core` (for `truewire-core`) or `release/truewire` (for `truewire`) off `main`.
+2. Bump `version` in the package's `pyproject.toml` and add the entry to its `CHANGELOG.md`.
+3. Open the pull request; its body becomes the top of the GitHub release notes.
+4. Merge. `release-core.yml` / `release-truewire.yml` run the package's tests, build it, publish
+   to PyPI (Trusted Publishing, no tokens), push the `truewire-core-v<version>` /
+   `truewire-v<version>` tag, and create the GitHub release. A version already on PyPI is
+   skipped, so re-merging is safe.
+
+`truewire` depends on `truewire-core`, so when both change, release core first.

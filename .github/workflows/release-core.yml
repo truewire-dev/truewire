@@ -1,20 +1,90 @@
 name: Release truewire-core
 
+# Merge a pull request from branch `release/core` into main. If the version in
+# packages/core-python/pyproject.toml is not on PyPI yet, this builds, publishes
+# (PyPI Trusted Publishing; the pending publisher names this workflow file),
+# tags `truewire-core-v<version>` and creates the GitHub release.
 on:
-  push:
-    tags: ['truewire-core-v*']
+  pull_request:
+    types: [closed]
+    branches: [main]
+    paths: ['packages/core-python/**']
+
+permissions:
+  id-token: write
+  contents: write
 
 jobs:
-  publish:
+  check:
+    if: github.event.pull_request.merged == true && github.head_ref == 'release/core'
     runs-on: ubuntu-latest
-    environment: pypi
-    permissions:
-      id-token: write   # PyPI Trusted Publishing (OIDC): pending publisher for project 'truewire-core' names this workflow file
-      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      published: ${{ steps.check.outputs.published }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
+      - id: version
+        run: |
+          version=$(grep -m1 '^version = ' packages/core-python/pyproject.toml | sed -E 's/version = "(.*)"/\1/')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - id: check
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" "https://pypi.org/pypi/truewire-core/${{ steps.version.outputs.version }}/json")
+          if [ "$code" = "200" ]; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  release:
+    needs: check
+    if: needs.check.outputs.published == 'false'
+    runs-on: ubuntu-latest
+    environment: pypi
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          fetch-tags: true
       - uses: astral-sh/setup-uv@v4
+      - name: Test
+        run: |
+          uv venv --python 3.11 .venv
+          uv pip install --python .venv/bin/python -e 'packages/core-python[dev]'
+          .venv/bin/ruff check --config packages/truewire/src/truewire/resources/ruff.toml packages/core-python/src
+          .venv/bin/python -m pytest packages/core-python/test -q
       - name: Build
         run: uv build packages/core-python --out-dir dist
-      - name: Publish
-        run: uv publish --trusted-publishing always dist/*
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+      - id: previous_tag
+        run: |
+          previous=$(git tag -l 'truewire-core-v*' | sort -V | tail -1)
+          echo "previous=$previous" >> "$GITHUB_OUTPUT"
+      - run: git tag truewire-core-v${{ needs.check.outputs.version }}
+      - run: git push origin truewire-core-v${{ needs.check.outputs.version }}
+      - if: steps.previous_tag.outputs.previous != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: truewire-core-v${{ needs.check.outputs.version }}
+          name: truewire-core ${{ needs.check.outputs.version }}
+          previous_tag: ${{ steps.previous_tag.outputs.previous }}
+          generate_release_notes: true
+          body: |
+            Published to [PyPI](https://pypi.org/project/truewire-core/${{ needs.check.outputs.version }}/) as `truewire-core==${{ needs.check.outputs.version }}`.
+
+            ${{ github.event.pull_request.body }}
+      - if: steps.previous_tag.outputs.previous == ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: truewire-core-v${{ needs.check.outputs.version }}
+          name: truewire-core ${{ needs.check.outputs.version }}
+          generate_release_notes: true
+          body: |
+            Published to [PyPI](https://pypi.org/project/truewire-core/${{ needs.check.outputs.version }}/) as `truewire-core==${{ needs.check.outputs.version }}`.
+
+            ${{ github.event.pull_request.body }}

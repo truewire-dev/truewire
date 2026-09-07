@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+- **A response schema describes the wire body; `envelope.payload` selects the returned
+  value** (ADR 0010, authoring rule 6). Before, the schema described the value the core
+  returned after unwrapping and `truewire check` extracted `envelope.payload` from a
+  recording before validating. Now the schema describes the whole recorded frame, the
+  checker validates the recording against it as-is, and the generator types the method's
+  return value from the schema at `envelope.payload`. The method still returns the
+  unwrapped value; cores, the mock server, `truewire capture` and `envelope.correlate` are
+  unchanged. Pagination paths stay relative to what the method returns. `truewire import
+  openapi` keeps writing the document's response schema, which was always the wire body.
+  A new `envelope` lint rule (error) requires `envelope.payload` to name a property of the
+  response schema. Stream `payload` schemas are unchanged.
+- `truewire migrate`: rewrites a spec written under the previous rule. For every rpc
+  endpoint declaring `envelope.payload` whose response schema does not carry that path,
+  it wraps the schema into the frame its recordings show (`<Title>Frame`, other keys
+  inferred and described as wire fields, the old schema under the payload key). It
+  refuses an endpoint with no recording; `--template <function>` names a recorded
+  endpoint whose frame stands in. A second run changes nothing.
+- `examples/kraken` migrated with the command: 64 endpoints, generated source unchanged.
+
 ## 0.3.0 (2026-09-07)
 
 - `truewire import registry <name>`: start a project from a spec in

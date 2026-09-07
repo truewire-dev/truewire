@@ -48,67 +48,85 @@
       }
     },
     "response": {
-      "title": "OrderAmends",
-      "description": "The amend transaction history for one order.",
+      "title": "OrderAmendsFrame",
       "type": "object",
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
       "properties": {
-        "count": {
-          "description": "Total count of new and amend transactions (including the original order).",
-          "type": "integer"
-        },
-        "amends": {
-          "description": "Amend transactions, ordered by ascending amend timestamp.",
+        "error": {
           "type": "array",
           "items": {
-            "title": "OrderAmend",
-            "description": "One amend transaction.",
-            "type": "object",
-            "properties": {
-              "amend_id": {
-                "description": "Kraken amend identifier.",
-                "type": "string"
-              },
-              "amend_type": {
-                "description": "The type of amend transaction: `original` (original order values on order entry), `user` (user-requested amendment), or `restated` (engine order maintenance amendment).",
-                "type": "string",
-                "enum": [
-                  "original",
-                  "user",
-                  "restated"
-                ]
-              },
-              "order_qty": {
-                "description": "Order quantity in terms of the base asset.",
-                "type": "string"
-              },
-              "display_qty": {
-                "description": "The quantity shown in the book for iceberg orders.",
-                "type": "string"
-              },
-              "remaining_qty": {
-                "description": "Remaining un-traded quantity on the order.",
-                "type": "string"
-              },
-              "limit_price": {
-                "description": "The limit price restriction on the order.",
-                "type": "string"
-              },
-              "trigger_price": {
-                "description": "The trigger price on trigger order types.",
-                "type": "string"
-              },
-              "reason": {
-                "description": "Description of the reason for this amend.",
-                "type": "string"
-              },
-              "post_only": {
-                "description": "Indicates if the transaction was restricted from taking liquidity.",
-                "type": "boolean"
-              },
-              "timestamp": {
-                "description": "The UNIX timestamp for the amend transaction, in nanosecond precision.",
-                "type": "integer",
-                "format": "epoch-nanos"
+            "type": "string"
+          },
+          "description": "Wire envelope field; see the core."
+        },
+        "result": {
+          "title": "OrderAmends",
+          "description": "The amend transaction history for one order.",
+          "type": "object",
+          "properties": {
+            "count": {
+              "description": "Total count of new and amend transactions (including the original order).",
+              "type": "integer"
+            },
+            "amends": {
+              "description": "Amend transactions, ordered by ascending amend timestamp.",
+              "type": "array",
+              "items": {
+                "title": "OrderAmend",
+                "description": "One amend transaction.",
+                "type": "object",
+                "properties": {
+                  "amend_id": {
+                    "description": "Kraken amend identifier.",
+                    "type": "string"
+                  },
+                  "amend_type": {
+                    "description": "The type of amend transaction: `original` (original order values on order entry), `user` (user-requested amendment), or `restated` (engine order maintenance amendment).",
+                    "type": "string",
+                    "enum": [
+                      "original",
+                      "user",
+                      "restated"
+                    ]
+                  },
+                  "order_qty": {
+                    "description": "Order quantity in terms of the base asset.",
+                    "type": "string"
+                  },
+                  "display_qty": {
+                    "description": "The quantity shown in the book for iceberg orders.",
+                    "type": "string"
+                  },
+                  "remaining_qty": {
+                    "description": "Remaining un-traded quantity on the order.",
+                    "type": "string"
+                  },
+                  "limit_price": {
+                    "description": "The limit price restriction on the order.",
+                    "type": "string"
+                  },
+                  "trigger_price": {
+                    "description": "The trigger price on trigger order types.",
+                    "type": "string"
+                  },
+                  "reason": {
+                    "description": "Description of the reason for this amend.",
+                    "type": "string"
+                  },
+                  "post_only": {
+                    "description": "Indicates if the transaction was restricted from taking liquidity.",
+                    "type": "boolean"
+                  },
+                  "timestamp": {
+                    "description": "The UNIX timestamp for the amend transaction, in nanosecond precision.",
+                    "type": "integer",
+                    "format": "epoch-nanos"
+                  }
+                }
               }
             }
           }

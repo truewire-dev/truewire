@@ -60,13 +60,31 @@
       }
     },
     "response": {
-      "title": "OrderAmended",
+      "title": "OrderAmendedFrame",
       "type": "object",
-      "description": "Result of amending a live order.",
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
       "properties": {
-        "amend_id": {
-          "type": "string",
-          "description": "The unique Kraken identifier generated for this amend transaction."
+        "error": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Wire envelope field; see the core."
+        },
+        "result": {
+          "title": "OrderAmended",
+          "type": "object",
+          "description": "Result of amending a live order.",
+          "properties": {
+            "amend_id": {
+              "type": "string",
+              "description": "The unique Kraken identifier generated for this amend transaction."
+            }
+          }
         }
       }
     }

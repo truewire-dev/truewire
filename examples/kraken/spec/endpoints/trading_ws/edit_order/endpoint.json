@@ -126,24 +126,59 @@
       }
     },
     "response": {
-      "title": "EditOrderResult",
+      "title": "EditOrderResultFrame",
       "type": "object",
-      "description": "Result of a successful `edit_order` call.",
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "method",
+        "req_id",
+        "result",
+        "success",
+        "time_in",
+        "time_out"
+      ],
       "properties": {
-        "order_id": {
+        "method": {
           "type": "string",
-          "description": "Unique ID of the new (edited) order."
+          "description": "Wire envelope field; see the core."
         },
-        "original_order_id": {
+        "req_id": {
+          "type": "integer",
+          "description": "Wire envelope field; see the core."
+        },
+        "result": {
+          "title": "EditOrderResult",
+          "type": "object",
+          "description": "Result of a successful `edit_order` call.",
+          "properties": {
+            "order_id": {
+              "type": "string",
+              "description": "Unique ID of the new (edited) order."
+            },
+            "original_order_id": {
+              "type": "string",
+              "description": "ID of the original order that was edited."
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Non-fatal warnings about the edit, if any."
+            }
+          }
+        },
+        "success": {
+          "type": "boolean",
+          "description": "Wire envelope field; see the core."
+        },
+        "time_in": {
           "type": "string",
-          "description": "ID of the original order that was edited."
+          "description": "Wire envelope field; see the core."
         },
-        "warnings": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "Non-fatal warnings about the edit, if any."
+        "time_out": {
+          "type": "string",
+          "description": "Wire envelope field; see the core."
         }
       }
     }

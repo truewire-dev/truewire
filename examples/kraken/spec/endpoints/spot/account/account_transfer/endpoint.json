@@ -56,21 +56,39 @@
       }
     },
     "response": {
-      "title": "AccountTransferResult",
-      "description": "Outcome of the account transfer.",
+      "title": "AccountTransferResultFrame",
       "type": "object",
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
       "properties": {
-        "transfer_id": {
-          "description": "Unique identifier for the transfer.",
-          "type": "string"
+        "error": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Wire envelope field; see the core."
         },
-        "status": {
-          "description": "Transfer status.",
-          "type": "string",
-          "enum": [
-            "pending",
-            "complete"
-          ]
+        "result": {
+          "title": "AccountTransferResult",
+          "description": "Outcome of the account transfer.",
+          "type": "object",
+          "properties": {
+            "transfer_id": {
+              "description": "Unique identifier for the transfer.",
+              "type": "string"
+            },
+            "status": {
+              "description": "Transfer status.",
+              "type": "string",
+              "enum": [
+                "pending",
+                "complete"
+              ]
+            }
+          }
         }
       }
     }

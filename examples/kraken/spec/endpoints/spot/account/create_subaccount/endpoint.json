@@ -37,8 +37,26 @@
       }
     },
     "response": {
-      "type": "boolean",
-      "description": "Whether subaccount creation succeeded."
+      "title": "CreateSubaccountFrame",
+      "type": "object",
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
+      "properties": {
+        "error": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Wire envelope field; see the core."
+        },
+        "result": {
+          "type": "boolean",
+          "description": "Whether subaccount creation succeeded."
+        }
+      }
     }
   },
   "envelope": {

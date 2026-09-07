@@ -33,22 +33,40 @@
       ]
     },
     "response": {
-      "description": "Status of the last deallocation operation for the strategy. `null` when an error occurred.",
-      "anyOf": [
-        {
-          "title": "EarnDeallocateStatusResult",
-          "type": "object",
-          "properties": {
-            "pending": {
-              "description": "`true` if a deallocation operation is still in progress on this strategy.",
-              "type": "boolean"
-            }
-          }
+      "title": "EarnDeallocateStatusFrame",
+      "type": "object",
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
+      "properties": {
+        "error": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Wire envelope field; see the core."
         },
-        {
-          "type": "null"
+        "result": {
+          "description": "Status of the last deallocation operation for the strategy. `null` when an error occurred.",
+          "anyOf": [
+            {
+              "title": "EarnDeallocateStatusResult",
+              "type": "object",
+              "properties": {
+                "pending": {
+                  "description": "`true` if a deallocation operation is still in progress on this strategy.",
+                  "type": "boolean"
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
-      ]
+      }
     }
   },
   "envelope": {

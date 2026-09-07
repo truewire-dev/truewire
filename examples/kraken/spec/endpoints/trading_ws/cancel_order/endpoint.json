@@ -40,24 +40,59 @@
       }
     },
     "response": {
-      "title": "CancelOrderResult",
+      "title": "CancelOrderResultFrame",
       "type": "object",
-      "description": "Result describing one cancelled order.",
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "method",
+        "req_id",
+        "result",
+        "success",
+        "time_in",
+        "time_out"
+      ],
       "properties": {
-        "order_id": {
+        "method": {
           "type": "string",
-          "description": "Kraken identifier of the cancelled order."
+          "description": "Wire envelope field; see the core."
         },
-        "cl_ord_id": {
+        "req_id": {
+          "type": "integer",
+          "description": "Wire envelope field; see the core."
+        },
+        "result": {
+          "title": "CancelOrderResult",
+          "type": "object",
+          "description": "Result describing one cancelled order.",
+          "properties": {
+            "order_id": {
+              "type": "string",
+              "description": "Kraken identifier of the cancelled order."
+            },
+            "cl_ord_id": {
+              "type": "string",
+              "description": "Client identifier of the cancelled order, if any."
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Non-fatal warnings about the cancellation, if any."
+            }
+          }
+        },
+        "success": {
+          "type": "boolean",
+          "description": "Wire envelope field; see the core."
+        },
+        "time_in": {
           "type": "string",
-          "description": "Client identifier of the cancelled order, if any."
+          "description": "Wire envelope field; see the core."
         },
-        "warnings": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "Non-fatal warnings about the cancellation, if any."
+        "time_out": {
+          "type": "string",
+          "description": "Wire envelope field; see the core."
         }
       }
     }

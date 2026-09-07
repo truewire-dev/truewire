@@ -46,36 +46,54 @@
       }
     },
     "response": {
-      "type": "array",
-      "description": "Withdrawal addresses available for the user.",
-      "items": {
-        "title": "WithdrawalAddress",
-        "type": "object",
-        "description": "One withdrawal address available for the user.",
-        "properties": {
-          "address": {
-            "type": "string",
-            "description": "Withdrawal address."
+      "title": "WithdrawAddressesFrame",
+      "type": "object",
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
+      "properties": {
+        "error": {
+          "type": "array",
+          "items": {
+            "type": "string"
           },
-          "asset": {
-            "type": "string",
-            "description": "Name of asset being withdrawn."
-          },
-          "method": {
-            "type": "string",
-            "description": "Name of the withdrawal method."
-          },
-          "key": {
-            "type": "string",
-            "description": "Withdrawal key name, as set up on the account."
-          },
-          "tag": {
-            "type": "string",
-            "description": "Tag for XRP, or memo for STX/XLM/EOS, deposit addresses associated with this withdrawal address."
-          },
-          "verified": {
-            "type": "boolean",
-            "description": "Verification status of the withdrawal address."
+          "description": "Wire envelope field; see the core."
+        },
+        "result": {
+          "type": "array",
+          "description": "Withdrawal addresses available for the user.",
+          "items": {
+            "title": "WithdrawalAddress",
+            "type": "object",
+            "description": "One withdrawal address available for the user.",
+            "properties": {
+              "address": {
+                "type": "string",
+                "description": "Withdrawal address."
+              },
+              "asset": {
+                "type": "string",
+                "description": "Name of asset being withdrawn."
+              },
+              "method": {
+                "type": "string",
+                "description": "Name of the withdrawal method."
+              },
+              "key": {
+                "type": "string",
+                "description": "Withdrawal key name, as set up on the account."
+              },
+              "tag": {
+                "type": "string",
+                "description": "Tag for XRP, or memo for STX/XLM/EOS, deposit addresses associated with this withdrawal address."
+              },
+              "verified": {
+                "type": "boolean",
+                "description": "Verification status of the withdrawal address."
+              }
+            }
           }
         }
       }

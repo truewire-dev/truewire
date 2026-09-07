@@ -60,173 +60,191 @@
       }
     },
     "response": {
-      "description": "Pair name (or display name, per `assetVersion`) mapped to its info.",
+      "title": "AssetPairsFrame",
       "type": "object",
-      "additionalProperties": {
-        "title": "AssetPair",
-        "description": "One tradable asset pair's info.",
-        "type": "object",
-        "properties": {
-          "altname": {
-            "type": "string",
-            "description": "Alternate pair name."
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
+      "properties": {
+        "error": {
+          "type": "array",
+          "items": {
+            "type": "string"
           },
-          "wsname": {
-            "type": "string",
-            "description": "WebSocket pair name (if available)."
-          },
-          "aclass_base": {
-            "type": "string",
-            "description": "Asset class of the base component."
-          },
-          "base": {
-            "type": "string",
-            "description": "Asset id of the base component."
-          },
-          "aclass_quote": {
-            "type": "string",
-            "description": "Asset class of the quote component."
-          },
-          "quote": {
-            "type": "string",
-            "description": "Asset id of the quote component."
-          },
-          "execution_venue": {
-            "type": "string",
-            "description": "Execution venue where the order book for this pair is listed.",
-            "enum": [
-              "international",
-              "bitnomial_exchange"
-            ]
-          },
-          "lot": {
-            "type": "string",
-            "description": "Volume lot size.",
-            "deprecated": true
-          },
-          "pair_decimals": {
-            "type": "integer",
-            "description": "Number of decimal places for prices in this pair."
-          },
-          "cost_decimals": {
-            "type": "integer",
-            "description": "Number of decimal places for cost of trades in the pair (quote asset terms)."
-          },
-          "lot_decimals": {
-            "type": "integer",
-            "description": "Number of decimal places for volume (base asset terms)."
-          },
-          "lot_multiplier": {
-            "type": "integer",
-            "description": "Amount to multiply lot volume by to get currency volume."
-          },
-          "leverage_buy": {
-            "type": "array",
-            "description": "Leverage amounts available when buying.",
-            "items": {
-              "type": "integer"
-            }
-          },
-          "leverage_sell": {
-            "type": "array",
-            "description": "Leverage amounts available when selling.",
-            "items": {
-              "type": "integer"
-            }
-          },
-          "fees": {
-            "type": "array",
-            "description": "Taker fee schedule.",
-            "items": {
-              "title": "FeeTier",
-              "type": "array",
-              "prefixItems": [
-                {
-                  "title": "volume",
-                  "type": "number",
-                  "description": "Volume threshold for this fee tier."
-                },
-                {
-                  "title": "percentFee",
-                  "type": "number",
-                  "description": "Percent fee at this tier."
+          "description": "Wire envelope field; see the core."
+        },
+        "result": {
+          "description": "Pair name (or display name, per `assetVersion`) mapped to its info.",
+          "type": "object",
+          "additionalProperties": {
+            "title": "AssetPair",
+            "description": "One tradable asset pair's info.",
+            "type": "object",
+            "properties": {
+              "altname": {
+                "type": "string",
+                "description": "Alternate pair name."
+              },
+              "wsname": {
+                "type": "string",
+                "description": "WebSocket pair name (if available)."
+              },
+              "aclass_base": {
+                "type": "string",
+                "description": "Asset class of the base component."
+              },
+              "base": {
+                "type": "string",
+                "description": "Asset id of the base component."
+              },
+              "aclass_quote": {
+                "type": "string",
+                "description": "Asset class of the quote component."
+              },
+              "quote": {
+                "type": "string",
+                "description": "Asset id of the quote component."
+              },
+              "execution_venue": {
+                "type": "string",
+                "description": "Execution venue where the order book for this pair is listed.",
+                "enum": [
+                  "international",
+                  "bitnomial_exchange"
+                ]
+              },
+              "lot": {
+                "type": "string",
+                "description": "Volume lot size.",
+                "deprecated": true
+              },
+              "pair_decimals": {
+                "type": "integer",
+                "description": "Number of decimal places for prices in this pair."
+              },
+              "cost_decimals": {
+                "type": "integer",
+                "description": "Number of decimal places for cost of trades in the pair (quote asset terms)."
+              },
+              "lot_decimals": {
+                "type": "integer",
+                "description": "Number of decimal places for volume (base asset terms)."
+              },
+              "lot_multiplier": {
+                "type": "integer",
+                "description": "Amount to multiply lot volume by to get currency volume."
+              },
+              "leverage_buy": {
+                "type": "array",
+                "description": "Leverage amounts available when buying.",
+                "items": {
+                  "type": "integer"
                 }
-              ],
-              "minItems": 2,
-              "maxItems": 2
-            }
-          },
-          "fees_maker": {
-            "type": "array",
-            "description": "Maker fee schedule, if the pair is on maker/taker fees.",
-            "items": {
-              "title": "FeeTier",
-              "type": "array",
-              "prefixItems": [
-                {
-                  "title": "volume",
-                  "type": "number",
-                  "description": "Volume threshold for this fee tier."
-                },
-                {
-                  "title": "percentFee",
-                  "type": "number",
-                  "description": "Percent fee at this tier."
+              },
+              "leverage_sell": {
+                "type": "array",
+                "description": "Leverage amounts available when selling.",
+                "items": {
+                  "type": "integer"
                 }
-              ],
-              "minItems": 2,
-              "maxItems": 2
+              },
+              "fees": {
+                "type": "array",
+                "description": "Taker fee schedule.",
+                "items": {
+                  "title": "FeeTier",
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "title": "volume",
+                      "type": "number",
+                      "description": "Volume threshold for this fee tier."
+                    },
+                    {
+                      "title": "percentFee",
+                      "type": "number",
+                      "description": "Percent fee at this tier."
+                    }
+                  ],
+                  "minItems": 2,
+                  "maxItems": 2
+                }
+              },
+              "fees_maker": {
+                "type": "array",
+                "description": "Maker fee schedule, if the pair is on maker/taker fees.",
+                "items": {
+                  "title": "FeeTier",
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "title": "volume",
+                      "type": "number",
+                      "description": "Volume threshold for this fee tier."
+                    },
+                    {
+                      "title": "percentFee",
+                      "type": "number",
+                      "description": "Percent fee at this tier."
+                    }
+                  ],
+                  "minItems": 2,
+                  "maxItems": 2
+                }
+              },
+              "fee_volume_currency": {
+                "type": "string",
+                "description": "Volume discount currency."
+              },
+              "margin_call": {
+                "type": "integer",
+                "description": "Margin call level."
+              },
+              "margin_stop": {
+                "type": "integer",
+                "description": "Stop-out/liquidation margin level."
+              },
+              "margin_level": {
+                "type": "integer",
+                "description": "Same value as `margin_stop`, returned under this name instead when `info=margin` is requested. Not in upstream's published field list; confirmed live -- see notes."
+              },
+              "ordermin": {
+                "type": "string",
+                "description": "Minimum order size (in terms of base currency).",
+                "format": "decimal-string"
+              },
+              "costmin": {
+                "type": "string",
+                "description": "Minimum order cost (in terms of quote currency).",
+                "format": "decimal-string"
+              },
+              "tick_size": {
+                "type": "string",
+                "description": "Minimum increment between valid price levels.",
+                "format": "decimal-string"
+              },
+              "status": {
+                "type": "string",
+                "description": "Status of the pair.",
+                "enum": [
+                  "online",
+                  "cancel_only",
+                  "post_only",
+                  "limit_only",
+                  "reduce_only"
+                ]
+              },
+              "long_position_limit": {
+                "type": "integer",
+                "description": "Maximum long margin position size (in terms of base currency)."
+              },
+              "short_position_limit": {
+                "type": "integer",
+                "description": "Maximum short margin position size (in terms of base currency)."
+              }
             }
-          },
-          "fee_volume_currency": {
-            "type": "string",
-            "description": "Volume discount currency."
-          },
-          "margin_call": {
-            "type": "integer",
-            "description": "Margin call level."
-          },
-          "margin_stop": {
-            "type": "integer",
-            "description": "Stop-out/liquidation margin level."
-          },
-          "margin_level": {
-            "type": "integer",
-            "description": "Same value as `margin_stop`, returned under this name instead when `info=margin` is requested. Not in upstream's published field list; confirmed live -- see notes."
-          },
-          "ordermin": {
-            "type": "string",
-            "description": "Minimum order size (in terms of base currency).",
-            "format": "decimal-string"
-          },
-          "costmin": {
-            "type": "string",
-            "description": "Minimum order cost (in terms of quote currency).",
-            "format": "decimal-string"
-          },
-          "tick_size": {
-            "type": "string",
-            "description": "Minimum increment between valid price levels.",
-            "format": "decimal-string"
-          },
-          "status": {
-            "type": "string",
-            "description": "Status of the pair.",
-            "enum": [
-              "online",
-              "cancel_only",
-              "post_only",
-              "limit_only",
-              "reduce_only"
-            ]
-          },
-          "long_position_limit": {
-            "type": "integer",
-            "description": "Maximum long margin position size (in terms of base currency)."
-          },
-          "short_position_limit": {
-            "type": "integer",
-            "description": "Maximum short margin position size (in terms of base currency)."
           }
         }
       }

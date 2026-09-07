@@ -16,17 +16,35 @@
     "description": "Request an authentication token for connecting to and authenticating with Kraken's private WebSocket API. The token should be used within 15 minutes of issuance; once a successful connection and private subscription has been made, it does not expire for the life of that connection.\n\n**API Key Permissions Required:** `WebSocket interface - On`",
     "request": null,
     "response": {
-      "title": "WebSocketsToken",
+      "title": "WebSocketsTokenFrame",
       "type": "object",
-      "description": "A short-lived token authenticating a private WebSocket connection.",
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
       "properties": {
-        "token": {
-          "type": "string",
-          "description": "WebSocket authentication token."
+        "error": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Wire envelope field; see the core."
         },
-        "expires": {
-          "type": "integer",
-          "description": "Seconds after which the token expires (~900), unless already consumed by a private WebSocket subscription."
+        "result": {
+          "title": "WebSocketsToken",
+          "type": "object",
+          "description": "A short-lived token authenticating a private WebSocket connection.",
+          "properties": {
+            "token": {
+              "type": "string",
+              "description": "WebSocket authentication token."
+            },
+            "expires": {
+              "type": "integer",
+              "description": "Seconds after which the token expires (~900), unless already consumed by a private WebSocket subscription."
+            }
+          }
         }
       }
     }

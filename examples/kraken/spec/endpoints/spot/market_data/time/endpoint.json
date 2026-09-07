@@ -11,17 +11,35 @@
     "description": "Get the server's time.",
     "request": null,
     "response": {
-      "title": "ServerTime",
-      "description": "The server's current time.",
+      "title": "ServerTimeFrame",
       "type": "object",
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
       "properties": {
-        "unixtime": {
-          "type": "integer",
-          "description": "Unix timestamp."
+        "error": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Wire envelope field; see the core."
         },
-        "rfc1123": {
-          "type": "string",
-          "description": "RFC 1123 time format."
+        "result": {
+          "title": "ServerTime",
+          "description": "The server's current time.",
+          "type": "object",
+          "properties": {
+            "unixtime": {
+              "type": "integer",
+              "description": "Unix timestamp."
+            },
+            "rfc1123": {
+              "type": "string",
+              "description": "RFC 1123 time format."
+            }
+          }
         }
       }
     }

@@ -53,144 +53,162 @@
       }
     },
     "response": {
-      "title": "QueriedTrades",
-      "description": "The queried trades, keyed by transaction ID.",
+      "title": "QueriedTradesFrame",
       "type": "object",
-      "additionalProperties": {
-        "title": "HistoricalTrade",
-        "description": "One historical trade.",
-        "type": "object",
-        "properties": {
-          "ordertxid": {
-            "description": "Order responsible for execution of the trade.",
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
+      "properties": {
+        "error": {
+          "type": "array",
+          "items": {
             "type": "string"
           },
-          "postxid": {
-            "description": "Position responsible for execution of the trade.",
-            "type": "string"
-          },
-          "pair": {
-            "description": "Asset pair.",
-            "type": "string"
-          },
-          "time": {
-            "description": "Unix timestamp of the trade.",
-            "type": "number",
-            "format": "epoch-seconds"
-          },
-          "type": {
-            "description": "Type of order.",
-            "type": "string",
-            "enum": [
-              "buy",
-              "sell"
-            ]
-          },
-          "ordertype": {
-            "description": "Order type.",
-            "type": "string",
-            "enum": [
-              "market",
-              "limit",
-              "iceberg",
-              "stop-loss",
-              "take-profit",
-              "stop-loss-limit",
-              "take-profit-limit",
-              "trailing-stop",
-              "trailing-stop-limit",
-              "settle-position"
-            ]
-          },
-          "price": {
-            "description": "Average price the order was executed at (quote currency).",
-            "type": "string"
-          },
-          "cost": {
-            "description": "Total cost of the order (quote currency).",
-            "type": "string"
-          },
-          "fee": {
-            "description": "Total fee (quote currency).",
-            "type": "string"
-          },
-          "vol": {
-            "description": "Volume (base currency).",
-            "type": "string"
-          },
-          "margin": {
-            "description": "Initial margin (quote currency).",
-            "type": "string"
-          },
-          "leverage": {
-            "description": "Amount of leverage used in the trade.",
-            "type": "string"
-          },
-          "misc": {
-            "description": "Comma-delimited list of miscellaneous info: `closing` -- trade closes all or part of a position.",
-            "type": "string"
-          },
-          "trade_id": {
-            "description": "Unique identifier of the trade executed.",
-            "type": "integer"
-          },
-          "maker": {
-            "description": "`true` if the trade was executed with the user as the maker, `false` if taker.",
-            "type": "boolean"
-          },
-          "posstatus": {
-            "description": "Position status. Only present if the trade opened a position.",
-            "type": "string",
-            "enum": [
-              "open",
-              "closed"
-            ]
-          },
-          "cprice": {
-            "description": "Average price of the closed portion of the position (quote currency). Only present if the trade opened a position.",
-            "type": "number"
-          },
-          "ccost": {
-            "description": "Total cost of the closed portion of the position (quote currency). Only present if the trade opened a position.",
-            "type": "number"
-          },
-          "cfee": {
-            "description": "Total fee of the closed portion of the position (quote currency). Only present if the trade opened a position.",
-            "type": "number"
-          },
-          "cvol": {
-            "description": "Total fee of the closed portion of the position (quote currency). Only present if the trade opened a position.",
-            "type": "number"
-          },
-          "cmargin": {
-            "description": "Total margin freed in the closed portion of the position (quote currency). Only present if the trade opened a position.",
-            "type": "number"
-          },
-          "net": {
-            "description": "Net profit/loss of the closed portion of the position (quote currency). Only present if the trade opened a position.",
-            "type": "number"
-          },
-          "trades": {
-            "description": "List of closing trades for the position (if available). Only present if the trade opened a position.",
-            "type": "array",
-            "items": {
-              "type": "string"
+          "description": "Wire envelope field; see the core."
+        },
+        "result": {
+          "title": "QueriedTrades",
+          "description": "The queried trades, keyed by transaction ID.",
+          "type": "object",
+          "additionalProperties": {
+            "title": "HistoricalTrade",
+            "description": "One historical trade.",
+            "type": "object",
+            "properties": {
+              "ordertxid": {
+                "description": "Order responsible for execution of the trade.",
+                "type": "string"
+              },
+              "postxid": {
+                "description": "Position responsible for execution of the trade.",
+                "type": "string"
+              },
+              "pair": {
+                "description": "Asset pair.",
+                "type": "string"
+              },
+              "time": {
+                "description": "Unix timestamp of the trade.",
+                "type": "number",
+                "format": "epoch-seconds"
+              },
+              "type": {
+                "description": "Type of order.",
+                "type": "string",
+                "enum": [
+                  "buy",
+                  "sell"
+                ]
+              },
+              "ordertype": {
+                "description": "Order type.",
+                "type": "string",
+                "enum": [
+                  "market",
+                  "limit",
+                  "iceberg",
+                  "stop-loss",
+                  "take-profit",
+                  "stop-loss-limit",
+                  "take-profit-limit",
+                  "trailing-stop",
+                  "trailing-stop-limit",
+                  "settle-position"
+                ]
+              },
+              "price": {
+                "description": "Average price the order was executed at (quote currency).",
+                "type": "string"
+              },
+              "cost": {
+                "description": "Total cost of the order (quote currency).",
+                "type": "string"
+              },
+              "fee": {
+                "description": "Total fee (quote currency).",
+                "type": "string"
+              },
+              "vol": {
+                "description": "Volume (base currency).",
+                "type": "string"
+              },
+              "margin": {
+                "description": "Initial margin (quote currency).",
+                "type": "string"
+              },
+              "leverage": {
+                "description": "Amount of leverage used in the trade.",
+                "type": "string"
+              },
+              "misc": {
+                "description": "Comma-delimited list of miscellaneous info: `closing` -- trade closes all or part of a position.",
+                "type": "string"
+              },
+              "trade_id": {
+                "description": "Unique identifier of the trade executed.",
+                "type": "integer"
+              },
+              "maker": {
+                "description": "`true` if the trade was executed with the user as the maker, `false` if taker.",
+                "type": "boolean"
+              },
+              "posstatus": {
+                "description": "Position status. Only present if the trade opened a position.",
+                "type": "string",
+                "enum": [
+                  "open",
+                  "closed"
+                ]
+              },
+              "cprice": {
+                "description": "Average price of the closed portion of the position (quote currency). Only present if the trade opened a position.",
+                "type": "number"
+              },
+              "ccost": {
+                "description": "Total cost of the closed portion of the position (quote currency). Only present if the trade opened a position.",
+                "type": "number"
+              },
+              "cfee": {
+                "description": "Total fee of the closed portion of the position (quote currency). Only present if the trade opened a position.",
+                "type": "number"
+              },
+              "cvol": {
+                "description": "Total fee of the closed portion of the position (quote currency). Only present if the trade opened a position.",
+                "type": "number"
+              },
+              "cmargin": {
+                "description": "Total margin freed in the closed portion of the position (quote currency). Only present if the trade opened a position.",
+                "type": "number"
+              },
+              "net": {
+                "description": "Net profit/loss of the closed portion of the position (quote currency). Only present if the trade opened a position.",
+                "type": "number"
+              },
+              "trades": {
+                "description": "List of closing trades for the position (if available). Only present if the trade opened a position.",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "ledgers": {
+                "description": "List of ledger ids for entries associated with the trade. Only present if the trade opened a position.",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "aclass": {
+                "description": "Asset class. Only present if the trade opened a position.",
+                "type": "string"
+              },
+              "tradeordertype": {
+                "description": "Order type of the trade (e.g. `market`, `limit`). May differ from `ordertype` when the order type was converted on execution. Only present if the trade opened a position.",
+                "type": "string"
+              }
             }
-          },
-          "ledgers": {
-            "description": "List of ledger ids for entries associated with the trade. Only present if the trade opened a position.",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "aclass": {
-            "description": "Asset class. Only present if the trade opened a position.",
-            "type": "string"
-          },
-          "tradeordertype": {
-            "description": "Order type of the trade (e.g. `market`, `limit`). May differ from `ordertype` when the order type was converted on execution. Only present if the trade opened a position.",
-            "type": "string"
           }
         }
       }

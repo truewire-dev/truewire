@@ -37,18 +37,36 @@
       }
     },
     "response": {
-      "title": "AccountBalance",
-      "description": "All cash balances, keyed by asset code.",
+      "title": "AccountBalanceFrame",
       "type": "object",
-      "additionalProperties": {
-        "type": "string",
-        "description": "Balance of this asset, as a decimal string.",
-        "format": "decimal-string"
-      },
-      "example": {
-        "ZUSD": "171288.6158",
-        "ZEUR": "504861.8946",
-        "XXBT": "1011.1908877900"
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
+      "properties": {
+        "error": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Wire envelope field; see the core."
+        },
+        "result": {
+          "title": "AccountBalance",
+          "description": "All cash balances, keyed by asset code.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "description": "Balance of this asset, as a decimal string.",
+            "format": "decimal-string"
+          },
+          "example": {
+            "ZUSD": "171288.6158",
+            "ZEUR": "504861.8946",
+            "XXBT": "1011.1908877900"
+          }
+        }
       }
     }
   },

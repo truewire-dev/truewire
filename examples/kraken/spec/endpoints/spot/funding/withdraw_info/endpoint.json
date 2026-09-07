@@ -42,25 +42,43 @@
       }
     },
     "response": {
-      "title": "WithdrawalInfo",
+      "title": "WithdrawalInfoFrame",
       "type": "object",
-      "description": "Fee and limit information for a potential withdrawal.",
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
       "properties": {
-        "method": {
-          "type": "string",
-          "description": "Name of the withdrawal method that will be used."
+        "error": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Wire envelope field; see the core."
         },
-        "limit": {
-          "type": "string",
-          "description": "Maximum net amount that can be withdrawn right now."
-        },
-        "amount": {
-          "type": "string",
-          "description": "Net amount that will be sent, after fees."
-        },
-        "fee": {
-          "type": "string",
-          "description": "Amount of fees that will be paid."
+        "result": {
+          "title": "WithdrawalInfo",
+          "type": "object",
+          "description": "Fee and limit information for a potential withdrawal.",
+          "properties": {
+            "method": {
+              "type": "string",
+              "description": "Name of the withdrawal method that will be used."
+            },
+            "limit": {
+              "type": "string",
+              "description": "Maximum net amount that can be withdrawn right now."
+            },
+            "amount": {
+              "type": "string",
+              "description": "Net amount that will be sent, after fees."
+            },
+            "fee": {
+              "type": "string",
+              "description": "Amount of fees that will be paid."
+            }
+          }
         }
       }
     }

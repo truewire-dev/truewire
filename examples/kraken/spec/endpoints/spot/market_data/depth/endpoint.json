@@ -44,71 +44,89 @@
       ]
     },
     "response": {
-      "description": "Pair name (or display name, per `assetVersion`) mapped to its order book.",
+      "title": "DepthFrame",
       "type": "object",
-      "additionalProperties": {
-        "title": "OrderBook",
-        "description": "One pair's L2 order book.",
-        "type": "object",
-        "properties": {
-          "asks": {
-            "description": "Ask side, best first.",
-            "type": "array",
-            "items": {
-              "title": "DepthLevel",
-              "description": "One price level `[price, volume, timestamp]`.",
-              "type": "array",
-              "prefixItems": [
-                {
-                  "title": "price",
-                  "type": "string",
-                  "description": "Price at this level.",
-                  "format": "decimal-string"
-                },
-                {
-                  "title": "volume",
-                  "type": "string",
-                  "description": "Aggregated volume at this level.",
-                  "format": "decimal-string"
-                },
-                {
-                  "title": "timestamp",
-                  "type": "integer",
-                  "description": "Unix timestamp this level was last updated."
-                }
-              ],
-              "minItems": 3,
-              "maxItems": 3
-            }
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
+      "properties": {
+        "error": {
+          "type": "array",
+          "items": {
+            "type": "string"
           },
-          "bids": {
-            "description": "Bid side, best first.",
-            "type": "array",
-            "items": {
-              "title": "DepthLevel",
-              "description": "One price level `[price, volume, timestamp]`.",
-              "type": "array",
-              "prefixItems": [
-                {
-                  "title": "price",
-                  "type": "string",
-                  "description": "Price at this level.",
-                  "format": "decimal-string"
-                },
-                {
-                  "title": "volume",
-                  "type": "string",
-                  "description": "Aggregated volume at this level.",
-                  "format": "decimal-string"
-                },
-                {
-                  "title": "timestamp",
-                  "type": "integer",
-                  "description": "Unix timestamp this level was last updated."
+          "description": "Wire envelope field; see the core."
+        },
+        "result": {
+          "description": "Pair name (or display name, per `assetVersion`) mapped to its order book.",
+          "type": "object",
+          "additionalProperties": {
+            "title": "OrderBook",
+            "description": "One pair's L2 order book.",
+            "type": "object",
+            "properties": {
+              "asks": {
+                "description": "Ask side, best first.",
+                "type": "array",
+                "items": {
+                  "title": "DepthLevel",
+                  "description": "One price level `[price, volume, timestamp]`.",
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "title": "price",
+                      "type": "string",
+                      "description": "Price at this level.",
+                      "format": "decimal-string"
+                    },
+                    {
+                      "title": "volume",
+                      "type": "string",
+                      "description": "Aggregated volume at this level.",
+                      "format": "decimal-string"
+                    },
+                    {
+                      "title": "timestamp",
+                      "type": "integer",
+                      "description": "Unix timestamp this level was last updated."
+                    }
+                  ],
+                  "minItems": 3,
+                  "maxItems": 3
                 }
-              ],
-              "minItems": 3,
-              "maxItems": 3
+              },
+              "bids": {
+                "description": "Bid side, best first.",
+                "type": "array",
+                "items": {
+                  "title": "DepthLevel",
+                  "description": "One price level `[price, volume, timestamp]`.",
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "title": "price",
+                      "type": "string",
+                      "description": "Price at this level.",
+                      "format": "decimal-string"
+                    },
+                    {
+                      "title": "volume",
+                      "type": "string",
+                      "description": "Aggregated volume at this level.",
+                      "format": "decimal-string"
+                    },
+                    {
+                      "title": "timestamp",
+                      "type": "integer",
+                      "description": "Unix timestamp this level was last updated."
+                    }
+                  ],
+                  "minItems": 3,
+                  "maxItems": 3
+                }
+              }
             }
           }
         }

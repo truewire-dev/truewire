@@ -53,105 +53,123 @@
       }
     },
     "response": {
-      "title": "OpenPositions",
-      "description": "Open margin positions, keyed by transaction ID.",
+      "title": "OpenPositionsFrame",
       "type": "object",
-      "additionalProperties": {
-        "title": "OpenPosition",
-        "description": "One open margin position.",
-        "type": "object",
-        "properties": {
-          "ordertxid": {
-            "description": "Order ID responsible for the position.",
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
+      "properties": {
+        "error": {
+          "type": "array",
+          "items": {
             "type": "string"
           },
-          "class": {
-            "description": "Asset class of the position.",
-            "type": "string"
-          },
-          "posstatus": {
-            "description": "Position status.",
-            "type": "string",
-            "enum": [
-              "open"
-            ]
-          },
-          "pair": {
-            "description": "Asset pair.",
-            "type": "string"
-          },
-          "time": {
-            "description": "Unix timestamp of the trade.",
-            "type": "number",
-            "format": "epoch-seconds"
-          },
-          "type": {
-            "description": "Direction of the position.",
-            "type": "string",
-            "enum": [
-              "buy",
-              "sell"
-            ]
-          },
-          "ordertype": {
-            "description": "Order type used to open the position.",
-            "type": "string",
-            "enum": [
-              "market",
-              "limit",
-              "iceberg",
-              "stop-loss",
-              "take-profit",
-              "stop-loss-limit",
-              "take-profit-limit",
-              "trailing-stop",
-              "trailing-stop-limit",
-              "settle-position"
-            ]
-          },
-          "cost": {
-            "description": "Opening cost of the position (quote currency).",
-            "type": "string"
-          },
-          "fee": {
-            "description": "Opening fee of the position (quote currency).",
-            "type": "string"
-          },
-          "vol": {
-            "description": "Position opening size (base currency).",
-            "type": "string"
-          },
-          "vol_closed": {
-            "description": "Quantity closed (base currency).",
-            "type": "string"
-          },
-          "margin": {
-            "description": "Initial margin consumed (quote currency).",
-            "type": "string"
-          },
-          "value": {
-            "description": "Current value of the remaining position. Only present if `docalcs` requested.",
-            "type": "string"
-          },
-          "net": {
-            "description": "Unrealised P&L of the remaining position. Only present if `docalcs` requested.",
-            "type": "string"
-          },
-          "terms": {
-            "description": "Funding cost and term of the position (e.g. \"0.0100% per 4 hours\").",
-            "type": "string"
-          },
-          "rollovertm": {
-            "description": "Timestamp of the next margin rollover fee.",
-            "type": "string"
-          },
-          "misc": {
-            "description": "Comma-delimited list of additional info.",
-            "type": "string"
-          },
-          "oflags": {
-            "description": "Comma-delimited list of opening order flags.",
-            "type": "string"
+          "description": "Wire envelope field; see the core."
+        },
+        "result": {
+          "title": "OpenPositions",
+          "description": "Open margin positions, keyed by transaction ID.",
+          "type": "object",
+          "additionalProperties": {
+            "title": "OpenPosition",
+            "description": "One open margin position.",
+            "type": "object",
+            "properties": {
+              "ordertxid": {
+                "description": "Order ID responsible for the position.",
+                "type": "string"
+              },
+              "class": {
+                "description": "Asset class of the position.",
+                "type": "string"
+              },
+              "posstatus": {
+                "description": "Position status.",
+                "type": "string",
+                "enum": [
+                  "open"
+                ]
+              },
+              "pair": {
+                "description": "Asset pair.",
+                "type": "string"
+              },
+              "time": {
+                "description": "Unix timestamp of the trade.",
+                "type": "number",
+                "format": "epoch-seconds"
+              },
+              "type": {
+                "description": "Direction of the position.",
+                "type": "string",
+                "enum": [
+                  "buy",
+                  "sell"
+                ]
+              },
+              "ordertype": {
+                "description": "Order type used to open the position.",
+                "type": "string",
+                "enum": [
+                  "market",
+                  "limit",
+                  "iceberg",
+                  "stop-loss",
+                  "take-profit",
+                  "stop-loss-limit",
+                  "take-profit-limit",
+                  "trailing-stop",
+                  "trailing-stop-limit",
+                  "settle-position"
+                ]
+              },
+              "cost": {
+                "description": "Opening cost of the position (quote currency).",
+                "type": "string"
+              },
+              "fee": {
+                "description": "Opening fee of the position (quote currency).",
+                "type": "string"
+              },
+              "vol": {
+                "description": "Position opening size (base currency).",
+                "type": "string"
+              },
+              "vol_closed": {
+                "description": "Quantity closed (base currency).",
+                "type": "string"
+              },
+              "margin": {
+                "description": "Initial margin consumed (quote currency).",
+                "type": "string"
+              },
+              "value": {
+                "description": "Current value of the remaining position. Only present if `docalcs` requested.",
+                "type": "string"
+              },
+              "net": {
+                "description": "Unrealised P&L of the remaining position. Only present if `docalcs` requested.",
+                "type": "string"
+              },
+              "terms": {
+                "description": "Funding cost and term of the position (e.g. \"0.0100% per 4 hours\").",
+                "type": "string"
+              },
+              "rollovertm": {
+                "description": "Timestamp of the next margin rollover fee.",
+                "type": "string"
+              },
+              "misc": {
+                "description": "Comma-delimited list of additional info.",
+                "type": "string"
+              },
+              "oflags": {
+                "description": "Comma-delimited list of opening order flags.",
+                "type": "string"
+              }
+            }
           }
         }
       }

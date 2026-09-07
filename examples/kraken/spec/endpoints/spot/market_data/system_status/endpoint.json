@@ -11,24 +11,42 @@
     "description": "Get the current system status or trading mode.",
     "request": null,
     "response": {
-      "title": "SystemStatus",
-      "description": "The exchange's current operational status.",
+      "title": "SystemStatusFrame",
       "type": "object",
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
       "properties": {
-        "status": {
-          "type": "string",
-          "description": "Current system status: `online` (operating normally, all order types accepted), `maintenance` (offline, no new orders or cancellations), `cancel_only` (resting orders can be cancelled but none submitted, no trades occur), or `post_only` (only post-only limit orders accepted, existing orders may still be cancelled, no trades occur).",
-          "enum": [
-            "online",
-            "maintenance",
-            "cancel_only",
-            "post_only"
-          ]
+        "error": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Wire envelope field; see the core."
         },
-        "timestamp": {
-          "type": "string",
-          "format": "date-time",
-          "description": "Current timestamp (RFC3339)."
+        "result": {
+          "title": "SystemStatus",
+          "description": "The exchange's current operational status.",
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "description": "Current system status: `online` (operating normally, all order types accepted), `maintenance` (offline, no new orders or cancellations), `cancel_only` (resting orders can be cancelled but none submitted, no trades occur), or `post_only` (only post-only limit orders accepted, existing orders may still be cancelled, no trades occur).",
+              "enum": [
+                "online",
+                "maintenance",
+                "cancel_only",
+                "post_only"
+              ]
+            },
+            "timestamp": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Current timestamp (RFC3339)."
+            }
+          }
         }
       }
     }

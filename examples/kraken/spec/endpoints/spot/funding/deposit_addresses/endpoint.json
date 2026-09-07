@@ -61,36 +61,54 @@
       }
     },
     "response": {
-      "type": "array",
-      "description": "Deposit addresses for the requested asset and method.",
-      "items": {
-        "title": "DepositAddress",
-        "type": "object",
-        "description": "One deposit address for a particular asset and method.",
-        "required": [
-          "address",
-          "expiretm"
-        ],
-        "properties": {
-          "address": {
-            "type": "string",
-            "description": "Deposit address."
+      "title": "DepositAddressesFrame",
+      "type": "object",
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
+      "properties": {
+        "error": {
+          "type": "array",
+          "items": {
+            "type": "string"
           },
-          "expiretm": {
-            "type": "string",
-            "description": "Expiration time as a unix timestamp, or `0` if not expiring."
-          },
-          "new": {
-            "type": "boolean",
-            "description": "Whether or not the address has ever been used."
-          },
-          "tag": {
-            "type": "string",
-            "description": "Destination tag for XRP deposit addresses, or memo for STX/XLM/EOS deposit addresses."
-          },
-          "memo": {
-            "type": "string",
-            "description": "Memo for some deposit addresses (seen alongside `tag` in Kraken's own documented example response, though this property is not declared on the upstream schema -- see this endpoint's `notes`)."
+          "description": "Wire envelope field; see the core."
+        },
+        "result": {
+          "type": "array",
+          "description": "Deposit addresses for the requested asset and method.",
+          "items": {
+            "title": "DepositAddress",
+            "type": "object",
+            "description": "One deposit address for a particular asset and method.",
+            "required": [
+              "address",
+              "expiretm"
+            ],
+            "properties": {
+              "address": {
+                "type": "string",
+                "description": "Deposit address."
+              },
+              "expiretm": {
+                "type": "string",
+                "description": "Expiration time as a unix timestamp, or `0` if not expiring."
+              },
+              "new": {
+                "type": "boolean",
+                "description": "Whether or not the address has ever been used."
+              },
+              "tag": {
+                "type": "string",
+                "description": "Destination tag for XRP deposit addresses, or memo for STX/XLM/EOS deposit addresses."
+              },
+              "memo": {
+                "type": "string",
+                "description": "Memo for some deposit addresses (seen alongside `tag` in Kraken's own documented example response, though this property is not declared on the upstream schema -- see this endpoint's `notes`)."
+              }
+            }
           }
         }
       }

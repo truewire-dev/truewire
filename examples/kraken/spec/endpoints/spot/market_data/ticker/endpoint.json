@@ -36,178 +36,196 @@
       }
     },
     "response": {
-      "description": "Pair name (or display name, per `assetVersion`) mapped to its ticker snapshot.",
+      "title": "TickerFrame",
       "type": "object",
-      "additionalProperties": {
-        "title": "AssetTicker",
-        "description": "One pair's ticker snapshot. Field names follow Kraken's own wire shortcuts.",
-        "type": "object",
-        "properties": {
-          "a": {
-            "title": "TickerLevel",
-            "description": "Ask `[price, whole lot volume, lot volume]`.",
-            "type": "array",
-            "prefixItems": [
-              {
-                "title": "price",
-                "type": "string",
-                "description": "Ask price."
-              },
-              {
-                "title": "wholeLotVolume",
-                "type": "string",
-                "description": "Whole lot volume at the ask."
-              },
-              {
-                "title": "lotVolume",
-                "type": "string",
-                "description": "Lot volume at the ask."
-              }
-            ],
-            "minItems": 3,
-            "maxItems": 3
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
+      "properties": {
+        "error": {
+          "type": "array",
+          "items": {
+            "type": "string"
           },
-          "b": {
-            "title": "TickerLevel",
-            "description": "Bid `[price, whole lot volume, lot volume]`.",
-            "type": "array",
-            "prefixItems": [
-              {
-                "title": "price",
-                "type": "string",
-                "description": "Bid price."
+          "description": "Wire envelope field; see the core."
+        },
+        "result": {
+          "description": "Pair name (or display name, per `assetVersion`) mapped to its ticker snapshot.",
+          "type": "object",
+          "additionalProperties": {
+            "title": "AssetTicker",
+            "description": "One pair's ticker snapshot. Field names follow Kraken's own wire shortcuts.",
+            "type": "object",
+            "properties": {
+              "a": {
+                "title": "TickerLevel",
+                "description": "Ask `[price, whole lot volume, lot volume]`.",
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "title": "price",
+                    "type": "string",
+                    "description": "Ask price."
+                  },
+                  {
+                    "title": "wholeLotVolume",
+                    "type": "string",
+                    "description": "Whole lot volume at the ask."
+                  },
+                  {
+                    "title": "lotVolume",
+                    "type": "string",
+                    "description": "Lot volume at the ask."
+                  }
+                ],
+                "minItems": 3,
+                "maxItems": 3
               },
-              {
-                "title": "wholeLotVolume",
-                "type": "string",
-                "description": "Whole lot volume at the bid."
+              "b": {
+                "title": "TickerLevel",
+                "description": "Bid `[price, whole lot volume, lot volume]`.",
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "title": "price",
+                    "type": "string",
+                    "description": "Bid price."
+                  },
+                  {
+                    "title": "wholeLotVolume",
+                    "type": "string",
+                    "description": "Whole lot volume at the bid."
+                  },
+                  {
+                    "title": "lotVolume",
+                    "type": "string",
+                    "description": "Lot volume at the bid."
+                  }
+                ],
+                "minItems": 3,
+                "maxItems": 3
               },
-              {
-                "title": "lotVolume",
+              "c": {
+                "title": "TickerLastTrade",
+                "description": "Last trade closed `[price, lot volume]`.",
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "title": "price",
+                    "type": "string",
+                    "description": "Last trade closed price."
+                  },
+                  {
+                    "title": "lotVolume",
+                    "type": "string",
+                    "description": "Last trade closed lot volume."
+                  }
+                ],
+                "minItems": 2,
+                "maxItems": 2
+              },
+              "v": {
+                "title": "TickerVolume",
+                "description": "Volume `[today, last 24 hours]`.",
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "title": "today",
+                    "type": "string",
+                    "description": "Volume traded today."
+                  },
+                  {
+                    "title": "last24Hours",
+                    "type": "string",
+                    "description": "Volume traded in the last 24 hours."
+                  }
+                ],
+                "minItems": 2,
+                "maxItems": 2
+              },
+              "p": {
+                "title": "TickerVwap",
+                "description": "Volume weighted average price `[today, last 24 hours]`.",
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "title": "today",
+                    "type": "string",
+                    "description": "Volume weighted average price today."
+                  },
+                  {
+                    "title": "last24Hours",
+                    "type": "string",
+                    "description": "Volume weighted average price in the last 24 hours."
+                  }
+                ],
+                "minItems": 2,
+                "maxItems": 2
+              },
+              "t": {
+                "title": "TickerTradeCount",
+                "description": "Number of trades `[today, last 24 hours]`.",
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "title": "today",
+                    "type": "integer",
+                    "description": "Number of trades today."
+                  },
+                  {
+                    "title": "last24Hours",
+                    "type": "integer",
+                    "description": "Number of trades in the last 24 hours."
+                  }
+                ],
+                "minItems": 2,
+                "maxItems": 2
+              },
+              "l": {
+                "title": "TickerLow",
+                "description": "Low `[today, last 24 hours]`.",
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "title": "today",
+                    "type": "string",
+                    "description": "Low price today."
+                  },
+                  {
+                    "title": "last24Hours",
+                    "type": "string",
+                    "description": "Low price in the last 24 hours."
+                  }
+                ],
+                "minItems": 2,
+                "maxItems": 2
+              },
+              "h": {
+                "title": "TickerHigh",
+                "description": "High `[today, last 24 hours]`.",
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "title": "today",
+                    "type": "string",
+                    "description": "High price today."
+                  },
+                  {
+                    "title": "last24Hours",
+                    "type": "string",
+                    "description": "High price in the last 24 hours."
+                  }
+                ],
+                "minItems": 2,
+                "maxItems": 2
+              },
+              "o": {
                 "type": "string",
-                "description": "Lot volume at the bid."
+                "description": "Today's opening price."
               }
-            ],
-            "minItems": 3,
-            "maxItems": 3
-          },
-          "c": {
-            "title": "TickerLastTrade",
-            "description": "Last trade closed `[price, lot volume]`.",
-            "type": "array",
-            "prefixItems": [
-              {
-                "title": "price",
-                "type": "string",
-                "description": "Last trade closed price."
-              },
-              {
-                "title": "lotVolume",
-                "type": "string",
-                "description": "Last trade closed lot volume."
-              }
-            ],
-            "minItems": 2,
-            "maxItems": 2
-          },
-          "v": {
-            "title": "TickerVolume",
-            "description": "Volume `[today, last 24 hours]`.",
-            "type": "array",
-            "prefixItems": [
-              {
-                "title": "today",
-                "type": "string",
-                "description": "Volume traded today."
-              },
-              {
-                "title": "last24Hours",
-                "type": "string",
-                "description": "Volume traded in the last 24 hours."
-              }
-            ],
-            "minItems": 2,
-            "maxItems": 2
-          },
-          "p": {
-            "title": "TickerVwap",
-            "description": "Volume weighted average price `[today, last 24 hours]`.",
-            "type": "array",
-            "prefixItems": [
-              {
-                "title": "today",
-                "type": "string",
-                "description": "Volume weighted average price today."
-              },
-              {
-                "title": "last24Hours",
-                "type": "string",
-                "description": "Volume weighted average price in the last 24 hours."
-              }
-            ],
-            "minItems": 2,
-            "maxItems": 2
-          },
-          "t": {
-            "title": "TickerTradeCount",
-            "description": "Number of trades `[today, last 24 hours]`.",
-            "type": "array",
-            "prefixItems": [
-              {
-                "title": "today",
-                "type": "integer",
-                "description": "Number of trades today."
-              },
-              {
-                "title": "last24Hours",
-                "type": "integer",
-                "description": "Number of trades in the last 24 hours."
-              }
-            ],
-            "minItems": 2,
-            "maxItems": 2
-          },
-          "l": {
-            "title": "TickerLow",
-            "description": "Low `[today, last 24 hours]`.",
-            "type": "array",
-            "prefixItems": [
-              {
-                "title": "today",
-                "type": "string",
-                "description": "Low price today."
-              },
-              {
-                "title": "last24Hours",
-                "type": "string",
-                "description": "Low price in the last 24 hours."
-              }
-            ],
-            "minItems": 2,
-            "maxItems": 2
-          },
-          "h": {
-            "title": "TickerHigh",
-            "description": "High `[today, last 24 hours]`.",
-            "type": "array",
-            "prefixItems": [
-              {
-                "title": "today",
-                "type": "string",
-                "description": "High price today."
-              },
-              {
-                "title": "last24Hours",
-                "type": "string",
-                "description": "High price in the last 24 hours."
-              }
-            ],
-            "minItems": 2,
-            "maxItems": 2
-          },
-          "o": {
-            "type": "string",
-            "description": "Today's opening price."
+            }
           }
         }
       }

@@ -53,58 +53,76 @@
       }
     },
     "response": {
-      "type": "array",
-      "description": "Deposit methods available for the requested asset.",
-      "items": {
-        "title": "DepositMethod",
-        "type": "object",
-        "description": "One method available for depositing a particular asset.",
-        "required": [
-          "method",
-          "limit",
-          "fee"
-        ],
-        "properties": {
-          "method": {
-            "type": "string",
-            "description": "Name of the deposit method, e.g. `Bitcoin`."
+      "title": "DepositMethodsFrame",
+      "type": "object",
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
+      "properties": {
+        "error": {
+          "type": "array",
+          "items": {
+            "type": "string"
           },
-          "limit": {
-            "description": "Maximum net amount that can be deposited right now, or `false` if there is no limit.",
-            "anyOf": [
-              {
-                "type": "string"
+          "description": "Wire envelope field; see the core."
+        },
+        "result": {
+          "type": "array",
+          "description": "Deposit methods available for the requested asset.",
+          "items": {
+            "title": "DepositMethod",
+            "type": "object",
+            "description": "One method available for depositing a particular asset.",
+            "required": [
+              "method",
+              "limit",
+              "fee"
+            ],
+            "properties": {
+              "method": {
+                "type": "string",
+                "description": "Name of the deposit method, e.g. `Bitcoin`."
               },
-              {
-                "type": "boolean",
-                "enum": [
-                  false
+              "limit": {
+                "description": "Maximum net amount that can be deposited right now, or `false` if there is no limit.",
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "boolean",
+                    "enum": [
+                      false
+                    ]
+                  }
                 ]
+              },
+              "fee": {
+                "type": "string",
+                "description": "Amount of fees that will be paid (flat fee).",
+                "format": "decimal-string"
+              },
+              "fee-percentage": {
+                "type": "string",
+                "description": "Percentage fee that will be paid (used instead of `fee` for some methods, e.g. Lightning).",
+                "format": "decimal-string"
+              },
+              "address-setup-fee": {
+                "type": "string",
+                "description": "Whether or not the method has an address setup fee."
+              },
+              "gen-address": {
+                "type": "boolean",
+                "description": "Whether new addresses can be generated for this method."
+              },
+              "minimum": {
+                "type": "string",
+                "description": "Minimum net amount that can be deposited right now.",
+                "format": "decimal-string"
               }
-            ]
-          },
-          "fee": {
-            "type": "string",
-            "description": "Amount of fees that will be paid (flat fee).",
-            "format": "decimal-string"
-          },
-          "fee-percentage": {
-            "type": "string",
-            "description": "Percentage fee that will be paid (used instead of `fee` for some methods, e.g. Lightning).",
-            "format": "decimal-string"
-          },
-          "address-setup-fee": {
-            "type": "string",
-            "description": "Whether or not the method has an address setup fee."
-          },
-          "gen-address": {
-            "type": "boolean",
-            "description": "Whether new addresses can be generated for this method."
-          },
-          "minimum": {
-            "type": "string",
-            "description": "Minimum net amount that can be deposited right now.",
-            "format": "decimal-string"
+            }
           }
         }
       }

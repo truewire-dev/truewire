@@ -37,17 +37,35 @@
       }
     },
     "response": {
-      "title": "RemoveExportResult",
-      "description": "Outcome of the delete/cancel operation. Exactly one of `delete`/`cancel` is present, matching the requested `type`.",
+      "title": "RemoveExportResultFrame",
       "type": "object",
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
       "properties": {
-        "delete": {
-          "description": "Whether deletion succeeded. Present when `type: \"delete\"` was requested.",
-          "type": "boolean"
+        "error": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Wire envelope field; see the core."
         },
-        "cancel": {
-          "description": "Whether cancellation succeeded. Present when `type: \"cancel\"` was requested.",
-          "type": "boolean"
+        "result": {
+          "title": "RemoveExportResult",
+          "description": "Outcome of the delete/cancel operation. Exactly one of `delete`/`cancel` is present, matching the requested `type`.",
+          "type": "object",
+          "properties": {
+            "delete": {
+              "description": "Whether deletion succeeded. Present when `type: \"delete\"` was requested.",
+              "type": "boolean"
+            },
+            "cancel": {
+              "description": "Whether cancellation succeeded. Present when `type: \"cancel\"` was requested.",
+              "type": "boolean"
+            }
+          }
         }
       }
     }

@@ -1104,51 +1104,69 @@
       }
     },
     "response": {
-      "title": "OrderBatchAdded",
+      "title": "OrderBatchAddedFrame",
       "type": "object",
-      "description": "Result of submitting an order batch.",
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
       "properties": {
-        "orders": {
-          "title": "AddOrderBatchResults",
+        "error": {
           "type": "array",
-          "description": "One result per submitted order, in request order.",
           "items": {
-            "description": "Either a successfully-placed order, or one rejected during matching-engine pre-checks.",
-            "anyOf": [
-              {
-                "title": "AddOrderBatchSuccess",
-                "type": "object",
-                "description": "An order from the batch that was accepted.",
-                "properties": {
-                  "txid": {
-                    "type": "string",
-                    "description": "Transaction ID for this order."
-                  },
-                  "descr": {
-                    "title": "OrderDescription",
+            "type": "string"
+          },
+          "description": "Wire envelope field; see the core."
+        },
+        "result": {
+          "title": "OrderBatchAdded",
+          "type": "object",
+          "description": "Result of submitting an order batch.",
+          "properties": {
+            "orders": {
+              "title": "AddOrderBatchResults",
+              "type": "array",
+              "description": "One result per submitted order, in request order.",
+              "items": {
+                "description": "Either a successfully-placed order, or one rejected during matching-engine pre-checks.",
+                "anyOf": [
+                  {
+                    "title": "AddOrderBatchSuccess",
                     "type": "object",
-                    "description": "Human-readable description of the order.",
+                    "description": "An order from the batch that was accepted.",
                     "properties": {
-                      "order": {
+                      "txid": {
                         "type": "string",
-                        "description": "Human-readable order description."
+                        "description": "Transaction ID for this order."
+                      },
+                      "descr": {
+                        "title": "OrderDescription",
+                        "type": "object",
+                        "description": "Human-readable description of the order.",
+                        "properties": {
+                          "order": {
+                            "type": "string",
+                            "description": "Human-readable order description."
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "title": "AddOrderBatchFailure",
+                    "type": "object",
+                    "description": "An order from the batch that was rejected during pre-match checks.",
+                    "properties": {
+                      "error": {
+                        "type": "string",
+                        "description": "Error description for this individual order."
                       }
                     }
                   }
-                }
-              },
-              {
-                "title": "AddOrderBatchFailure",
-                "type": "object",
-                "description": "An order from the batch that was rejected during pre-match checks.",
-                "properties": {
-                  "error": {
-                    "type": "string",
-                    "description": "Error description for this individual order."
-                  }
-                }
+                ]
               }
-            ]
+            }
           }
         }
       }

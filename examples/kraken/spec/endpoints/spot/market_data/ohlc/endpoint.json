@@ -58,66 +58,84 @@
       ]
     },
     "response": {
-      "title": "OhlcResult",
-      "description": "OHLC candles, keyed by pair, plus the polling cursor.",
+      "title": "OhlcResultFrame",
       "type": "object",
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
       "properties": {
-        "last": {
-          "type": "integer",
-          "description": "ID to be used as `since` when polling for new, committed OHLC data."
-        }
-      },
-      "additionalProperties": {
-        "description": "This pair's candles, oldest first. The last entry is the current, not-yet-committed timeframe.",
-        "type": "array",
-        "items": {
-          "title": "OhlcCandle",
-          "description": "One OHLC candle.",
+        "error": {
           "type": "array",
-          "prefixItems": [
-            {
-              "title": "time",
+          "items": {
+            "type": "string"
+          },
+          "description": "Wire envelope field; see the core."
+        },
+        "result": {
+          "title": "OhlcResult",
+          "description": "OHLC candles, keyed by pair, plus the polling cursor.",
+          "type": "object",
+          "properties": {
+            "last": {
               "type": "integer",
-              "description": "Candle open time (Unix timestamp)."
-            },
-            {
-              "title": "open",
-              "type": "string",
-              "description": "Open price."
-            },
-            {
-              "title": "high",
-              "type": "string",
-              "description": "High price."
-            },
-            {
-              "title": "low",
-              "type": "string",
-              "description": "Low price."
-            },
-            {
-              "title": "close",
-              "type": "string",
-              "description": "Close price."
-            },
-            {
-              "title": "vwap",
-              "type": "string",
-              "description": "Volume weighted average price."
-            },
-            {
-              "title": "volume",
-              "type": "string",
-              "description": "Volume traded."
-            },
-            {
-              "title": "count",
-              "type": "integer",
-              "description": "Number of trades."
+              "description": "ID to be used as `since` when polling for new, committed OHLC data."
             }
-          ],
-          "minItems": 8,
-          "maxItems": 8
+          },
+          "additionalProperties": {
+            "description": "This pair's candles, oldest first. The last entry is the current, not-yet-committed timeframe.",
+            "type": "array",
+            "items": {
+              "title": "OhlcCandle",
+              "description": "One OHLC candle.",
+              "type": "array",
+              "prefixItems": [
+                {
+                  "title": "time",
+                  "type": "integer",
+                  "description": "Candle open time (Unix timestamp)."
+                },
+                {
+                  "title": "open",
+                  "type": "string",
+                  "description": "Open price."
+                },
+                {
+                  "title": "high",
+                  "type": "string",
+                  "description": "High price."
+                },
+                {
+                  "title": "low",
+                  "type": "string",
+                  "description": "Low price."
+                },
+                {
+                  "title": "close",
+                  "type": "string",
+                  "description": "Close price."
+                },
+                {
+                  "title": "vwap",
+                  "type": "string",
+                  "description": "Volume weighted average price."
+                },
+                {
+                  "title": "volume",
+                  "type": "string",
+                  "description": "Volume traded."
+                },
+                {
+                  "title": "count",
+                  "type": "integer",
+                  "description": "Number of trades."
+                }
+              ],
+              "minItems": 8,
+              "maxItems": 8
+            }
+          }
         }
       }
     }

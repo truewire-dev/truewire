@@ -54,104 +54,122 @@
       }
     },
     "response": {
-      "type": "array",
-      "description": "Withdrawal methods available for the user.",
-      "items": {
-        "title": "WithdrawalMethod",
-        "type": "object",
-        "description": "One withdrawal method available for the user.",
-        "required": [
-          "fee"
-        ],
-        "properties": {
-          "asset": {
-            "type": "string",
-            "description": "Name of asset being withdrawn."
+      "title": "WithdrawMethodsFrame",
+      "type": "object",
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
+      "properties": {
+        "error": {
+          "type": "array",
+          "items": {
+            "type": "string"
           },
-          "method": {
-            "type": "string",
-            "description": "Name of the withdrawal method."
-          },
-          "method_id": {
-            "type": "string",
-            "description": "Unique identifier for the withdrawal method."
-          },
-          "network": {
-            "type": "string",
-            "description": "Name of the blockchain or network being withdrawn on."
-          },
-          "network_id": {
-            "type": "string",
-            "description": "Unique identifier for the network."
-          },
-          "minimum": {
-            "type": "string",
-            "description": "Minimum net amount that can be withdrawn right now.",
-            "format": "decimal-string"
-          },
-          "fee": {
-            "title": "WithdrawalMethodFee",
+          "description": "Wire envelope field; see the core."
+        },
+        "result": {
+          "type": "array",
+          "description": "Withdrawal methods available for the user.",
+          "items": {
+            "title": "WithdrawalMethod",
             "type": "object",
-            "description": "Fee details for a withdrawal method.",
+            "description": "One withdrawal method available for the user.",
             "required": [
               "fee"
             ],
             "properties": {
-              "aclass": {
-                "type": "string",
-                "description": "Asset class of the fee."
-              },
               "asset": {
                 "type": "string",
-                "description": "Asset used for the fee."
+                "description": "Name of asset being withdrawn."
+              },
+              "method": {
+                "type": "string",
+                "description": "Name of the withdrawal method."
+              },
+              "method_id": {
+                "type": "string",
+                "description": "Unique identifier for the withdrawal method."
+              },
+              "network": {
+                "type": "string",
+                "description": "Name of the blockchain or network being withdrawn on."
+              },
+              "network_id": {
+                "type": "string",
+                "description": "Unique identifier for the network."
+              },
+              "minimum": {
+                "type": "string",
+                "description": "Minimum net amount that can be withdrawn right now.",
+                "format": "decimal-string"
               },
               "fee": {
-                "type": "string",
-                "description": "Flat fee amount.",
-                "format": "decimal-string"
+                "title": "WithdrawalMethodFee",
+                "type": "object",
+                "description": "Fee details for a withdrawal method.",
+                "required": [
+                  "fee"
+                ],
+                "properties": {
+                  "aclass": {
+                    "type": "string",
+                    "description": "Asset class of the fee."
+                  },
+                  "asset": {
+                    "type": "string",
+                    "description": "Asset used for the fee."
+                  },
+                  "fee": {
+                    "type": "string",
+                    "description": "Flat fee amount.",
+                    "format": "decimal-string"
+                  },
+                  "fee_percentage": {
+                    "type": "string",
+                    "description": "Percentage fee (present instead of a flat fee for some methods).",
+                    "format": "decimal-string"
+                  }
+                }
               },
-              "fee_percentage": {
-                "type": "string",
-                "description": "Percentage fee (present instead of a flat fee for some methods).",
-                "format": "decimal-string"
-              }
-            }
-          },
-          "limits": {
-            "type": "array",
-            "description": "Rate limit details for this withdrawal method.",
-            "items": {
-              "title": "WithdrawalRateLimit",
-              "type": "object",
-              "description": "One rate limit rule for a withdrawal method.",
-              "properties": {
-                "description": {
-                  "type": "string",
-                  "description": "Description of this rate limit."
-                },
-                "limit_type": {
-                  "type": "string",
-                  "description": "Type of rate limit."
-                },
-                "limits": {
+              "limits": {
+                "type": "array",
+                "description": "Rate limit details for this withdrawal method.",
+                "items": {
+                  "title": "WithdrawalRateLimit",
                   "type": "object",
-                  "description": "Limits keyed by the time window they apply to, in seconds.",
-                  "additionalProperties": {
-                    "title": "WithdrawalRateLimitWindow",
-                    "type": "object",
-                    "description": "Rate limit usage for one time window.",
-                    "properties": {
-                      "maximum": {
-                        "type": "string",
-                        "description": "Maximum amount allowed in this window."
-                      },
-                      "remaining": {
-                        "type": "string",
-                        "description": "Amount remaining in this window."
-                      },
-                      "used": {
-                        "type": "string",
-                        "description": "Amount already used in this window."
+                  "description": "One rate limit rule for a withdrawal method.",
+                  "properties": {
+                    "description": {
+                      "type": "string",
+                      "description": "Description of this rate limit."
+                    },
+                    "limit_type": {
+                      "type": "string",
+                      "description": "Type of rate limit."
+                    },
+                    "limits": {
+                      "type": "object",
+                      "description": "Limits keyed by the time window they apply to, in seconds.",
+                      "additionalProperties": {
+                        "title": "WithdrawalRateLimitWindow",
+                        "type": "object",
+                        "description": "Rate limit usage for one time window.",
+                        "properties": {
+                          "maximum": {
+                            "type": "string",
+                            "description": "Maximum amount allowed in this window."
+                          },
+                          "remaining": {
+                            "type": "string",
+                            "description": "Amount remaining in this window."
+                          },
+                          "used": {
+                            "type": "string",
+                            "description": "Amount already used in this window."
+                          }
+                        }
                       }
                     }
                   }

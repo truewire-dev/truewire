@@ -37,105 +37,123 @@
       }
     },
     "response": {
-      "title": "PostTradeResult",
-      "description": "A list of executed trades in ascending timestamp order.",
+      "title": "PostTradeResultFrame",
       "type": "object",
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
       "properties": {
-        "last_ts": {
-          "description": "Timestamp of the latest trade in the list, or an empty string when the result contains no trades. Can be used as the `from_ts` parameter when requesting the next batch of trades.",
-          "anyOf": [
-            {
-              "type": "string",
-              "format": "date-time",
-              "description": "Timestamp of the latest trade in the list."
-            },
-            {
-              "type": "string",
-              "enum": [
-                ""
-              ],
-              "description": "Empty when the result contains no trades."
-            }
-          ]
-        },
-        "count": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 1000,
-          "description": "The number of trades returned."
-        },
-        "trades": {
+        "error": {
           "type": "array",
-          "description": "The trades, in ascending timestamp order.",
           "items": {
-            "title": "PostTradeEntry",
-            "description": "One executed trade.",
-            "type": "object",
-            "properties": {
-              "trade_id": {
-                "type": "string",
-                "maxLength": 19,
-                "description": "Kraken unique trade identifier."
-              },
-              "price": {
-                "type": "string",
-                "description": "Trade price excluding fees and commissions."
-              },
-              "quantity": {
-                "type": "string",
-                "description": "Unconsolidated trade quantity from execution."
-              },
-              "symbol": {
-                "type": "string",
-                "maxLength": 32,
-                "description": "The symbol of the currency pair."
-              },
-              "description": {
-                "type": "string",
-                "maxLength": 350,
-                "description": "The full description of the currency pair."
-              },
-              "base_asset": {
-                "type": "string",
-                "description": "ISO 4217 currency code for the base asset."
-              },
-              "base_notation": {
-                "type": "string",
-                "description": "Indicates that the quantity is expressed in nominal units.",
-                "enum": [
-                  "UNIT"
-                ]
-              },
-              "quote_asset": {
-                "type": "string",
-                "description": "ISO 4217 currency in which the trading price is expressed."
-              },
-              "quote_notation": {
-                "type": "string",
-                "description": "Indicates that the price is expressed in monetary value.",
-                "enum": [
-                  "MONE"
-                ]
-              },
-              "trade_venue": {
-                "type": "string",
-                "maxLength": 12,
-                "description": "ISO 10383 Market Identifier Code (MIC) of the trading platform where the trade was executed."
-              },
-              "trade_ts": {
-                "type": "string",
-                "format": "date-time",
-                "description": "Timestamp the trade was matched in the engine, to microsecond precision."
-              },
-              "publication_venue": {
-                "type": "string",
-                "maxLength": 12,
-                "description": "ISO 10383 Market Identifier Code (MIC) of the trading platform where the trade was published."
-              },
-              "publication_ts": {
-                "type": "string",
-                "format": "date-time",
-                "description": "Timestamp the trade was published to market data streams."
+            "type": "string"
+          },
+          "description": "Wire envelope field; see the core."
+        },
+        "result": {
+          "title": "PostTradeResult",
+          "description": "A list of executed trades in ascending timestamp order.",
+          "type": "object",
+          "properties": {
+            "last_ts": {
+              "description": "Timestamp of the latest trade in the list, or an empty string when the result contains no trades. Can be used as the `from_ts` parameter when requesting the next batch of trades.",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time",
+                  "description": "Timestamp of the latest trade in the list."
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    ""
+                  ],
+                  "description": "Empty when the result contains no trades."
+                }
+              ]
+            },
+            "count": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000,
+              "description": "The number of trades returned."
+            },
+            "trades": {
+              "type": "array",
+              "description": "The trades, in ascending timestamp order.",
+              "items": {
+                "title": "PostTradeEntry",
+                "description": "One executed trade.",
+                "type": "object",
+                "properties": {
+                  "trade_id": {
+                    "type": "string",
+                    "maxLength": 19,
+                    "description": "Kraken unique trade identifier."
+                  },
+                  "price": {
+                    "type": "string",
+                    "description": "Trade price excluding fees and commissions."
+                  },
+                  "quantity": {
+                    "type": "string",
+                    "description": "Unconsolidated trade quantity from execution."
+                  },
+                  "symbol": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "description": "The symbol of the currency pair."
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 350,
+                    "description": "The full description of the currency pair."
+                  },
+                  "base_asset": {
+                    "type": "string",
+                    "description": "ISO 4217 currency code for the base asset."
+                  },
+                  "base_notation": {
+                    "type": "string",
+                    "description": "Indicates that the quantity is expressed in nominal units.",
+                    "enum": [
+                      "UNIT"
+                    ]
+                  },
+                  "quote_asset": {
+                    "type": "string",
+                    "description": "ISO 4217 currency in which the trading price is expressed."
+                  },
+                  "quote_notation": {
+                    "type": "string",
+                    "description": "Indicates that the price is expressed in monetary value.",
+                    "enum": [
+                      "MONE"
+                    ]
+                  },
+                  "trade_venue": {
+                    "type": "string",
+                    "maxLength": 12,
+                    "description": "ISO 10383 Market Identifier Code (MIC) of the trading platform where the trade was executed."
+                  },
+                  "trade_ts": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Timestamp the trade was matched in the engine, to microsecond precision."
+                  },
+                  "publication_venue": {
+                    "type": "string",
+                    "maxLength": 12,
+                    "description": "ISO 10383 Market Identifier Code (MIC) of the trading platform where the trade was published."
+                  },
+                  "publication_ts": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Timestamp the trade was published to market data streams."
+                  }
+                }
               }
             }
           }

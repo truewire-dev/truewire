@@ -2,7 +2,8 @@ from typing_extensions import Sequence, Mapping
 from dataclasses import dataclass, field
 
 from truewire.generation.schema import Reference, Schema, DataType
-from .schema import Type, InlineType
+from truewire.plan.types import OPAQUE_FORMATS
+from .schema import Type, InlineType, Scalar
 
 TIMESTAMP_FORMATS: Mapping[str, str] = {
   'epoch-seconds': 'TimestampSeconds',
@@ -21,21 +22,14 @@ TYPES_PACKAGE = 'truewire_core.types'
 builders call `.dump()` on) are imported from. Generated code never reaches into a
 project's own core for these (ADR 0011)."""
 
-OPAQUE_STRING_FORMATS = {'uuid', 'hostname', 'uri'}
+OPAQUE_STRING_FORMATS = set(OPAQUE_FORMATS)
 """Standard OpenAPI string formats that document a value without narrowing its Python type.
 
 A `uuid` is a `str` to every caller: nothing in the generated surface parses it, and a
 `Literal` cannot enumerate it. The format is worth keeping in the spec because it tells a
 reader what the API sends, and unsupported formats raise rather than render, so it has to
-be named here to be allowed through as the `str` it already is.
-
-`hostname`/`uri` were once handled by per-project `Parser` subclasses. `truewire.toml`
-deliberately offers no Parser-customization escape hatch, so a project declaring either
-format has no way to render it at all unless the shared table admits it. Both are standard
-OpenAPI string formats with the identical "documents shape, doesn't narrow the type"
-reasoning `uuid` already has -- a webhook URL or a DNS hostname is a `str` to every
-caller the same way a UUID is -- so widening the shared table is the same call this
-constant already makes for `uuid`, not a new one.
+be named here to be allowed through as the `str` it already is. `hostname`/`uri` are the
+same call: a webhook URL or a DNS hostname is a `str` to every caller the way a UUID is.
 """
 
 BOOLEAN_STRING_FORMATS = {'boolean-string'}
@@ -48,27 +42,24 @@ straight to `str`.
 """
 
 INTEGER_STRING_FORMATS = {'integer-string'}
-"""String formats that narrow to the builtin `int`, `docs/spec/authoring.md` rule 13.
-
-Same reasoning as `BOOLEAN_STRING_FORMATS`: `pydantic`'s default (lax) coercion already
-turns a wire string like `"12"` into a real `int` with no custom `BeforeValidator`, so this
-renders straight to the builtin the same way `uuid`/`boolean-string` above do.
-"""
+"""String formats that narrow to the builtin `int`, `docs/spec/authoring.md` rule 13."""
 
 DECIMAL_STRING_FORMATS = {'decimal-string'}
-"""String formats that narrow to stdlib `decimal.Decimal`, `docs/spec/authoring.md` rule 15.
+"""String formats that narrow to stdlib `decimal.Decimal`, `docs/spec/authoring.md` rule 15."""
 
-Same reasoning as `BOOLEAN_STRING_FORMATS`/`INTEGER_STRING_FORMATS`: `pydantic`'s default
-(lax) coercion already turns a wire string like `"1.23"` into a real `Decimal` with no
-custom `BeforeValidator`, so this needs no runtime alias either -- it renders to
-`decimal.Decimal`, a stdlib import rather than a builtin, the same way `Any` renders to a
-`typing_extensions` import.
-"""
+
+def scalar(base: str, format: str | None = None) -> Scalar:
+  """Build one `Scalar` node, carrying `format` only when the schema declared one."""
+  node: Scalar = {'type': 'scalar', 'base': base}  # type: ignore[typeddict-item]
+  if format is not None:
+    node['format'] = format
+  return node
+
 
 @dataclass(kw_only=True)
 class Parser:
   typing_package: str = 'typing_extensions'
-  any: InlineType = field(default_factory=lambda: {'type': 'ref', 'id': 'Any', 'package': 'typing_extensions'})
+  any: InlineType = field(default_factory=lambda: scalar('any'))
 
   def __call__(self, schema: Reference | Schema | None, *, id: str | None = None, inline: bool = False) -> Type:
     if schema is None:
@@ -140,44 +131,33 @@ class Parser:
   def string(self, schema: Schema, *, id: str | None = None) -> Type:
     if schema.enum:
       return {'type': 'literal', 'values': schema.enum, 'id': id}
-    elif schema.format in TIMESTAMP_FORMATS:
-      return self.timestamp(schema, id=id)
-    elif schema.format in OPAQUE_STRING_FORMATS:
-      return {'type': 'ref', 'id': 'str'}
-    elif schema.format in BOOLEAN_STRING_FORMATS:
-      return {'type': 'ref', 'id': 'bool'}
-    elif schema.format in INTEGER_STRING_FORMATS:
-      return {'type': 'ref', 'id': 'int'}
-    elif schema.format in DECIMAL_STRING_FORMATS:
-      return {'type': 'ref', 'id': 'Decimal', 'package': 'decimal'}
-    elif schema.format is not None:
+    known = (
+      set(TIMESTAMP_FORMATS) | OPAQUE_STRING_FORMATS | BOOLEAN_STRING_FORMATS
+      | INTEGER_STRING_FORMATS | DECIMAL_STRING_FORMATS
+    )
+    if schema.format is not None and schema.format not in known:
       raise NotImplementedError(f"String format '{schema.format}' is not supported.")
-    else:
-      return {'type': 'ref', 'id': 'str'}
+    return scalar('string', schema.format)
 
   def number(self, schema: Schema, id: str | None = None) -> Type:
     if schema.enum:
       return {'type': 'literal', 'values': schema.enum, 'id': id}
-    return {'type': 'ref', 'id': 'float'}
+    return scalar('number')
 
   def integer(self, schema: Schema, id=None) -> Type:
     if schema.enum:
       return {'type': 'literal', 'values': schema.enum, 'id': id}
     if schema.format in TIMESTAMP_FORMATS:
-      return self.timestamp(schema, id=id)
-    return {'type': 'ref', 'id': 'int'}
-
-  def timestamp(self, schema: Schema, *, id: str | None = None) -> Type:
-    """Render a timestamp-formatted field as the runtime's matching `TimestampX` alias."""
-    return {'type': 'ref', 'id': TIMESTAMP_FORMATS[schema.format], 'package': TYPES_PACKAGE}
+      return scalar('integer', schema.format)
+    return scalar('integer')
 
   def boolean(self, schema: Schema, id: str | None = None) -> Type:
     if schema.enum:
       return {'type': 'literal', 'values': schema.enum, 'id': id}
-    return {'type': 'ref', 'id': 'bool'}
+    return scalar('boolean')
 
   def null(self, schema: Schema, id: str | None = None) -> Type:
-    return {'type': 'ref', 'id': 'None'}
+    return scalar('null')
 
   def array(self, schema: Schema, id: str | None = None) -> Type:
     if schema.prefixItems:
@@ -200,7 +180,7 @@ class Parser:
         value = self.inline(schema.additionalProperties)
       return {
         'type': 'dict',
-        'key': {'type': 'ref', 'id': 'str'},
+        'key': scalar('string'),
         'value': value,
         'id': id,
       }

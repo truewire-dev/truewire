@@ -1,0 +1,12 @@
+{
+  "meta": {"signed": true},
+  "spec": {
+    "kind": "rpc", "transports": ["http"], "path": "/v1/account/deposits/history", "method": "GET",
+    "request": {"title": "DepositHistoryRequest", "type": "object", "properties": {
+      "asset": {"type": "string", "description": "Asset symbol."}
+    }, "required": ["asset"]},
+    "response": {"title": "DepositHistory", "type": "object", "properties": {
+      "deposits": {"type": "array", "items": {"type": "string"}, "description": "Historical deposit ids."}
+    }}
+  }
+}

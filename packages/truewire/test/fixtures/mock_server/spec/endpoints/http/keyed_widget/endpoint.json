@@ -1,0 +1,50 @@
+{
+  "function": "widgets.keyed",
+  "meta": {
+    "in": "query",
+    "name": "apikey"
+  },
+  "redacted": ["apikey"],
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/keyed-widgets",
+    "method": "GET",
+    "openapi": {
+      "description": "Get one widget from a venue that authenticates on a query parameter.",
+      "parameters": [
+        {
+          "name": "id",
+          "in": "query",
+          "required": true,
+          "description": "Widget id.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "The widget.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "title": "KeyedWidget",
+                "type": "object",
+                "description": "One widget, fetched with a credential in the query string.",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Widget name."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

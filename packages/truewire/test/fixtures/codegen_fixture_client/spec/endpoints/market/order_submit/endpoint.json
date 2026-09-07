@@ -1,0 +1,18 @@
+{
+  "meta": {"signed": true},
+  "spec": {
+    "kind": "rpc", "transports": ["http"], "path": "/v1/order/submit", "method": "POST",
+    "request": {"title": "OrderRequest", "description": "Order to place.", "anyOf": [
+      {"title": "LimitOrderRequest", "type": "object", "properties": {
+        "symbol": {"type": "string", "description": "Trading pair."},
+        "price": {"type": "string", "format": "decimal-string", "description": "Limit price."}
+      }, "required": ["symbol", "price"]},
+      {"title": "MarketOrderRequest", "type": "object", "properties": {
+        "symbol": {"type": "string", "description": "Trading pair."}
+      }, "required": ["symbol"]}
+    ]},
+    "response": {"title": "OrderSubmitAck", "type": "object", "properties": {
+      "orderId": {"type": "string", "description": "Assigned order id."}
+    }}
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "function": "widgets.get",
+  "spec": {
+    "kind": "rpc",
+    "transports": ["http"],
+    "path": "/widgets/{id}",
+    "method": "GET",
+    "openapi": {
+      "description": "Get one widget by id.",
+      "parameters": [
+        {"name": "id", "in": "path", "required": true, "description": "Widget id.", "schema": {"type": "string"}}
+      ],
+      "responses": {
+        "200": {
+          "description": "The widget.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "title": "Widget", "type": "object", "description": "One widget.",
+                "properties": {
+                  "name": {"type": "string", "description": "Widget name."},
+                  "stock": {"type": "integer", "description": "Units in stock."}
+                },
+                "required": ["name", "stock"]
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "envelope": {"payload": "result", "correlate": "id"}
+}

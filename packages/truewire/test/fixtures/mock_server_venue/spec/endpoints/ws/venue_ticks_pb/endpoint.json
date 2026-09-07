@@ -1,0 +1,32 @@
+{
+  "function": "streams.venue_ticks_protobuf",
+  "notes": [
+    "Synthetic venue-dialect stream whose pushes are binary. The subscribe frame is JSON and recorded under `payload`; the pushes are opaque protobuf frames the mock relays verbatim."
+  ],
+  "spec": {
+    "kind": "stream",
+    "channel": "acme@public.ticks.pb@{symbol}",
+    "openapi": {
+      "description": "Synthetic protobuf tick stream subscribed to with a venue-shaped JSON frame.",
+      "parameters": [
+        {
+          "name": "symbol",
+          "in": "path",
+          "required": true,
+          "description": "Trading pair.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "responses": {
+        "reply": {
+          "description": "Subscription acknowledgement."
+        },
+        "message": {
+          "description": "Protobuf-encoded tick frame."
+        }
+      }
+    }
+  }
+}

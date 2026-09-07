@@ -1,0 +1,13 @@
+{
+  "meta": {"signed": true},
+  "spec": {
+    "kind": "rpc", "transports": ["http"], "path": "/v1/order", "method": "POST",
+    "request": {"title": "PlaceOrderRequest", "type": "object", "properties": {
+      "symbol": {"type": "string", "description": "Trading pair."},
+      "quantity": {"type": "string", "format": "decimal-string", "description": "Order size."}
+    }, "required": ["symbol", "quantity"]},
+    "response": {"title": "OrderAck", "type": "object", "properties": {
+      "orderId": {"type": "string", "description": "Assigned order id."}
+    }}
+  }
+}

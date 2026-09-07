@@ -1,0 +1,4 @@
+{
+  "description": "No parameters -- this stream is never subscribed to, only pushed after login.",
+  "parameters": {}
+}

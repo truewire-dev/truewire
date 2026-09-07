@@ -1,0 +1,33 @@
+{
+  "meta": {"public": true},
+  "spec": {
+    "kind": "rpc", "transports": ["http"], "path": "/v1/order/ids", "method": "GET",
+    "request": {
+      "title": "OrderIdListRequest",
+      "type": "object",
+      "properties": {
+        "symbol": {"type": "string", "description": "Trading pair."},
+        "pageKey": {"type": "string", "description": "Pagination cursor."}
+      },
+      "required": ["symbol"]
+    },
+    "response": {
+      "title": "OrderIdListResponse",
+      "type": "object",
+      "properties": {
+        "orderIds": {
+          "type": "array",
+          "description": "Matching order ids.",
+          "items": {"type": "string", "description": "Order id."}
+        },
+        "pageKey": {"type": "string", "description": "Pagination cursor for the next page."}
+      },
+      "required": ["orderIds"]
+    }
+  },
+  "pagination": {
+    "strategy": "token",
+    "cursor": {"parameter": "pageKey", "from": "pageKey"},
+    "done": {"kind": "absent_cursor", "rows": "orderIds"}
+  }
+}

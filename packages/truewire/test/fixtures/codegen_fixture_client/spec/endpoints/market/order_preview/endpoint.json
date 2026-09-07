@@ -1,0 +1,15 @@
+{
+  "meta": {"public": true},
+  "spec": {
+    "kind": "rpc", "transports": ["http"], "path": "/v1/order/preview", "method": "GET",
+    "request": {"title": "OrderPreviewRequest", "type": "object", "properties": {
+      "symbol": {"type": "string", "description": "Trading pair."},
+      "side": {"$ref": "OrderSide"}
+    }, "required": ["symbol", "side"]},
+    "response": {"title": "OrderPreview", "type": "object", "properties": {
+      "estimatedPrice": {
+        "type": "string", "format": "decimal-string", "description": "Estimated fill price."
+      }
+    }, "required": ["estimatedPrice"]}
+  }
+}

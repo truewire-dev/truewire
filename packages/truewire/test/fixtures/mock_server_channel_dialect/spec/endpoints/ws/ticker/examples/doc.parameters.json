@@ -1,0 +1,6 @@
+{
+  "description": "Subscribed to /market/ticker:ACME-USDT. No `payload` recorded -- kucoin's own real streams never capture one either, only `parameters`.",
+  "parameters": {
+    "symbol": "ACME-USDT"
+  }
+}

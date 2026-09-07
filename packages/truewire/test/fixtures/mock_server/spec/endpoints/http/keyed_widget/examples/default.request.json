@@ -1,0 +1,4 @@
+{
+  "description": "Fetch a keyed widget by id. The credential is never recorded.",
+  "parameters": {"id": "k1"}
+}

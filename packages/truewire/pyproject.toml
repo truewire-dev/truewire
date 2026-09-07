@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "truewire"
+version = "0.1.0"
+authors = [
+  {name = "Truewire contributors"}
+]
+description = "Typed clients, true to the wire: spec checks, an example-replaying HTTP+WebSocket mock server, and a Python client generator for any API."
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Typing :: Typed",
+]
+dependencies = [
+  "pydantic",
+  "jsonschema",
+  "pyyaml",
+  "rich",
+  "typer",
+  "typing-extensions",
+  "websockets",
+  "httpx",
+  "orjson",
+  "toposort",
+  "case-converter",
+  "jinja2",
+]
+requires-python = ">=3.11"
+readme = {file = "README.md", content-type = "text/markdown"}
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-asyncio", "pyright", "ruff", "mcp"]
+mcp = ["mcp"]
+
+[project.scripts]
+truewire = "truewire.cli:app"
+
+[project.urls]
+Repository = "https://github.com/truewire-dev/truewire"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+truewire = ["py.typed", "resources/*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["test"]

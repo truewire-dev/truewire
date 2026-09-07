@@ -1,0 +1,13 @@
+{
+  "meta": {"signed": true},
+  "spec": {
+    "kind": "rpc", "transports": ["http"], "path": "/v1/order/status", "method": "GET",
+    "request": {"title": "OrderStatusRequest", "type": "object", "properties": {
+      "orderId": {"type": "string", "description": "Order id to look up."},
+      "clientId": {"type": "string", "description": "Optional client-supplied order id, when known."}
+    }, "required": ["orderId"]},
+    "response": {"title": "OrderStatus", "type": "object", "properties": {
+      "status": {"type": "string", "description": "Current order status."}
+    }}
+  }
+}

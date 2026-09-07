@@ -1,0 +1,39 @@
+{
+  "function": "market.orderbook_request_field",
+  "meta": {"public": true},
+  "spec": {
+    "kind": "rpc",
+    "transports": ["http"],
+    "path": "/v1/orderbook2",
+    "method": "GET",
+    "description": "Fetch an order book snapshot for a trading pair, recorded via `request` (Task 23) instead of `parameters`.",
+    "request": {
+      "title": "OrderbookRequestField",
+      "type": "object",
+      "description": "Order book query.",
+      "required": ["symbol"],
+      "properties": {
+        "symbol": {
+          "type": "string",
+          "description": "Trading pair symbol."
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum rows to return."
+        }
+      }
+    },
+    "response": {
+      "title": "OrderbookRequestFieldResponse",
+      "type": "object",
+      "description": "Order book snapshot.",
+      "properties": {
+        "bids": {
+          "type": "array",
+          "description": "Bid rows.",
+          "items": {"type": "string"}
+        }
+      }
+    }
+  }
+}

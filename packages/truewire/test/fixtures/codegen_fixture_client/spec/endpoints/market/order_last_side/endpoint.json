@@ -1,0 +1,10 @@
+{
+  "meta": {"public": true},
+  "spec": {
+    "kind": "rpc", "transports": ["http"], "path": "/v1/order/last-side", "method": "GET",
+    "request": {"title": "OrderLastSideRequest", "type": "object", "properties": {
+      "symbol": {"type": "string", "description": "Trading pair."}
+    }, "required": ["symbol"]},
+    "response": {"$ref": "OrderSide"}
+  }
+}

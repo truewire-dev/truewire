@@ -1,0 +1,16 @@
+{
+  "meta": {"signed": false, "public": true},
+  "spec": {
+    "kind": "rpc", "transports": ["http"], "path": "/v1/futures/leverage", "method": "GET",
+    "request": {"title": "LeverageRequest", "type": "object", "properties": {
+      "symbol": {"type": "string", "description": "Trading pair."}
+    }, "required": ["symbol"]},
+    "response": {"title": "LeverageInfo", "type": "object", "properties": {
+      "side": {"$ref": "FuturesSide"},
+      "leverage": {
+        "type": "string", "format": "decimal-string",
+        "description": "Current leverage multiplier."
+      }
+    }, "required": ["side", "leverage"]}
+  }
+}

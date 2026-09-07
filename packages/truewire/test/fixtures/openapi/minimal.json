@@ -1,0 +1,44 @@
+{
+  "openapi": "3.0.3",
+  "info": {"title": "Minimal Service", "version": "0.1.0"},
+  "servers": [{"url": "https://minimal.example.com/api"}],
+  "paths": {
+    "/ping": {
+      "get": {
+        "operationId": "ping",
+        "description": "Liveness probe.",
+        "responses": {
+          "200": {"description": "Alive; no body."}
+        }
+      }
+    },
+    "/echo/{word}": {
+      "post": {
+        "operationId": "echo",
+        "description": "Echo a word back, optionally shouting.",
+        "parameters": [
+          {"name": "word", "in": "path", "required": true, "description": "Word to echo.", "schema": {"type": "string"}},
+          {"name": "shout", "in": "query", "description": "Upper-case the reply.", "schema": {"type": "boolean"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "The echoed word.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "word": {"type": "string", "description": "The echoed word."},
+                    "note": {"type": "string", "nullable": true, "description": "Optional note, null when absent."}
+                  },
+                  "required": ["word", "note"]
+                },
+                "example": {"word": "hello", "note": null}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

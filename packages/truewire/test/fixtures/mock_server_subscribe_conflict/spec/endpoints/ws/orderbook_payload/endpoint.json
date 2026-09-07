@@ -1,0 +1,19 @@
+{
+  "function": "streams.orderbook_payload",
+  "notes": [
+    "Synthetic declared-channel example recording the exact venue frame under `payload`, on the same channel as `orderbook_identity`. Regression fixture for the 'confirmed with Marcel' uniqueness rule -- see that endpoint's note."
+  ],
+  "spec": {
+    "kind": "stream",
+    "channel": "orderbook",
+    "openapi": {
+      "description": "Synthetic order book stream, subscribed to with a venue-shaped JSON frame naming its channel under `topic`. Records the exact subscribe frame under `payload`.",
+      "responses": {
+        "message": {
+          "description": "Order book update."
+        }
+      }
+    }
+  },
+  "envelope": {"payload": "data", "channel": "topic"}
+}

@@ -1,0 +1,27 @@
+{
+  "function": "acme.ws_get_balance",
+  "spec": {
+    "kind": "rpc",
+    "transports": ["ws"],
+    "path": "acme_getBalance",
+    "openapi": {
+      "description": "Returns the balance of one address over WS.",
+      "requestBody": {
+        "required": true,
+        "description": "Positional JSON-RPC parameter: address.",
+        "content": {
+          "application/json": {
+            "schema": {"title": "WsGetBalanceParams", "type": "string", "description": "Address to check the balance of."}
+          }
+        }
+      },
+      "responses": {
+        "reply": {
+          "description": "The balance.",
+          "content": {"application/json": {"schema": {"type": "string", "description": "Hex-encoded balance."}}}
+        }
+      }
+    }
+  },
+  "envelope": {"payload": "result", "correlate": "id"}
+}

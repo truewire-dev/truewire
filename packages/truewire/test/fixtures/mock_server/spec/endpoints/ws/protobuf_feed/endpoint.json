@@ -1,0 +1,18 @@
+{
+  "function": "streams.ticks_protobuf",
+  "spec": {
+    "kind": "stream",
+    "channel": "stream_ticks_pb",
+    "openapi": {
+      "description": "Synthetic protobuf-framed tick stream.",
+      "responses": {
+        "reply": {
+          "description": "Subscription acknowledgement."
+        },
+        "message": {
+          "description": "Protobuf-encoded tick frame."
+        }
+      }
+    }
+  }
+}

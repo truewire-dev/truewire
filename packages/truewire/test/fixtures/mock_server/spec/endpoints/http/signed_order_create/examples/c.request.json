@@ -1,0 +1,7 @@
+{
+  "description": "Place a signed order whose recorded payload happens to also carry the redacted `nonce` field, at whatever value was live during capture -- a real request's own (different) live nonce must still match, proving redaction strips both sides rather than only the actual one.",
+  "payload": {
+    "orderId": "unique-order",
+    "nonce": "captured-nonce-value"
+  }
+}

@@ -1,0 +1,4 @@
+{
+  "description": "Fetch an order book snapshot for BTCUSDT, capped at 10 rows.",
+  "parameters": {"symbol": "BTCUSDT", "limit": 10}
+}

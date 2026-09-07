@@ -1,0 +1,6 @@
+[
+  {
+    "channel": "connect.push",
+    "data": {"greeting": "pushed-on-connect"}
+  }
+]

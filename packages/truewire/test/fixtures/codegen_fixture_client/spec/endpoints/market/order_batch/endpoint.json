@@ -1,0 +1,27 @@
+{
+  "meta": {"public": true},
+  "spec": {
+    "kind": "rpc", "transports": ["http"], "path": "/v1/order/batch", "method": "POST",
+    "request": {
+      "title": "OrderBatchRequest",
+      "type": "object",
+      "properties": {
+        "orders": {
+          "type": "array",
+          "description": "Orders to place.",
+          "items": {
+            "title": "BatchOrderItem",
+            "type": "object",
+            "properties": {
+              "symbol": {"type": "string", "description": "Trading pair."},
+              "quantity": {"type": "string", "format": "decimal-string", "description": "Quantity."}
+            },
+            "required": ["symbol", "quantity"]
+          }
+        }
+      },
+      "required": ["orders"]
+    },
+    "response": {"$ref": "OrderSide"}
+  }
+}

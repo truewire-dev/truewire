@@ -1,0 +1,29 @@
+{
+  "function": "streams.trades",
+  "spec": {
+    "kind": "stream",
+    "channel": "stream_trades",
+    "openapi": {
+      "description": "Synthetic trade stream, subscribed to by market id.",
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "Market id.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "responses": {
+        "reply": {
+          "description": "Subscription acknowledgement."
+        },
+        "message": {
+          "description": "Trade update."
+        }
+      }
+    }
+  }
+}

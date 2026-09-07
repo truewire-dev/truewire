@@ -1,0 +1,435 @@
+openapi: 3.1.0
+info:
+  title: Swagger Petstore
+  summary: A richer take on the classic Petstore sample.
+  description: Pets, their owners, and the store that sells them.
+  version: 1.2.0
+externalDocs:
+  description: Petstore docs
+  url: https://petstore3.swagger.io/
+servers:
+  - url: https://petstore3.swagger.io/api/v3
+security:
+  - api_key: []
+tags:
+  - name: pets
+    description: Everything about your pets.
+    externalDocs:
+      url: https://petstore3.swagger.io/#/pet
+  - name: store
+    description: Access to Petstore orders and inventory.
+paths:
+  /pets:
+    get:
+      tags: [pets]
+      operationId: listPets
+      summary: List pets
+      description: List pets, newest first, one page at a time.
+      security: []
+      externalDocs:
+        url: https://petstore3.swagger.io/#/pet/findPetsByStatus
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of pets per page.
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 2
+        - name: cursor
+          in: query
+          description: Opaque cursor from a previous page's `next_cursor`.
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: Only pets in this status.
+          schema:
+            type: string
+            enum: [available, pending, sold]
+          example: available
+        - name: since
+          in: query
+          description: Only pets created at or after this instant.
+          schema:
+            type: string
+            format: date-time
+          example: '2026-01-01T00:00:00Z'
+        - name: X-Request-Id
+          in: header
+          description: Client-chosen request correlation id.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: One page of pets.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    description: Pets on this page.
+                    items:
+                      $ref: '#/components/schemas/Pet'
+                  next_cursor:
+                    type: [string, 'null']
+                    description: Cursor for the next page, or null on the last page.
+                required: [items, next_cursor]
+              examples:
+                firstPage:
+                  summary: First page of two pets
+                  value:
+                    items:
+                      - id: 1
+                        name: Rex
+                        status: available
+                        category: {id: 1, name: Dogs}
+                        tags: [{id: 7, name: good-boy}]
+                        created_at: '2026-01-02T10:00:00Z'
+                      - id: 2
+                        name: Tom
+                        status: pending
+                        category: {id: 2, name: Cats}
+                        tags: []
+                        created_at: '2026-01-03T10:00:00Z'
+                    next_cursor: eyJpZCI6Mn0
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags: [pets]
+      operationId: createPet
+      description: Add a new pet to the store.
+      requestBody:
+        description: The pet to add.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewPet'
+            example:
+              name: Rex
+              status: available
+              category: {id: 1, name: Dogs}
+      responses:
+        '201':
+          description: The created pet.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pet'
+              example:
+                id: 3
+                name: Rex
+                status: available
+                category: {id: 1, name: Dogs}
+                tags: []
+                created_at: '2026-01-04T10:00:00Z'
+        '422':
+          description: Validation failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /pets/{petId}:
+    parameters:
+      - name: petId
+        in: path
+        required: true
+        description: Id of the pet.
+        schema:
+          type: integer
+          format: int64
+        example: 42
+    get:
+      tags: [pets]
+      operationId: getPet
+      description: Fetch one pet by id.
+      responses:
+        '200':
+          description: The pet.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pet'
+              example:
+                id: 42
+                name: Fido
+                status: sold
+                category: {id: 1, name: Dogs}
+                tags: [{id: 1, name: fluffy}]
+                created_at: '2025-12-24T08:30:00Z'
+        '404':
+          description: No such pet.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags: [pets]
+      operationId: deletePet
+      description: Remove a pet from the store.
+      responses:
+        '204':
+          description: Deleted; no body.
+        '404':
+          description: No such pet.
+  /pets/{petId}/owner:
+    get:
+      tags: [pets]
+      operationId: getPetOwner
+      description: Fetch the owner of a pet, if it has one.
+      parameters:
+        - name: petId
+          in: path
+          required: true
+          description: Id of the pet.
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: The pet's owner.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  petId:
+                    type: integer
+                    format: int64
+                    description: Id of the owned pet.
+                  name:
+                    type: string
+                    description: Owner's display name.
+                  address:
+                    type: [object, 'null']
+                    description: Postal address, or null when unknown.
+                    properties:
+                      street:
+                        type: string
+                        description: Street line.
+                      city:
+                        type: string
+                        description: City.
+                    required: [street, city]
+                required: [petId, name, address]
+              example:
+                petId: 42
+                name: Alice
+                address: {street: 1 Main St, city: Springfield}
+  /store/inventory:
+    get:
+      tags: [store]
+      operationId: getInventory
+      description: Pet counts by status.
+      security: []
+      responses:
+        '200':
+          description: Map of status to count.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: integer
+                  format: int32
+              example:
+                available: 3
+                pending: 1
+  /store/orders:
+    post:
+      tags: [store]
+      operationId: placeOrder
+      description: Place an order for a pet, either for pickup or for delivery.
+      requestBody:
+        description: The order to place.
+        required: true
+        content:
+          application/json:
+            schema:
+              title: OrderRequest
+              description: The order to place.
+              oneOf:
+                - $ref: '#/components/schemas/PickupOrder'
+                - $ref: '#/components/schemas/DeliveryOrder'
+      responses:
+        '201':
+          description: The placed order.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+  /store/orders/{orderId}:
+    get:
+      tags: [store]
+      operationId: getOrder
+      description: Fetch one order by id.
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          description: Id of the order.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The order.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '404':
+          description: No such order.
+components:
+  securitySchemes:
+    api_key:
+      type: apiKey
+      name: api_key
+      in: header
+  schemas:
+    Pet:
+      type: object
+      description: A pet in the store.
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Unique pet id.
+        name:
+          type: string
+          description: Pet's name.
+        status:
+          type: string
+          description: Availability status.
+          enum: [available, pending, sold]
+        category:
+          $ref: '#/components/schemas/Category'
+        tags:
+          type: array
+          description: Free-form tags.
+          items:
+            $ref: '#/components/schemas/Tag'
+        created_at:
+          type: string
+          format: date-time
+          description: When the pet was added.
+      required: [id, name, status, created_at]
+    NewPet:
+      type: object
+      description: A pet to add.
+      properties:
+        name:
+          type: string
+          description: Pet's name.
+        status:
+          type: string
+          description: Initial availability status.
+          enum: [available, pending, sold]
+        category:
+          $ref: '#/components/schemas/Category'
+      required: [name]
+    Category:
+      type: object
+      description: A pet category.
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Category id.
+        name:
+          type: string
+          description: Category name.
+      required: [id, name]
+    Tag:
+      type: object
+      description: A tag attached to a pet.
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Tag id.
+        name:
+          type: string
+          description: Tag text.
+      required: [id, name]
+    Error:
+      type: object
+      description: An error envelope.
+      properties:
+        code:
+          type: integer
+          description: Error code.
+        message:
+          type: string
+          description: Human-readable message.
+      required: [code, message]
+    OrderBase:
+      type: object
+      description: Fields every order carries.
+      properties:
+        petId:
+          type: integer
+          format: int64
+          description: Pet being ordered.
+        quantity:
+          type: integer
+          format: int32
+          description: How many.
+      required: [petId, quantity]
+    PickupOrder:
+      description: An order collected in store.
+      allOf:
+        - $ref: '#/components/schemas/OrderBase'
+        - type: object
+          properties:
+            kind:
+              type: string
+              description: Order kind.
+              enum: [pickup]
+          required: [kind]
+    DeliveryOrder:
+      description: An order shipped to an address.
+      allOf:
+        - $ref: '#/components/schemas/OrderBase'
+        - type: object
+          properties:
+            kind:
+              type: string
+              description: Order kind.
+              enum: [delivery]
+            address:
+              type: string
+              description: Shipping address.
+          required: [kind, address]
+    Order:
+      type: object
+      description: A placed order.
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Order id.
+        petId:
+          type: integer
+          format: int64
+          description: Pet ordered.
+        status:
+          type: string
+          description: Order status.
+          enum: [placed, approved, delivered]
+        shipDate:
+          type: string
+          format: date-time
+          description: When the order ships.
+          example: '2026-02-01T09:00:00Z'
+      required: [id, petId, status]

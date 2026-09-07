@@ -1,0 +1,30 @@
+{
+  "function": "acme.ws_get_stuff",
+  "redacted": ["nonce"],
+  "notes": [
+    "Synthetic named-object WS RPC command whose venue injects a monotonic `nonce` into every call's `params`. Two recorded examples (`a`, `b`) differ only in their (redacted) `nonce`, so a live call carrying yet another `nonce` value matches both once `nonce` is stripped from both sides -- regression fixture for `match_rpc`'s `AmbiguousSubscriptionMatch` case. A `symbol` that does not match either example's `symbol` exercises the 'method recognized, params don't match' `UnexpectedSubscriptionParameters` case."
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": ["ws"],
+    "path": "acme_getStuff",
+    "openapi": {
+      "description": "Returns stuff for one symbol over WS, on a venue that injects a monotonic nonce into every call.",
+      "requestBody": {
+        "required": true,
+        "description": "Named-object JSON-RPC parameter.",
+        "content": {
+          "application/json": {
+            "schema": {"title": "WsGetStuffParams", "type": "object", "description": "Call arguments.", "properties": {"symbol": {"type": "string", "description": "Symbol to look up."}, "nonce": {"type": "string", "description": "Venue-injected monotonic nonce."}}, "required": ["symbol", "nonce"]}
+          }
+        }
+      },
+      "responses": {
+        "reply": {
+          "description": "Stuff for the symbol.",
+          "content": {"application/json": {"schema": {"type": "object", "description": "Reply.", "properties": {"symbol": {"type": "string", "description": "Echoed symbol."}}}}}
+        }
+      }
+    }
+  }
+}

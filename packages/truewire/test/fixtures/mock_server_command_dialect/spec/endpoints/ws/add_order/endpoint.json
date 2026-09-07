@@ -1,0 +1,29 @@
+{
+  "function": "trading.ws_add_order",
+  "notes": [
+    "Synthetic bit2me-style WS command: `kind: 'rpc'`, but the wire frame carries no JSON-RPC `method` field at all -- it uses `event` instead. Regression fixture for the `match_rpc` false-match bug: `rpc_method` is set (from `path`) purely because `kind` is `'rpc'`, even though this example's own recorded payload is not JSON-RPC-shaped."
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": ["ws"],
+    "path": "add-order",
+    "openapi": {
+      "description": "Place an order over WS.",
+      "requestBody": {
+        "required": true,
+        "description": "Order command.",
+        "content": {
+          "application/json": {
+            "schema": {"title": "WsAddOrderParams", "type": "object", "description": "Order to place.", "properties": {"orderId": {"type": "string", "description": "Client order id."}}, "required": ["orderId"]}
+          }
+        }
+      },
+      "responses": {
+        "reply": {
+          "description": "Order acknowledgement.",
+          "content": {"application/json": {"schema": {"type": "object", "description": "Order acknowledgement.", "properties": {"orderId": {"type": "string", "description": "Client order id."}}, "required": ["orderId"]}}}
+        }
+      }
+    }
+  }
+}

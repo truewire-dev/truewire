@@ -1,0 +1,33 @@
+{
+  "function": "streams.login",
+  "notes": [
+    "Synthetic zero-arg WS RPC login command -- mexc's `futures.streams.user.*` shape: a normal request/reply, then a sibling `after_rpc` push endpoint starts pushing unprompted with no subscribe frame of its own."
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": ["ws"],
+    "path": "login",
+    "openapi": {
+      "description": "Authenticate the connection with no arguments.",
+      "responses": {
+        "reply": {
+          "description": "Login acknowledgement.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "Reply.",
+                "properties": {
+                  "result": {
+                    "type": "string",
+                    "description": "Literal 'ok'."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "description": "Open a sell order.",
+  "payload": {
+    "side": "sell",
+    "symbol": "ACME/USD",
+    "price": "100.00",
+    "amount": "0.5",
+    "clientOrderId": "synthetic-rest-1"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "meta": {"public": true},
+  "spec": {
+    "kind": "rpc", "transports": ["http"], "path": "/v1/order/list", "method": "GET",
+    "request": {
+      "title": "OrderListRequest",
+      "type": "object",
+      "properties": {
+        "symbol": {"type": "string", "description": "Trading pair."},
+        "pageKey": {"type": "string", "description": "Pagination cursor."}
+      },
+      "required": ["symbol"]
+    },
+    "response": {
+      "title": "OrderListResponse",
+      "type": "object",
+      "properties": {
+        "orders": {
+          "type": "array",
+          "description": "Matching orders.",
+          "items": {
+            "title": "OrderListItem",
+            "type": "object",
+            "properties": {
+              "orderId": {"type": "string", "description": "Order id."}
+            },
+            "required": ["orderId"]
+          }
+        },
+        "pageKey": {"type": "string", "description": "Pagination cursor for the next page."}
+      },
+      "required": ["orders"]
+    }
+  },
+  "pagination": {
+    "strategy": "token",
+    "cursor": {"parameter": "pageKey", "from": "pageKey"},
+    "done": {"kind": "absent_cursor", "rows": "orders"}
+  }
+}

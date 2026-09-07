@@ -1,0 +1,48 @@
+{
+  "meta": {"public": true},
+  "spec": {
+    "kind": "rpc", "transports": ["http"], "path": "/v1/order/nullable_list", "method": "GET",
+    "request": {
+      "title": "OrderNullableListRequest",
+      "type": "object",
+      "properties": {
+        "symbol": {"type": "string", "description": "Trading pair."},
+        "pageKey": {"type": "string", "description": "Pagination cursor."}
+      },
+      "required": ["symbol"]
+    },
+    "response": {
+      "description": "Page of orders, or nothing when there is no open page.",
+      "anyOf": [
+        {
+          "title": "OrderNullableListPage",
+          "type": "object",
+          "description": "One page of orders.",
+          "properties": {
+            "orders": {
+              "type": "array",
+              "description": "Matching orders.",
+              "items": {
+                "title": "OrderNullableListItem",
+                "type": "object",
+                "description": "A single matching order.",
+                "properties": {
+                  "orderId": {"type": "string", "description": "Order id."}
+                },
+                "required": ["orderId"]
+              }
+            },
+            "pageKey": {"type": "string", "description": "Pagination cursor for the next page."}
+          },
+          "required": ["orders"]
+        },
+        {"type": "null"}
+      ]
+    }
+  },
+  "pagination": {
+    "strategy": "token",
+    "cursor": {"parameter": "pageKey", "from": "pageKey"},
+    "done": {"kind": "absent_cursor", "rows": "orders"}
+  }
+}

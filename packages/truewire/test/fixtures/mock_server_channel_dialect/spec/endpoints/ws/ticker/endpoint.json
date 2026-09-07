@@ -1,0 +1,30 @@
+{
+  "function": "streams.ticker",
+  "notes": [
+    "Synthetic channel-dialect stream: the venue's real subscribe frame carries no `type`/`channel` keys the mock's generic dialect expects (`{id, type, topic, ...}`, kucoin-shaped), and no example records the raw frame under `payload` -- `envelope.channel` is the only declared routing field, matched against the parameter-interpolated endpoint channel."
+  ],
+  "spec": {
+    "kind": "stream",
+    "channel": "/market/ticker:{symbol}",
+    "openapi": {
+      "description": "Synthetic ticker stream subscribed to with a venue-shaped JSON frame naming its channel under `topic`.",
+      "parameters": [
+        {
+          "name": "symbol",
+          "in": "path",
+          "required": true,
+          "description": "Trading pair symbol.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "responses": {
+        "message": {
+          "description": "Ticker update."
+        }
+      }
+    }
+  },
+  "envelope": {"payload": "data", "channel": "topic"}
+}

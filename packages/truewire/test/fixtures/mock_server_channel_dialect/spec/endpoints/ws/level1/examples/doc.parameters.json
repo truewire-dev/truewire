@@ -1,0 +1,6 @@
+{
+  "description": "Subscribed to /market/level1:ACME-USDT. No `payload` recorded, same as `streams.ticker`.",
+  "parameters": {
+    "symbol": "ACME-USDT"
+  }
+}

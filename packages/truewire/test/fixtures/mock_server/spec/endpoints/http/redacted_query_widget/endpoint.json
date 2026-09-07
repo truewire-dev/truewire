@@ -1,0 +1,59 @@
+{
+  "function": "widgets.redacted_query",
+  "meta": {
+    "in": "query",
+    "name": "token"
+  },
+  "redacted": ["token"],
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/redacted-widgets",
+    "method": "GET",
+    "openapi": {
+      "description": "Get one widget from a venue whose credential is also a genuine bindable parameter, recorded like any other -- regression fixture for the expected-side redaction gap.",
+      "parameters": [
+        {
+          "name": "id",
+          "in": "query",
+          "required": true,
+          "description": "Widget id.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "token",
+          "in": "query",
+          "required": true,
+          "description": "Session credential, also recorded like a normal parameter.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "The widget.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "title": "RedactedQueryWidget",
+                "type": "object",
+                "description": "One widget, fetched with a credential that is also recorded in `parameters`.",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Widget name."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

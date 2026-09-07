@@ -1,0 +1,5 @@
+{
+  "description": "Place a limit order via `request` (Task 23). `payload` is also set, to a deliberately different value, to prove `request` takes precedence in the legacy `openapi` branch's body read too -- not just when `request` is the only field set.",
+  "request": {"type": "limit", "price": "100.00"},
+  "payload": {"type": "market"}
+}

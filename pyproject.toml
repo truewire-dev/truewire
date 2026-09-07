@@ -1,0 +1,6 @@
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+truewire-core = { workspace = true }
+truewire = { workspace = true }

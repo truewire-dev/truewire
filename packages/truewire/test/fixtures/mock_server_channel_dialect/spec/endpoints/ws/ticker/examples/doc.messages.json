@@ -1,0 +1,3 @@
+[
+  {"type": "message", "topic": "/market/ticker:ACME-USDT", "subject": "", "data": {"price": "100.5", "size": "1"}}
+]

@@ -1,0 +1,12 @@
+{
+  "meta": {"signed": true},
+  "spec": {
+    "kind": "rpc", "transports": ["http"], "path": "/v1/futures/positions", "method": "GET",
+    "request": {"title": "PositionsRequest", "type": "object", "properties": {
+      "symbol": {"type": "string", "description": "Trading pair."}
+    }, "required": ["symbol"]},
+    "response": {"title": "PositionList", "type": "object", "properties": {
+      "positions": {"type": "array", "items": {"type": "string"}, "description": "Open position ids."}
+    }}
+  }
+}

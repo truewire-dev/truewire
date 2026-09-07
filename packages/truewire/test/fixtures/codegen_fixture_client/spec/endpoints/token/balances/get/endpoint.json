@@ -1,0 +1,12 @@
+{
+  "meta": {},
+  "spec": {
+    "kind": "rpc", "transports": ["http"], "path": "/v1/token/balances", "method": "GET",
+    "request": {"title": "TokenBalancesRequest", "type": "object", "properties": {
+      "address": {"type": "string", "description": "Wallet address to query."}
+    }, "required": ["address"]},
+    "response": {"title": "TokenBalances", "type": "object", "properties": {
+      "balances": {"type": "array", "items": {"type": "string"}, "description": "Token balances."}
+    }}
+  }
+}

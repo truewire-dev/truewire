@@ -1,0 +1,4 @@
+{
+  "status": 200,
+  "payload": {"name": "Widget One", "stock": 4}
+}

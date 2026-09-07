@@ -1,0 +1,4 @@
+{
+  "parameters": {},
+  "payload": {"jsonrpc": "2.0", "id": 1, "method": "acme_getBalance", "params": ["0xACME0000000000000000000000000000000001"]}
+}

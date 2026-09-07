@@ -1,0 +1,4 @@
+{
+  "description": "Fetch the same widget with extra detail fields requested.",
+  "parameters": {"id": "w1", "verbose": true}
+}

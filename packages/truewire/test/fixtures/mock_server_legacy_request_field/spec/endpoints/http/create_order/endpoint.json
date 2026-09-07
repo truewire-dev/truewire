@@ -1,0 +1,76 @@
+{
+  "function": "orders.create",
+  "spec": {
+    "kind": "rpc",
+    "transports": ["http"],
+    "path": "/orders",
+    "method": "POST",
+    "openapi": {
+      "description": "Place a synthetic order via a discriminated-union body (rule 0), so no flat body property is pooled into `expected_query` -- isolates the legacy branch's `request_body` read (`request` vs `payload`) from query/body pooling.",
+      "requestBody": {
+        "required": true,
+        "description": "Order to place.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "title": "OrderRequest",
+              "description": "Order to place.",
+              "anyOf": [
+                {
+                  "title": "LimitOrderRequest",
+                  "type": "object",
+                  "description": "Limit order.",
+                  "required": ["type", "price"],
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "description": "Order type.",
+                      "enum": ["limit"]
+                    },
+                    "price": {
+                      "type": "string",
+                      "description": "Limit price."
+                    }
+                  }
+                },
+                {
+                  "title": "MarketOrderRequest",
+                  "type": "object",
+                  "description": "Market order.",
+                  "required": ["type"],
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "description": "Order type.",
+                      "enum": ["market"]
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "The created order.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "title": "Order",
+                "type": "object",
+                "description": "Order acknowledgement.",
+                "properties": {
+                  "orderId": {
+                    "type": "string",
+                    "description": "Order id."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

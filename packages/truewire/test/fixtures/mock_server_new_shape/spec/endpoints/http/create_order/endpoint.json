@@ -1,0 +1,52 @@
+{
+  "function": "trading.create_order",
+  "meta": {"kind": "hmac"},
+  "spec": {
+    "kind": "rpc",
+    "transports": ["http"],
+    "path": "/v1/orders",
+    "method": "POST",
+    "description": "Place an order, limit or market.",
+    "request": {
+      "title": "OrderRequest",
+      "description": "Order to place.",
+      "anyOf": [
+        {
+          "title": "LimitOrderRequest",
+          "type": "object",
+          "description": "A limit order.",
+          "required": ["price"],
+          "properties": {
+            "price": {
+              "type": "string",
+              "description": "Limit price."
+            }
+          }
+        },
+        {
+          "title": "MarketOrderRequest",
+          "type": "object",
+          "description": "A market order.",
+          "required": ["quantity"],
+          "properties": {
+            "quantity": {
+              "type": "string",
+              "description": "Market quantity."
+            }
+          }
+        }
+      ]
+    },
+    "response": {
+      "title": "OrderAck",
+      "type": "object",
+      "description": "Order acknowledgement.",
+      "properties": {
+        "orderId": {
+          "type": "string",
+          "description": "Order id."
+        }
+      }
+    }
+  }
+}

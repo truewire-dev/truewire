@@ -1,0 +1,1 @@
+{"description": "Per-chain JSON-RPC surfaces, reachable over any of several EVM networks (design §5a's own worked example, mirrored for the fixture).", "upstream": "https://example.com/docs/token", "core": "chain"}

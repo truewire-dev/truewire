@@ -1,0 +1,37 @@
+{
+  "function": "acme.ws_subscribe",
+  "notes": [
+    "Synthetic generic multiplexed subscribe RPC, deribit-shaped: one `kind: 'rpc'` command (`acme/subscribe`) whose sole recorded example subscribes to `ticker.ACME`, alongside a separate `kind: 'stream'` endpoint (`ws/book`) declaring `envelope.channel` routing for a different channel (`book.ACME`) reached through the exact same RPC method name. Regression fixture for the `match_rpc`/`match_subscribe` server-loop precedence bug: a live call for `book.ACME` is recognized by `match_rpc` (method matches) but mismatches its one example's `channels` params, and must fall through to `match_subscribe`'s declared-channel routing instead of the mock raising `UnexpectedSubscriptionParameters` immediately."
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": ["ws"],
+    "path": "acme/subscribe",
+    "openapi": {
+      "description": "Subscribe to one or more channels.",
+      "parameters": [
+        {
+          "name": "channels",
+          "in": "query",
+          "required": true,
+          "description": "Channels to subscribe to.",
+          "schema": {"type": "array", "items": {"type": "string", "description": "A channel name."}}
+        }
+      ],
+      "responses": {
+        "reply": {
+          "description": "The subset of the requested channels actually subscribed to.",
+          "content": {
+            "application/json": {
+              "schema": {"type": "array", "items": {"type": "string", "description": "A subscribed channel name."}, "description": "Subscribed channels."}
+            }
+          }
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result",
+    "correlate": "id"
+  }
+}

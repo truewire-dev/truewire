@@ -1,0 +1,5 @@
+{
+  "description": "Test-only probe directory declaring a *different* core than its parent `mismatch_probe/router.json` -- `_check_aggregate_core_consistency`'s own regression test resolves a hand-built leaf `b` here to prove two multiply-inherited siblings resolving to different cores raise, instead of silently letting C3 linearization pick one.",
+  "upstream": "https://example.com/docs",
+  "core": "futures"
+}

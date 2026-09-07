@@ -1,0 +1,6 @@
+{
+  "description": "Place a signed order (recorded copy B -- deliberately identical to copy A once the venue-injected `nonce` is stripped, to exercise ambiguous matching).",
+  "payload": {
+    "orderId": "dup-order"
+  }
+}

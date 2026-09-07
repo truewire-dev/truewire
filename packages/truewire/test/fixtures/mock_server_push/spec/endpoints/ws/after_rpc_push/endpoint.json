@@ -1,0 +1,22 @@
+{
+  "function": "streams.after_rpc_push",
+  "notes": [
+    "Synthetic post-login push stream: no subscribe frame of its own, matching `docs/spec/authoring.md` rule 11's `after_rpc` trigger. Starts pushing its declared example messages once the sibling `login` RPC example's reply has been served."
+  ],
+  "push": {
+    "trigger": "after_rpc",
+    "method": "login"
+  },
+  "spec": {
+    "kind": "stream",
+    "channel": "personal.orders",
+    "openapi": {
+      "description": "Synthetic post-login push stream with no subscribe frame at all.",
+      "responses": {
+        "message": {
+          "description": "Pushed update."
+        }
+      }
+    }
+  }
+}

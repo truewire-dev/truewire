@@ -1,0 +1,4 @@
+{
+  "description": "Subscribe to the ACME-1 trade stream.",
+  "parameters": {"id": "ACME-1"}
+}

@@ -1,0 +1,43 @@
+{
+  "function": "streams.ticker",
+  "notes": [
+    "Synthetic flat-ack stream: the subscribe acknowledgement is a flat frame with nothing worth extracting -- `envelope.reply_payload` declares `''`, so the `reply` schema below describes the whole ack frame, not one field of it. kucoin's real subscribe ack (`{id, type}`) is this shape."
+  ],
+  "spec": {
+    "kind": "stream",
+    "channel": "/market/ticker:{symbol}",
+    "openapi": {
+      "description": "Synthetic ticker stream whose subscribe ack is a flat frame.",
+      "parameters": [
+        {
+          "name": "symbol",
+          "in": "path",
+          "required": true,
+          "description": "Trading pair symbol.",
+          "schema": {"type": "string"}
+        }
+      ],
+      "responses": {
+        "reply": {
+          "description": "Subscribe acknowledgement.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "title": "TickerSubscribeAck",
+                "type": "object",
+                "description": "Flat subscribe acknowledgement frame.",
+                "properties": {
+                  "id": {"type": "integer", "description": "Request id echoed back."},
+                  "type": {"type": "string", "enum": ["ack"], "description": "Acknowledgement marker."}
+                },
+                "required": ["id", "type"]
+              }
+            }
+          }
+        },
+        "message": {"description": "Ticker update."}
+      }
+    }
+  },
+  "envelope": {"payload": "data", "channel": "topic", "reply_payload": ""}
+}

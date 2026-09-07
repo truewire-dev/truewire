@@ -1,0 +1,16 @@
+{
+  "meta": {"public": true},
+  "spec": {
+    "kind": "rpc", "transports": ["http"], "path": "/v1/order/ledger", "method": "GET",
+    "request": {"title": "OrderLedgerRequest", "type": "object", "properties": {
+      "symbol": {"type": "string", "description": "Trading pair."},
+      "pageKey": {"type": "string", "description": "Pagination cursor."}
+    }, "required": ["symbol"]},
+    "response": {"$ref": "OrderLedgerResponse"}
+  },
+  "pagination": {
+    "strategy": "token",
+    "cursor": {"parameter": "pageKey", "from": "pageKey"},
+    "done": {"kind": "absent_cursor", "rows": "orders"}
+  }
+}

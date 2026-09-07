@@ -1,0 +1,19 @@
+{
+  "function": "streams.orderbook_identity",
+  "notes": [
+    "Synthetic declared-channel example recording no `payload` at all -- a channel-identity-only candidate. Regression fixture for the 'confirmed with Marcel' uniqueness rule: this must not silently win over a payload-specific sibling declaring the exact same channel (see `orderbook_payload`); both matching the same incoming frame is `AmbiguousSubscriptionMatch`, not 'the specific one wins'."
+  ],
+  "spec": {
+    "kind": "stream",
+    "channel": "orderbook",
+    "openapi": {
+      "description": "Synthetic order book stream, subscribed to with a venue-shaped JSON frame naming its channel under `topic`. No recorded `payload`.",
+      "responses": {
+        "message": {
+          "description": "Order book update."
+        }
+      }
+    }
+  },
+  "envelope": {"payload": "data", "channel": "topic"}
+}

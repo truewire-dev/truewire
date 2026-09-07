@@ -1,0 +1,40 @@
+{
+  "function": "acme.get_balance",
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "acme_getBalance",
+    "method": "POST",
+    "openapi": {
+      "description": "Returns the balance of one address. A single JSON-RPC positional parameter.",
+      "requestBody": {
+        "required": true,
+        "description": "Positional JSON-RPC parameter: address.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "title": "GetBalanceParams",
+              "type": "string",
+              "description": "Address to check the balance of."
+            }
+          }
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "The balance, in wei.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string",
+                "description": "Hex-encoded balance."
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

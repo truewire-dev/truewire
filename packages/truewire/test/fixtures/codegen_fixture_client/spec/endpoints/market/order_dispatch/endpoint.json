@@ -1,0 +1,13 @@
+{
+  "meta": {"public": true},
+  "spec": {
+    "kind": "rpc", "transports": ["http"], "path": "/v1/dispatch", "method": "GET",
+    "request": {"title": "OrderDispatchRequest", "type": "object", "properties": {
+      "symbol": {"type": "string", "description": "Trading pair."},
+      "action": {"type": "string", "enum": ["list"], "description": "Fixed dispatch action selector; use `list`."}
+    }, "required": ["symbol", "action"]},
+    "response": {"title": "OrderDispatchAck", "type": "object", "properties": {
+      "symbol": {"type": "string", "description": "Trading pair queried."}
+    }}
+  }
+}

@@ -1,0 +1,4 @@
+{
+  "description": "Fetch a widget by id, with no extra detail requested.",
+  "parameters": {"id": "w1"}
+}

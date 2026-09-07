@@ -1,0 +1,30 @@
+{
+  "function": "streams.level1",
+  "notes": [
+    "Second channel-dialect stream, alongside `streams.ticker`. Exists so a subscribe frame naming this channel's `topic` can be checked against both declared-channel endpoints at once -- proving `envelope.channel` routing picks the one whose interpolated channel actually matches, not just any declared-channel example."
+  ],
+  "spec": {
+    "kind": "stream",
+    "channel": "/market/level1:{symbol}",
+    "openapi": {
+      "description": "Synthetic level1 stream subscribed to with a venue-shaped JSON frame naming its channel under `topic`.",
+      "parameters": [
+        {
+          "name": "symbol",
+          "in": "path",
+          "required": true,
+          "description": "Trading pair symbol.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "responses": {
+        "message": {
+          "description": "Level1 update."
+        }
+      }
+    }
+  },
+  "envelope": {"payload": "data", "channel": "topic"}
+}

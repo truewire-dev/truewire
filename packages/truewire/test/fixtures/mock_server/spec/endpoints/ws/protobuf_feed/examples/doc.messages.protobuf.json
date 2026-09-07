@@ -1,0 +1,8 @@
+[
+  {
+    "content_type": "application/x-protobuf",
+    "encoding": "base64",
+    "data": "c3ludGhldGljLXByb3RvYnVmLWZyYW1lAAEC",
+    "description": "Opaque synthetic frame; the mock server relays it byte-for-byte and does not decode it."
+  }
+]

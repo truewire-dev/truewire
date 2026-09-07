@@ -1,0 +1,12 @@
+{
+  "meta": {"public": true},
+  "spec": {
+    "kind": "rpc", "transports": ["http"], "path": "/v1/mixed", "method": "GET",
+    "request": {"title": "MixedRequest", "type": "object", "properties": {
+      "id": {"type": "string", "description": "Resource id."}
+    }, "required": ["id"]},
+    "response": {"title": "MixedResource", "type": "object", "properties": {
+      "id": {"type": "string", "description": "Resource id."}
+    }}
+  }
+}

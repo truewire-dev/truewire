@@ -1,0 +1,32 @@
+{
+  "function": "streams.venue_depth",
+  "notes": [
+    "Synthetic venue-dialect stream: the example records the venue's own subscribe frame under `payload`, so the frame carries no `type` discriminator."
+  ],
+  "spec": {
+    "kind": "stream",
+    "channel": "sub.depth",
+    "openapi": {
+      "description": "Synthetic depth stream subscribed to with a venue-shaped JSON frame.",
+      "parameters": [
+        {
+          "name": "symbol",
+          "in": "path",
+          "required": true,
+          "description": "Contract symbol.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "responses": {
+        "reply": {
+          "description": "Subscription acknowledgement."
+        },
+        "message": {
+          "description": "Depth update."
+        }
+      }
+    }
+  }
+}

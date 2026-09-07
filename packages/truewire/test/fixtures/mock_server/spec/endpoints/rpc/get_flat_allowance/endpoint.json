@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "public": true
+  },
+  "function": "acme.get_flat_allowance",
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "acme_getFlatAllowance",
+    "method": "POST",
+    "request": {
+      "title": "GetFlatAllowanceRequest",
+      "type": "object",
+      "properties": {
+        "contract": {
+          "type": "string",
+          "description": "ERC-20 token contract address."
+        },
+        "owner": {
+          "type": "string",
+          "description": "Wallet address that owns the tokens."
+        }
+      },
+      "required": [
+        "contract",
+        "owner"
+      ]
+    },
+    "response": {
+      "title": "GetFlatAllowanceResponse",
+      "type": "string",
+      "description": "Decimal string allowance amount."
+    },
+    "description": "New-shape (request/response) JSON-RPC method whose flat request has more than one property -- the default JSON-RPC wire shape (the whole dict wrapped in a one-element params array), regression-testing the `expected_body` gap `_mock_http_example`'s new-shape branch had for any `rpc_method is not None` operation (common/lib commit 111f62df4)."
+  }
+}

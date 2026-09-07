@@ -1,0 +1,13 @@
+{
+  "meta": {"public": true},
+  "spec": {
+    "kind": "rpc", "transports": ["http"], "path": "/v1/order/cancel", "method": "POST",
+    "request": {"title": "CancelOrderRequest", "type": "object", "properties": {
+      "orderId": {"type": "string", "description": "Order id to cancel."},
+      "symbol": {"type": "string", "description": "Trading pair."}
+    }, "required": ["orderId", "symbol"]},
+    "response": {"title": "CancelAck", "type": "object", "properties": {
+      "orderId": {"type": "string", "description": "Cancelled order id."}
+    }}
+  }
+}

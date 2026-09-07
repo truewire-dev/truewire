@@ -1,0 +1,46 @@
+{
+  "function": "streams.book",
+  "notes": [
+    "Reached through the same `acme/subscribe` RPC method as `acme.ws_subscribe`, on a different channel -- this is the half of the regression fixture that should win once the RPC candidate's one recorded example (`ticker.ACME`) mismatches a live `book.ACME` request."
+  ],
+  "spec": {
+    "kind": "stream",
+    "channel": "book.{symbol}",
+    "openapi": {
+      "description": "Real-time order book updates for a symbol.",
+      "parameters": [
+        {
+          "name": "symbol",
+          "in": "path",
+          "required": true,
+          "description": "The symbol to subscribe to.",
+          "schema": {"type": "string", "description": "The symbol to subscribe to."}
+        }
+      ],
+      "responses": {
+        "reply": {
+          "description": "Subscribe acknowledgement: the list of channel names now subscribed to.",
+          "content": {
+            "application/json": {
+              "schema": {"type": "array", "description": "Channel names now subscribed to.", "items": {"type": "string", "description": "Subscribed channel name."}}
+            }
+          }
+        },
+        "message": {
+          "description": "Push on `book.{symbol}`.",
+          "content": {
+            "application/json": {
+              "schema": {"title": "BookUpdate", "type": "object", "description": "Order book update.", "properties": {"symbol": {"type": "string", "description": "Symbol."}, "bid": {"type": "number", "description": "Best bid."}}, "required": ["symbol", "bid"]}
+            }
+          }
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "params.data",
+    "channel": "params.channels",
+    "reply_payload": "result",
+    "correlate": "id"
+  }
+}

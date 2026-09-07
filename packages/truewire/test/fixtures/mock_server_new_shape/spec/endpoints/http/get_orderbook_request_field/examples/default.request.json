@@ -1,0 +1,5 @@
+{
+  "description": "Fetch an order book snapshot for BTCUSDT, capped at 10 rows, via the single `request` field. `parameters` is also set, to a deliberately different value, to prove `request` takes precedence rather than merely working when it's the only field set.",
+  "request": {"symbol": "BTCUSDT", "limit": 10},
+  "parameters": {"symbol": "ETHUSDT", "limit": 5}
+}

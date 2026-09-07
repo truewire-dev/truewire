@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "truewire-core"
+version = "0.1.0"
+authors = [
+  {name="Truewire contributors"}
+]
+description = "Runtime for Truewire-generated API clients: async HTTP and WebSocket transport, response validation, paging, timestamps, errors."
+license = "MIT"
+license-files = ["LICENSE"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Typing :: Typed",
+]
+dependencies = [
+  "typing-extensions", "httpx", "websockets", "orjson", "pydantic",
+  "lazy-loader",
+]
+requires-python = ">=3.10"
+readme = {file="README.md", content-type="text/markdown"}
+
+[project.optional-dependencies]
+grpc = ["grpclib"]
+dev = ["pytest", "pytest-asyncio", "grpclib", "ruff"]
+
+[project.urls]
+Repository = "https://github.com/truewire-dev/truewire"
+
+[tool.setuptools.package-data]
+truewire_core = ["py.typed", "**/*.pyi"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["test"]

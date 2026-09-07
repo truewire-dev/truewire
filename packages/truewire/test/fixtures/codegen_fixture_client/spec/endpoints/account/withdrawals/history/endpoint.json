@@ -1,0 +1,12 @@
+{
+  "meta": {"signed": true},
+  "spec": {
+    "kind": "rpc", "transports": ["http"], "path": "/v1/account/withdrawals/history", "method": "GET",
+    "request": {"title": "WithdrawalHistoryRequest", "type": "object", "properties": {
+      "asset": {"type": "string", "description": "Asset symbol."}
+    }, "required": ["asset"]},
+    "response": {"title": "WithdrawalHistory", "type": "object", "properties": {
+      "withdrawals": {"type": "array", "items": {"type": "string"}, "description": "Historical withdrawal ids."}
+    }}
+  }
+}

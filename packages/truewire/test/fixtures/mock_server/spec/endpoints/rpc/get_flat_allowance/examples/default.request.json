@@ -1,0 +1,7 @@
+{
+  "description": "Flat two-property request, sent as the whole dict wrapped in a one-element params array.",
+  "request": {
+    "contract": "0xACME0000000000000000000000000000000002",
+    "owner": "0xACME0000000000000000000000000000000003"
+  }
+}

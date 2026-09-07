@@ -1,0 +1,10 @@
+{
+  "description": "Place an order using the venue's own command frame shape, with no JSON-RPC `method` field.",
+  "parameters": {
+    "orderId": "synthetic-order-1"
+  },
+  "payload": {
+    "event": "add-order",
+    "orderId": "synthetic-order-1"
+  }
+}

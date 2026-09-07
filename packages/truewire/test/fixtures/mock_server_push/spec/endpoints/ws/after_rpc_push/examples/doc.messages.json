@@ -1,0 +1,6 @@
+[
+  {
+    "channel": "personal.orders",
+    "data": {"orderId": "1", "status": "NEW"}
+  }
+]

@@ -1,0 +1,13 @@
+{
+  "meta": {"public": true},
+  "spec": {
+    "kind": "rpc", "transports": ["http"], "path": "/v1/order/history", "method": "GET",
+    "request": {"title": "OrderHistoryRequest", "type": "object", "properties": {
+      "symbol": {"type": "string", "description": "Trading pair."}
+    }, "required": ["symbol"]},
+    "response": {"title": "OrderHistoryEntry", "type": "object", "properties": {
+      "symbol": {"type": "string", "description": "Trading pair."},
+      "side": {"$ref": "OrderSide"}
+    }, "required": ["symbol", "side"]}
+  }
+}

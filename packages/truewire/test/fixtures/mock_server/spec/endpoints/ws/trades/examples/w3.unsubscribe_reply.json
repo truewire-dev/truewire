@@ -1,0 +1,7 @@
+{
+  "event": "unsubscribe",
+  "arg": {
+    "channel": "stream_trades",
+    "id": "ACME-3"
+  }
+}

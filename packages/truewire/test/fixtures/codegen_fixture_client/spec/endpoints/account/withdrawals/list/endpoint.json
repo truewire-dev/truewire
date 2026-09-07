@@ -1,0 +1,12 @@
+{
+  "meta": {"signed": true},
+  "spec": {
+    "kind": "rpc", "transports": ["http"], "path": "/v1/account/withdrawals", "method": "GET",
+    "request": {"title": "WithdrawalsRequest", "type": "object", "properties": {
+      "asset": {"type": "string", "description": "Asset symbol."}
+    }, "required": ["asset"]},
+    "response": {"title": "WithdrawalList", "type": "object", "properties": {
+      "withdrawals": {"type": "array", "items": {"type": "string"}, "description": "Withdrawal ids."}
+    }}
+  }
+}

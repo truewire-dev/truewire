@@ -1,0 +1,12 @@
+{
+  "description": "Subscribe to the ACME_USDT depth stream using the venue's own frame shape.",
+  "parameters": {
+    "symbol": "ACME_USDT"
+  },
+  "payload": {
+    "method": "sub.depth",
+    "param": {
+      "symbol": "ACME_USDT"
+    }
+  }
+}

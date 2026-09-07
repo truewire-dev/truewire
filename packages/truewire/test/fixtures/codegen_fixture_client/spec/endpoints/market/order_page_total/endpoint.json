@@ -1,0 +1,42 @@
+{
+  "meta": {"public": true},
+  "spec": {
+    "kind": "rpc", "transports": ["http"], "path": "/v1/order/page_total", "method": "GET",
+    "request": {
+      "title": "OrderPageTotalRequest",
+      "type": "object",
+      "properties": {
+        "symbol": {"type": "string", "description": "Trading pair."},
+        "current": {"type": "integer", "description": "Page number, starting at 1."},
+        "size": {"type": "integer", "description": "Rows per page."}
+      },
+      "required": ["symbol"]
+    },
+    "response": {
+      "title": "OrderPageTotalResponse",
+      "type": "object",
+      "properties": {
+        "rows": {
+          "type": "array",
+          "description": "Matching orders on this page.",
+          "items": {
+            "title": "OrderPageTotalItem",
+            "type": "object",
+            "properties": {
+              "orderId": {"type": "string", "description": "Order id."}
+            },
+            "required": ["orderId"]
+          }
+        },
+        "total": {"type": "integer", "description": "Total matching rows."}
+      },
+      "required": ["rows", "total"]
+    }
+  },
+  "pagination": {
+    "strategy": "page",
+    "index": {"parameter": "current", "start": 1},
+    "size": {"parameter": "size"},
+    "done": {"kind": "total", "path": "total", "counts": "items", "rows": "rows"}
+  }
+}

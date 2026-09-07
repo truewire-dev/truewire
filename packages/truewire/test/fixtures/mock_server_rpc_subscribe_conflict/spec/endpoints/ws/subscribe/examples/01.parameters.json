@@ -1,0 +1,14 @@
+{
+  "description": "Subscribe to the public ticker channel.",
+  "payload": {
+    "jsonrpc": "2.0",
+    "id": 0,
+    "method": "acme/subscribe",
+    "params": {
+      "channels": ["ticker.ACME"]
+    }
+  },
+  "parameters": {
+    "channels": ["ticker.ACME"]
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "description": "Subscribe to the ACME-3 trade stream, op/args dialect (bitget-shaped: no top-level `type`/`channel` key, the channel identity sits inside `args[0]`).",
+  "payload": {
+    "op": "subscribe",
+    "args": [
+      {
+        "channel": "stream_trades",
+        "id": "ACME-3"
+      }
+    ]
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "function": "acme.get_block_by_number",
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "acme_getBlockByNumber",
+    "method": "POST",
+    "openapi": {
+      "description": "Returns one block by number. Two positional JSON-RPC parameters.",
+      "requestBody": {
+        "required": true,
+        "description": "Positional JSON-RPC parameters: blockNumber, includeTransactions.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "title": "GetBlockByNumberParams",
+              "type": "array",
+              "description": "Positional JSON-RPC parameters: blockNumber, includeTransactions.",
+              "prefixItems": [
+                {
+                  "title": "blockNumber",
+                  "type": "string",
+                  "description": "Block number or tag."
+                },
+                {
+                  "title": "includeTransactions",
+                  "type": "boolean",
+                  "description": "Return full transaction objects."
+                }
+              ],
+              "minItems": 2,
+              "maxItems": 2
+            }
+          }
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "The block.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "title": "Block",
+                "type": "object",
+                "description": "One block.",
+                "properties": {
+                  "number": {
+                    "type": "string",
+                    "description": "Block number."
+                  },
+                  "transactions": {
+                    "type": "array",
+                    "description": "Transactions in the block.",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

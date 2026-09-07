@@ -1,0 +1,21 @@
+{
+  "function": "streams.connect_push",
+  "notes": [
+    "Synthetic connect-only push stream: no subscribe frame at all, matching `docs/spec/authoring.md` rule 11's `connect` trigger. The mock server pushes this endpoint's declared example messages the instant a connection is accepted, before any frame is read from it."
+  ],
+  "push": {
+    "trigger": "connect"
+  },
+  "spec": {
+    "kind": "stream",
+    "channel": "connect.push",
+    "openapi": {
+      "description": "Synthetic connect-only push stream with no subscribe frame at all.",
+      "responses": {
+        "message": {
+          "description": "Pushed update."
+        }
+      }
+    }
+  }
+}

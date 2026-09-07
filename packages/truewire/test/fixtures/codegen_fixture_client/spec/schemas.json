@@ -1,0 +1,31 @@
+{
+  "OrderSide": {
+    "title": "OrderSide",
+    "type": "string",
+    "description": "Order side.",
+    "enum": ["buy", "sell"]
+  },
+  "OrderLedgerEntry": {
+    "title": "OrderLedgerEntry",
+    "type": "object",
+    "description": "One settled order in the ledger.",
+    "properties": {
+      "orderId": {"type": "string", "description": "Order id."}
+    },
+    "required": ["orderId"]
+  },
+  "OrderLedgerResponse": {
+    "title": "OrderLedgerResponse",
+    "type": "object",
+    "description": "A page of the order ledger.",
+    "properties": {
+      "orders": {
+        "type": "array",
+        "description": "Ledger entries.",
+        "items": {"$ref": "OrderLedgerEntry"}
+      },
+      "pageKey": {"type": "string", "description": "Pagination cursor for the next page."}
+    },
+    "required": ["orders"]
+  }
+}

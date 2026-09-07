@@ -1,0 +1,8 @@
+{
+  "FuturesSide": {
+    "title": "FuturesSide",
+    "type": "string",
+    "description": "Futures position side.",
+    "enum": ["long", "short"]
+  }
+}

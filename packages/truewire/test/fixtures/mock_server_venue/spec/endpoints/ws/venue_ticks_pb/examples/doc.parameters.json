@@ -1,0 +1,12 @@
+{
+  "description": "Subscribe to the ACMEUSDT protobuf tick stream using the venue's own frame shape.",
+  "parameters": {
+    "symbol": "ACMEUSDT"
+  },
+  "payload": {
+    "method": "SUBSCRIPTION",
+    "params": [
+      "acme@public.ticks.pb@ACMEUSDT"
+    ]
+  }
+}

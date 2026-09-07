@@ -1,0 +1,39 @@
+{
+  "function": "market.orderbook",
+  "meta": {"public": true},
+  "spec": {
+    "kind": "rpc",
+    "transports": ["http"],
+    "path": "/v1/orderbook",
+    "method": "GET",
+    "description": "Fetch an order book snapshot for a trading pair.",
+    "request": {
+      "title": "OrderbookRequest",
+      "type": "object",
+      "description": "Order book query.",
+      "required": ["symbol"],
+      "properties": {
+        "symbol": {
+          "type": "string",
+          "description": "Trading pair symbol."
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum rows to return."
+        }
+      }
+    },
+    "response": {
+      "title": "Orderbook",
+      "type": "object",
+      "description": "Order book snapshot.",
+      "properties": {
+        "bids": {
+          "type": "array",
+          "description": "Bid rows.",
+          "items": {"type": "string"}
+        }
+      }
+    }
+  }
+}

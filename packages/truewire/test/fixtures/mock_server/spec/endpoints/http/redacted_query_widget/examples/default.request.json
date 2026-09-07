@@ -1,0 +1,4 @@
+{
+  "description": "Fetch a widget with a session token recorded like any other query parameter.",
+  "parameters": {"id": "r1", "token": "recorded-placeholder-token"}
+}

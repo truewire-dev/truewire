@@ -1,0 +1,8 @@
+{
+  "description": "Call recorded with nonce 'nonce-b' -- redacted, so a live call's own different nonce still matches once stripped.",
+  "parameters": {},
+  "payload": {
+    "method": "acme_getStuff",
+    "params": {"symbol": "ACME", "nonce": "nonce-b"}
+  }
+}

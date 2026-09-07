@@ -1,0 +1,13 @@
+[
+  {
+    "jsonrpc": "2.0",
+    "method": "subscription",
+    "params": {
+      "channel": "book.ACME",
+      "data": {
+        "symbol": "ACME",
+        "bid": 100.4
+      }
+    }
+  }
+]

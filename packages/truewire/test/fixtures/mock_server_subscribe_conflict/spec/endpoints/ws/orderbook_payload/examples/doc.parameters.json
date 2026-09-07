@@ -1,0 +1,11 @@
+{
+  "description": "Subscribed to the orderbook channel with the exact venue subscribe frame recorded verbatim.",
+  "parameters": {},
+  "payload": {
+    "id": "9",
+    "type": "subscribe",
+    "topic": "orderbook",
+    "privateChannel": false,
+    "response": true
+  }
+}

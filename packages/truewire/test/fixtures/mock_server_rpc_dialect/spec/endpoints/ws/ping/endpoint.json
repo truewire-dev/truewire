@@ -1,0 +1,20 @@
+{
+  "function": "system.ws_ping",
+  "notes": [
+    "Synthetic genuine zero-arg WS RPC command: `kind: 'rpc'`, and its one recorded example carries no `payload` at all (only empty `parameters`). Regression fixture for `match_rpc`'s zero-arg fix: rekeying candidate identification off the incoming message (rather than the example's own recorded payload) is what lets this become a candidate, and the synthesized `{selector: rpc_method}` expected frame is what lets a real `{'method': 'ping'}` message match it."
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": ["ws"],
+    "path": "ping",
+    "openapi": {
+      "description": "Keepalive ping with no arguments.",
+      "responses": {
+        "reply": {
+          "description": "Pong acknowledgement.",
+          "content": {"application/json": {"schema": {"type": "object", "description": "Pong reply.", "properties": {"result": {"type": "string", "description": "Literal 'pong'."}}}}}
+        }
+      }
+    }
+  }
+}

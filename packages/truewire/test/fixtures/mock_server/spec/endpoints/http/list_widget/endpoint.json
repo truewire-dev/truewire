@@ -1,0 +1,51 @@
+{
+  "function": "widgets.list",
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/list-widgets",
+    "method": "POST",
+    "openapi": {
+      "description": "List widgets by id, from a venue that sends its query-role parameters as a JSON body on this verb and declares no `requestBody` at all.",
+      "parameters": [
+        {
+          "name": "ids",
+          "in": "query",
+          "required": true,
+          "description": "Widget ids to fetch.",
+          "schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "The widgets.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "title": "WidgetList",
+                "type": "object",
+                "description": "Widgets found.",
+                "properties": {
+                  "names": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Widget names."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "description": "Test-only probe directory (no real endpoints) for `_check_aggregate_core_consistency`'s own regression test -- `router.json`-only, deliberately not endpoint-bearing, so it is invisible to the fixture client's own full-generation sweep (`endpoint_specs` globs `endpoint.json`, not `router.json`). Declares `default` so a hand-built leaf named `a` (no real directory of its own) resolves here via `_resolve_core`'s ancestor walk, while sibling `b/` overrides to a different core -- see `b/router.json`.",
+  "upstream": "https://example.com/docs",
+  "core": "default"
+}

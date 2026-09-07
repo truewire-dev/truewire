@@ -1,0 +1,9 @@
+[project]
+name = "grpc_proto_client"
+
+[python]
+package = "grpc_proto_client"
+src = "pkg/src"
+
+[python.cores.default]
+base = "grpc_proto_client.core:Endpoint"

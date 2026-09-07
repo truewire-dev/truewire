@@ -1,0 +1,4 @@
+{
+  "description": "Genuine zero-arg command -- no `payload` recorded, only empty `parameters`.",
+  "parameters": {}
+}

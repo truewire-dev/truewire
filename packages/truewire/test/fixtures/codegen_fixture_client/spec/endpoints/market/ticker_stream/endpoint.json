@@ -1,0 +1,12 @@
+{
+  "meta": {"public": true},
+  "spec": {
+    "kind": "stream", "channel": "/ticker/{symbol}",
+    "parameters": {"title": "TickerParams", "type": "object", "properties": {
+      "symbol": {"type": "string", "description": "Trading pair."}
+    }, "required": ["symbol"]},
+    "payload": {"title": "Ticker", "type": "object", "properties": {
+      "price": {"type": "string", "format": "decimal-string", "description": "Last price."}
+    }}
+  }
+}

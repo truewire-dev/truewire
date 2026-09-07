@@ -1,0 +1,29 @@
+[project]
+name = "fixture_client"
+
+# `[cores.<name>]` (design §2/§6): language-neutral `meta` JSON Schema per symbolic core
+# name -- optional per name, most cores need none at all. `chain` deliberately declares
+# none (the regression case every codegen-meta test proves stays working): both of its
+# endpoints declare `meta: {}` and generate no `meta=` argument at all.
+[cores.default]
+meta = { type = "object", properties = { signed = { type = "boolean" }, public = { type = "boolean" } }, additionalProperties = false }
+
+[cores.futures]
+meta = { type = "object", properties = { signed = { type = "boolean" }, public = { type = "boolean" } }, required = ["signed"], additionalProperties = false }
+
+[python]
+package = "fixture_client"
+src = "core_impl"
+name = "FixtureClient"
+
+[python.cores.root]
+base = "fixture_client.core:ClientBase"
+
+[python.cores.default]
+base = "fixture_client.core:RpcEndpoint"
+
+[python.cores.futures]
+base = "fixture_client.futures.core:FuturesEndpoint"
+
+[python.cores.chain]
+base = "fixture_client.token.core:ChainRpc"

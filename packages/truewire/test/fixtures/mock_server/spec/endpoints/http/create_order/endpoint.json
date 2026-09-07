@@ -1,0 +1,84 @@
+{
+  "function": "orders.create",
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/orders",
+    "method": "POST",
+    "openapi": {
+      "description": "Place a synthetic order.",
+      "requestBody": {
+        "required": true,
+        "description": "Order parameters.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "title": "CreateOrderRequest",
+              "type": "object",
+              "description": "Order to place.",
+              "required": [
+                "side",
+                "symbol",
+                "price",
+                "amount",
+                "clientOrderId"
+              ],
+              "properties": {
+                "side": {
+                  "type": "string",
+                  "description": "Order side.",
+                  "enum": [
+                    "buy",
+                    "sell"
+                  ]
+                },
+                "symbol": {
+                  "type": "string",
+                  "description": "Market symbol."
+                },
+                "price": {
+                  "type": "string",
+                  "description": "Limit price."
+                },
+                "amount": {
+                  "type": "string",
+                  "description": "Order amount."
+                },
+                "clientOrderId": {
+                  "type": "string",
+                  "description": "Caller-supplied idempotency key."
+                }
+              }
+            }
+          }
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "The created order.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "title": "Order",
+                "type": "object",
+                "description": "Order acknowledgement.",
+                "properties": {
+                  "orderId": {
+                    "type": "string",
+                    "description": "Order id."
+                  },
+                  "status": {
+                    "type": "string",
+                    "description": "Order status."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

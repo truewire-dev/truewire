@@ -1,0 +1,12 @@
+{
+  "meta": {"public": true},
+  "spec": {
+    "kind": "rpc", "transports": ["http"], "path": "/v1/orderbook", "method": "GET",
+    "request": {"title": "OrderbookRequest", "type": "object", "properties": {
+      "symbol": {"type": "string", "description": "Trading pair."}
+    }, "required": ["symbol"]},
+    "response": {"title": "Orderbook", "type": "object", "properties": {
+      "bids": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}, "description": "Bid levels."}
+    }}
+  }
+}

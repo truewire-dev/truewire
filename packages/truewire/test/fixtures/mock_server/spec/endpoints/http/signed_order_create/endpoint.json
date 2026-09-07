@@ -1,0 +1,56 @@
+{
+  "function": "orders.create_signed",
+  "meta": {
+    "kind": "hmac-sha512"
+  },
+  "redacted": ["nonce"],
+  "spec": {
+    "kind": "rpc",
+    "transports": ["http"],
+    "path": "/signed-orders",
+    "method": "POST",
+    "openapi": {
+      "description": "Place a synthetic order on a venue that injects a monotonic nonce into every signed body.",
+      "requestBody": {
+        "required": true,
+        "description": "Order parameters.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "title": "CreateSignedOrderRequest",
+              "type": "object",
+              "description": "Order to place.",
+              "required": ["orderId"],
+              "properties": {
+                "orderId": {
+                  "type": "string",
+                  "description": "Caller-supplied idempotency key."
+                }
+              }
+            }
+          }
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "The created order.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "title": "SignedOrder",
+                "type": "object",
+                "description": "Order acknowledgement.",
+                "properties": {
+                  "orderId": {
+                    "type": "string",
+                    "description": "Order id."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

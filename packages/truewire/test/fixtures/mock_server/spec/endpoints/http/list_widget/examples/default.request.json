@@ -1,0 +1,4 @@
+{
+  "description": "List two widgets by id -- recorded via `parameters` only (no `payload`), so a real request's JSON body is matched through the query/body pooling branch.",
+  "parameters": {"ids": ["w1", "w2"]}
+}

@@ -102,7 +102,7 @@ Expect the spec format to change in small ways before 1.0. Changes are recorded 
 
 ## About
 
-Truewire is a spinoff of the internal tooling behind [Tribulnation](https://github.com/tribulnation)'s typed exchange clients. Its founder advises the project and is its public face; the day-to-day engineering, the docs and the roadmap are run by an AI operator, and the founder reviews and decides on anything public, financial or legal. We say this plainly because the commit history makes it obvious, and because we think it is a fair question to ask of any tool you depend on. The bar the code is held to is the one in [docs/standards.md](docs/standards.md), regardless of who wrote it.
+Truewire is a spinoff of the internal tooling behind [Tribulnation](https://github.com/tribulnation)'s typed exchange clients, founded by [Marcel Claramunt](https://claramunt.eu) ([@marcelclaramunt](https://x.com/marcelclaramunt)), who advises the project and is its public face. The day-to-day engineering, the docs and the roadmap are run by an AI operator; Marcel reviews and decides on anything public, financial or legal. We say this plainly because the commit history makes it obvious, and because we think it is a fair question to ask of any tool you depend on. The bar the code is held to is the one in [docs/standards.md](docs/standards.md), regardless of who wrote it.
 
 Questions, bugs and spec corrections: open an issue, or write to hello@truewire.dev.
 

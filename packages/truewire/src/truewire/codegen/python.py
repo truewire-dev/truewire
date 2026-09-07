@@ -33,9 +33,9 @@ from truewire.generation.util import indent, snake_case
 from truewire.codegen.layout import class_name as router_class_name
 from truewire.project import Project
 from truewire.spec import (
-  Endpoint, GrpcEndpointSpec, Pagination, RouterDoc, RpcEndpointSpec, StreamEndpointSpec,
-  TokenPagination, WindowOverlap, WindowPagination, last_row_field, load_router,
-  path_segments,
+  Endpoint, GrpcEndpointSpec, Pagination, RouterDoc, RpcEndpointSpec, RpcEnvelopeSpec,
+  StreamEndpointSpec, TokenPagination, WindowOverlap, WindowPagination, last_row_field,
+  load_router, load_shared_schemas, path_segments, select_schema,
 )
 from truewire.spec.codegen_toml import CodegenConfig, PythonCoreConfig
 from truewire.spec.request import PLACEHOLDER
@@ -856,6 +856,53 @@ class Generator:
     types = self.type_generator(references)({STREAM_PAYLOAD_KEY: schema})
     return 'Any' not in re.split(r'\W+', types.identifiers[STREAM_PAYLOAD_KEY])
 
+  def raw_shared_schemas(self) -> Mapping[str, Any]:
+    """`spec/schemas.json`'s schemas as plain JSON, keyed by id, for walking a `$ref` met
+    on an `envelope.payload` path (`select_schema`). Read off the project when the CLI
+    set one, else dumped from `shared_schemas` -- the same map, one representation over."""
+    if self.project is not None:
+      cached = getattr(self, '_raw_shared_schemas', None)
+      if cached is None:
+        cached = load_shared_schemas(self.project)
+        self._raw_shared_schemas = cached
+      return cached
+    return {
+      key: value.model_dump(by_alias=True, exclude_none=True)
+      for key, value in self.shared_schemas.items()
+    }
+
+  def returned_response_schema(self, endpoint: Endpoint) -> dict[str, Any] | None:
+    """The schema of the value an rpc method returns: `spec.response` itself, or the node
+    a declared `envelope.payload` selects inside it.
+
+    The response schema describes the whole wire frame and `envelope.payload` is a
+    selector into it (ADR 0010, `docs/spec/authoring.md` rule 6); the wrapper's own
+    fields are never rendered, and the core still hands back the unwrapped value, so
+    the return type is the selected node's. A `$ref` on the way is walked through
+    `raw_shared_schemas`; the selected node is returned as written, a `$ref` node
+    included, so the caller renders it as the reference it is.
+
+    Raises:
+      ValueError: When the path does not resolve inside the schema, naming the segment
+        -- a schema still written for the unwrapped value (`truewire migrate` rewrites
+        it), or a path into an `anyOf`/unresolvable `$ref`.
+    """
+    spec = endpoint.spec
+    if not isinstance(spec, RpcEndpointSpec) or spec.response is None:
+      return None
+    envelope = endpoint.envelope
+    if not isinstance(envelope, RpcEnvelopeSpec) or envelope.payload == '':
+      return spec.response
+    try:
+      return select_schema(spec.response, envelope.payload, shared=self.raw_shared_schemas())
+    except LookupError as exc:
+      raise ValueError(
+        f'{spec.path}: envelope.payload {envelope.payload!r} does not resolve inside the '
+        f'response schema ({exc}); the schema describes the whole wire frame and the path '
+        f'selects the returned value (ADR 0010) -- `truewire migrate` rewrites a schema '
+        f'written for the unwrapped value'
+      ) from exc
+
   def endpoint_schemas(self, endpoint: Endpoint) -> Mapping[str, Schema | Reference]:
     """Return every schema one endpoint's module renders, keyed by reference id.
 
@@ -894,7 +941,15 @@ class Generator:
       schemas: dict[str, Schema | Reference] = {}
       if spec.request is not None:
         schemas['$request'] = Schema.model_validate(spec.request).model_copy(update={'title': None})
-      if spec.response is not None:
+      # The returned value's own schema (`envelope.payload` selected inside the wire-body
+      # `response`, ADR 0010) -- the type this leaf actually renders and could collide
+      # with. A path that fails to resolve falls back to the whole response here, since
+      # naming is all this method feeds; `rpc_endpoint` raises the real error.
+      try:
+        response = self.returned_response_schema(endpoint)
+      except ValueError:
+        response = spec.response
+      if response is not None:
         # A response that is, in its entirety, one bare `{"$ref": "..."}` needs the
         # same treatment `rpc_endpoint` itself already gives it (see that method's own
         # docstring: `Schema.model_validate` can't represent a bare `$ref` at all --
@@ -910,9 +965,9 @@ class Generator:
         # coming, silently producing an endpoint class shadowing its own response type
         # in the same module.
         schemas['$response'] = (
-          Reference.model_validate(spec.response)
-          if isinstance(spec.response, dict) and set(spec.response) == {'$ref'}
-          else Schema.model_validate(spec.response)
+          Reference.model_validate({'$ref': response['$ref']})
+          if isinstance(response.get('$ref'), str)
+          else Schema.model_validate(response)
         )
       return schemas
     if isinstance(spec, StreamEndpointSpec):
@@ -4547,9 +4602,15 @@ class Generator:
     # identical way a `$ref`-typed *request* property already is (`_rpc_request_params`'s
     # own `external_references.get(prop.ref)` branch, just above): directly against
     # `references`, with no local schema definition or `schemas['$response']` entry at all.
+    # `returned_response` is the schema of what the method returns: `spec.response`
+    # itself, or the node `envelope.payload` selects inside it (ADR 0010) -- the wrapper
+    # is never rendered. A selected node commonly carries a `description` beside its
+    # `$ref` (rule 7 asks for one on every property), so a `$ref` with company is a
+    # reference too, resolved the same way.
+    returned_response = self.returned_response_schema(endpoint)
     response_ref = (
-      spec.response['$ref']
-      if isinstance(spec.response, dict) and set(spec.response) == {'$ref'}
+      returned_response['$ref']
+      if isinstance(returned_response, dict) and isinstance(returned_response.get('$ref'), str)
       else None
     )
     response_schema: Schema | None = None
@@ -4561,8 +4622,8 @@ class Generator:
         raise ResolutionError(response_ref)
       response_type = external['name']
       response_import = {external['package']: {external['name']}}
-    elif spec.response is not None:
-      response_schema = Schema.model_validate(spec.response)
+    elif returned_response is not None:
+      response_schema = Schema.model_validate(returned_response)
     schemas: dict[str, Schema] = {}
     if request_schema is not None:
       # Forced to the fixed, per-module `Request` name regardless of the schema's own

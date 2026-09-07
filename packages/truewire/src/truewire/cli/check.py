@@ -133,8 +133,10 @@ def check(
   """Lint the spec and replay every recorded example against its endpoint's response schema.
 
   For each `endpoint.json` in scope, validates its `*.response.json` (rpc over http) or
-  `*.reply.json`/`*.messages.json` (rpc over ws, or stream) examples against the matching
-  `responses` schema in `spec.openapi`, `$ref`s into `spec/schemas.json` resolved first. An endpoint with no
+  `*.reply.json`/`*.messages.json` (rpc over ws, or stream) examples against the endpoint's
+  response schema, `$ref`s into `spec/schemas.json` resolved first. An rpc recording is
+  the wire body and validates whole; a declared `envelope.payload` selects the returned
+  value inside the schema, it extracts nothing here (ADR 0010). An endpoint with no
   recorded examples is skipped, not failed — that gap is `truewire examples`'s to
   report. Also runs the `docs/spec/authoring.md` audit over the same scope.
 
@@ -186,12 +188,12 @@ def check(
   def dotted_path_present(value: Any, path: str) -> bool:
     """Whether every segment of a dotted path actually exists in `value`.
 
-    `read_dotted_path`/`EnvelopeSpec.extract_value` return `None` both when a path segment
-    is genuinely absent and when it is present with a `null` value -- a schema is free to
-    declare a nullable enveloped response (`data` may be `null` on a legitimate "no
-    such order" result, for one), so `extracted is None` alone can't tell "not found" apart
-    from "found, and null." `path == ''` (the whole-frame sentinel, `PayloadPath`) is always
-    present -- there is no segment to look up.
+    Only a stream's frames are still read through a path here (ADR 0010 left stream
+    schemas describing the extracted message). `read_dotted_path` returns `None` both
+    when a path segment is genuinely absent and when it is present with a `null` value --
+    a schema is free to declare a nullable payload, so `extracted is None` alone can't
+    tell "not found" apart from "found, and null." `path == ''` (the whole-frame
+    sentinel, `PayloadPath`) is always present -- there is no segment to look up.
     """
     if path == '':
       return True
@@ -255,16 +257,10 @@ def check(
     example = response_example_payload(example_path)
     spec = endpoint_data['spec']
     status = str(example['status'])
+    # The recorded body, validated whole: the response schema describes the wire frame
+    # and a declared `envelope.payload` only selects the returned value inside it (ADR
+    # 0010) -- nothing to extract before validating.
     payload = example['payload']
-
-    envelope_data = endpoint_data.get('envelope')
-    if envelope_data is not None:
-      envelope = envelope_spec(envelope_data, spec_kind=spec['kind'])
-      if not dotted_path_present(payload, envelope.payload):
-        return [
-          f'{example_path}: envelope declares payload={envelope.payload!r}, not found in the recorded raw payload'
-        ]
-      payload = envelope.extract_value(payload)
 
     # A migrated endpoint carries `request`/`response` directly -- one schema
     # for the whole 2xx reply, no per-status `openapi.responses` map to look a status code
@@ -334,8 +330,11 @@ def check(
     payload = json.loads(example_path.read_text())
 
     envelope_data = endpoint_data.get('envelope')
-    if envelope_data is not None:
-      envelope = envelope_spec(envelope_data, spec_kind=endpoint_data['spec']['kind'])
+    # An rpc reply validates whole: its `response` schema describes the wire frame and
+    # `envelope.payload` selects the returned value inside it (ADR 0010). A stream's ack
+    # still extracts -- ADR 0010 leaves stream schemas as they were.
+    if envelope_data is not None and spec['kind'] == 'stream':
+      envelope = envelope_spec(envelope_data, spec_kind='stream')
       # A stream ack is a different frame from the pushed message the same envelope's
       # `payload` describes -- a JSON-RPC ack is a whole reply (`result`), never
       # `payload`'s `params.data` -- so `reply_payload` overrides it here when declared,

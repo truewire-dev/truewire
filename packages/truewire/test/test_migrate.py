@@ -76,7 +76,7 @@ def test_migrate_wraps_an_old_schema_from_its_recordings_and_is_idempotent(tmp_p
   result = runner.invoke(app, ['migrate', '--project', str(project)])
   assert result.exit_code == 0, result.output
   assert 'migrated   pets.list  PetFrame (error, result, time, meta, flag)' in result.output
-  assert 'Migrated 1 endpoint(s); 0 already in wire shape.' in result.output
+  assert 'Migrated 1 endpoint(s); 0 left as they are' in result.output
   assert '`error` (1)' in result.output
 
   response = response_of(endpoint_dir)
@@ -97,7 +97,7 @@ def test_migrate_wraps_an_old_schema_from_its_recordings_and_is_idempotent(tmp_p
   before = (endpoint_dir / 'endpoint.json').read_bytes()
   again = runner.invoke(app, ['migrate', '--project', str(project)])
   assert again.exit_code == 0, again.output
-  assert 'Migrated 0 endpoint(s); 1 already in wire shape.' in again.output
+  assert 'Migrated 0 endpoint(s); 1 left as they are' in again.output
   assert (endpoint_dir / 'endpoint.json').read_bytes() == before
 
 

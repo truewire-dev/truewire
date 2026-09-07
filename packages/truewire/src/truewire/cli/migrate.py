@@ -275,7 +275,10 @@ def migrate(
     typer.echo(f'migrated   {function}  {title} ({keys})')
 
   typer.echo()
-  typer.echo(f'Migrated {len(migrated)} endpoint(s); {unchanged} already in wire shape.')
+  typer.echo(
+    f'Migrated {len(migrated)} endpoint(s); {unchanged} left as they are (no `envelope.payload`, '
+    f'or already in wire shape).'
+  )
   if assumed:
     by_field: dict[str, int] = {}
     for field in assumed:

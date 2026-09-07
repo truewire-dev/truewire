@@ -38,8 +38,9 @@ real `datetime`/`date` types. Generated code never changes when you change the c
    `RateLimited`, 400/422 to `BadRequest`, all from `truewire_core.exceptions`
    (standards S9). Never swallow an error into `None`.
 4. **Envelope.** If the API wraps responses (`{code, msg, data}`, JSON-RPC `{result,
-   error}`), unwrap in `send()` or `request()` and declare `envelope` on the endpoints so
-   the spec describes what the core returns (authoring rule 6).
+   error}`), unwrap in `send()` or `request()` and declare `envelope.payload` on the
+   endpoints. The response schema still describes the whole wire frame; the path selects
+   the value the generated method returns (authoring rule 6, ADR 0010).
 5. **`meta`.** The `Meta` TypedDict in the core and `[cores.<name>].meta` in
    `truewire.toml` agree on the per-endpoint facts the core reads (`public`, `signed`, a
    scope). `truewire check` validates every endpoint's `meta` against that schema.

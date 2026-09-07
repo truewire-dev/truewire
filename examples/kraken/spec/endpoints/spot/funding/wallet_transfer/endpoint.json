@@ -53,16 +53,34 @@
       }
     },
     "response": {
-      "title": "WalletTransferReceipt",
+      "title": "WalletTransferReceiptFrame",
       "type": "object",
-      "description": "Reference to the created wallet transfer.",
+      "description": "Wire frame; the generated method returns `result`.",
       "required": [
-        "refid"
+        "error",
+        "result"
       ],
       "properties": {
-        "refid": {
-          "type": "string",
-          "description": "Reference ID."
+        "error": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Wire envelope field; see the core."
+        },
+        "result": {
+          "title": "WalletTransferReceipt",
+          "type": "object",
+          "description": "Reference to the created wallet transfer.",
+          "required": [
+            "refid"
+          ],
+          "properties": {
+            "refid": {
+              "type": "string",
+              "description": "Reference ID."
+            }
+          }
         }
       }
     }

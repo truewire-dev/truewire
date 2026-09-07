@@ -37,139 +37,157 @@
       }
     },
     "response": {
-      "description": "Credit line details for a VIP account. `null` for accounts with no credit line functionality.",
-      "anyOf": [
-        {
-          "title": "CreditLines",
-          "type": "object",
-          "properties": {
-            "asset_details": {
-              "description": "Per-asset credit line balances, keyed by asset code.",
+      "title": "CreditLinesFrame",
+      "type": "object",
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
+      "properties": {
+        "error": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Wire envelope field; see the core."
+        },
+        "result": {
+          "description": "Credit line details for a VIP account. `null` for accounts with no credit line functionality.",
+          "anyOf": [
+            {
+              "title": "CreditLines",
               "type": "object",
-              "additionalProperties": {
-                "title": "CreditLinesAsset",
-                "description": "Credit line details for one asset.",
-                "type": "object",
-                "properties": {
-                  "balance": {
-                    "description": "Current balance for the asset.",
-                    "type": "string",
-                    "example": "1000.5000"
-                  },
-                  "hold_trade": {
-                    "description": "Amount on hold for open orders.",
-                    "type": "string",
-                    "example": "0.0000"
-                  },
-                  "collateral_value": {
-                    "description": "Collateral value factor for this asset (present for eligible collateral assets).",
-                    "type": "number",
-                    "example": 0.99
-                  },
-                  "credit_limit": {
-                    "description": "Credit limit for the asset (present only for accounts with a credit line).",
-                    "type": "string",
-                    "example": "50000.0000"
-                  },
-                  "credit_used": {
-                    "description": "Currently used credit for the asset (present only for accounts with a credit line).",
-                    "type": "string",
-                    "example": "12500.0000"
-                  },
-                  "available_credit": {
-                    "description": "Available credit for the asset (present only for accounts with a credit line).",
-                    "type": "string",
-                    "example": "37500.0000"
+              "properties": {
+                "asset_details": {
+                  "description": "Per-asset credit line balances, keyed by asset code.",
+                  "type": "object",
+                  "additionalProperties": {
+                    "title": "CreditLinesAsset",
+                    "description": "Credit line details for one asset.",
+                    "type": "object",
+                    "properties": {
+                      "balance": {
+                        "description": "Current balance for the asset.",
+                        "type": "string",
+                        "example": "1000.5000"
+                      },
+                      "hold_trade": {
+                        "description": "Amount on hold for open orders.",
+                        "type": "string",
+                        "example": "0.0000"
+                      },
+                      "collateral_value": {
+                        "description": "Collateral value factor for this asset (present for eligible collateral assets).",
+                        "type": "number",
+                        "example": 0.99
+                      },
+                      "credit_limit": {
+                        "description": "Credit limit for the asset (present only for accounts with a credit line).",
+                        "type": "string",
+                        "example": "50000.0000"
+                      },
+                      "credit_used": {
+                        "description": "Currently used credit for the asset (present only for accounts with a credit line).",
+                        "type": "string",
+                        "example": "12500.0000"
+                      },
+                      "available_credit": {
+                        "description": "Available credit for the asset (present only for accounts with a credit line).",
+                        "type": "string",
+                        "example": "37500.0000"
+                      }
+                    }
+                  }
+                },
+                "limits_monitor": {
+                  "title": "CreditLinesMonitor",
+                  "description": "Portfolio-wide credit summary.",
+                  "type": "object",
+                  "properties": {
+                    "total_credit_usd": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "example": "100000.0000"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "Aggregate credit limit across all assets, in USD."
+                    },
+                    "total_credit_used_usd": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "example": "25000.0000"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "Aggregate utilized credit across all assets, in USD."
+                    },
+                    "total_collateral_value_usd": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "example": "150000.0000"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "Sum of asset balances in USD times each asset's collateral factor."
+                    },
+                    "equity_usd": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "example": "125000.0000"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "Total collateral value minus total credit used, in USD."
+                    },
+                    "ongoing_balance": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "example": "1.5000"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "Ratio of total collateral value to total credit, in USD."
+                    },
+                    "debt_to_equity": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "example": "0.2000"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "Ratio of total credit used to equity, in USD."
+                    }
                   }
                 }
               }
             },
-            "limits_monitor": {
-              "title": "CreditLinesMonitor",
-              "description": "Portfolio-wide credit summary.",
-              "type": "object",
-              "properties": {
-                "total_credit_usd": {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "example": "100000.0000"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ],
-                  "description": "Aggregate credit limit across all assets, in USD."
-                },
-                "total_credit_used_usd": {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "example": "25000.0000"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ],
-                  "description": "Aggregate utilized credit across all assets, in USD."
-                },
-                "total_collateral_value_usd": {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "example": "150000.0000"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ],
-                  "description": "Sum of asset balances in USD times each asset's collateral factor."
-                },
-                "equity_usd": {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "example": "125000.0000"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ],
-                  "description": "Total collateral value minus total credit used, in USD."
-                },
-                "ongoing_balance": {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "example": "1.5000"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ],
-                  "description": "Ratio of total collateral value to total credit, in USD."
-                },
-                "debt_to_equity": {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "example": "0.2000"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ],
-                  "description": "Ratio of total credit used to equity, in USD."
-                }
-              }
+            {
+              "type": "null"
             }
-          }
-        },
-        {
-          "type": "null"
+          ],
+          "title": "CreditLines"
         }
-      ],
-      "title": "CreditLines"
+      }
     }
   },
   "envelope": {

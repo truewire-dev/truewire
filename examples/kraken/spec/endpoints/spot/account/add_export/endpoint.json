@@ -59,13 +59,31 @@
       }
     },
     "response": {
-      "title": "AddExportResult",
-      "description": "The newly requested export report.",
+      "title": "AddExportResultFrame",
       "type": "object",
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
       "properties": {
-        "id": {
-          "description": "Report ID, for use with `ExportStatus`/`RetrieveExport`/`RemoveExport`.",
-          "type": "string"
+        "error": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Wire envelope field; see the core."
+        },
+        "result": {
+          "title": "AddExportResult",
+          "description": "The newly requested export report.",
+          "type": "object",
+          "properties": {
+            "id": {
+              "description": "Report ID, for use with `ExportStatus`/`RetrieveExport`/`RemoveExport`.",
+              "type": "string"
+            }
+          }
         }
       }
     }

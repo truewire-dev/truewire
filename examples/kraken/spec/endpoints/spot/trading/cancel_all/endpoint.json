@@ -16,18 +16,36 @@
     "description": "Cancel every open order for the account.\n\n**API Key Permissions Required:** `Orders and trades - Create & modify orders` or `Orders and trades - Cancel & close orders`",
     "request": null,
     "response": {
-      "title": "OrderCancelled",
+      "title": "OrderCancelledFrame",
       "type": "object",
-      "description": "Result of a cancel request.",
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
       "properties": {
-        "count": {
-          "type": "integer",
-          "format": "int32",
-          "description": "Number of orders cancelled."
+        "error": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Wire envelope field; see the core."
         },
-        "pending": {
-          "type": "boolean",
-          "description": "If true, orders are pending cancellation."
+        "result": {
+          "title": "OrderCancelled",
+          "type": "object",
+          "description": "Result of a cancel request.",
+          "properties": {
+            "count": {
+              "type": "integer",
+              "format": "int32",
+              "description": "Number of orders cancelled."
+            },
+            "pending": {
+              "type": "boolean",
+              "description": "If true, orders are pending cancellation."
+            }
+          }
         }
       }
     }

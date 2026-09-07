@@ -35,7 +35,8 @@ Every key an `endpoint.json` can carry, so you never have to read the loader:
   },
   "pagination": {"strategy": "page", "index": {"parameter": "page", "start": 1},
                  "size": {"parameter": "per_page"}, "done": {"kind": "short_page"}},
-  "envelope": {"payload": "data"},          // only when the core unwraps a wrapper; omit otherwise
+  "envelope": {"payload": "data"},          // only when the core unwraps a wrapper the API sends around `Pulls` ({"data": [...], ...}):
+                                            // `response` then describes that whole frame and this path selects what the method returns (rule 6). Omit otherwise
   "redacted": ["signature", "nonce"],       // request keys the transport injects; omit when none
   "unverified": {"reason": "requires_state", "detail": "needs an open pull request; none exist"},
   "notes": ["`state` enum from the docs page above.", "Docs were unreachable; schema from prior knowledge, confirmed by the page1 recording."]

@@ -76,28 +76,63 @@
       }
     },
     "response": {
-      "title": "AmendOrderResult",
+      "title": "AmendOrderResultFrame",
       "type": "object",
-      "description": "Result of a successful `amend_order` call.",
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "method",
+        "req_id",
+        "result",
+        "success",
+        "time_in",
+        "time_out"
+      ],
       "properties": {
-        "amend_id": {
+        "method": {
           "type": "string",
-          "description": "Unique Kraken identifier generated for this amend transaction."
+          "description": "Wire envelope field; see the core."
         },
-        "order_id": {
+        "req_id": {
+          "type": "integer",
+          "description": "Wire envelope field; see the core."
+        },
+        "result": {
+          "title": "AmendOrderResult",
+          "type": "object",
+          "description": "Result of a successful `amend_order` call.",
+          "properties": {
+            "amend_id": {
+              "type": "string",
+              "description": "Unique Kraken identifier generated for this amend transaction."
+            },
+            "order_id": {
+              "type": "string",
+              "description": "Kraken order identifier, if populated in the request."
+            },
+            "cl_ord_id": {
+              "type": "string",
+              "description": "Client identifier, if populated in the request."
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Non-fatal warnings about the amend, if any."
+            }
+          }
+        },
+        "success": {
+          "type": "boolean",
+          "description": "Wire envelope field; see the core."
+        },
+        "time_in": {
           "type": "string",
-          "description": "Kraken order identifier, if populated in the request."
+          "description": "Wire envelope field; see the core."
         },
-        "cl_ord_id": {
+        "time_out": {
           "type": "string",
-          "description": "Client identifier, if populated in the request."
-        },
-        "warnings": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "Non-fatal warnings about the amend, if any."
+          "description": "Wire envelope field; see the core."
         }
       }
     }

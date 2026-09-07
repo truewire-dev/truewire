@@ -59,426 +59,444 @@
       }
     },
     "response": {
-      "title": "QueriedOrders",
-      "description": "The queried orders, keyed by transaction ID. Each is either still open or already closed.",
+      "title": "QueriedOrdersFrame",
       "type": "object",
-      "additionalProperties": {
-        "anyOf": [
-          {
-            "title": "OpenOrder",
-            "description": "One open order.",
-            "type": "object",
-            "properties": {
-              "refid": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "Referral order transaction ID that created this order."
-              },
-              "userref": {
-                "anyOf": [
-                  {
-                    "type": "integer"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "Optional numeric client identifier associated with one or more orders."
-              },
-              "cl_ord_id": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "Optional alphanumeric client identifier associated with the order."
-              },
-              "status": {
-                "description": "Status of the order: `pending` (pending book entry), `open`, `closed`, `canceled`, or `expired`.",
-                "type": "string",
-                "enum": [
-                  "pending",
-                  "open",
-                  "closed",
-                  "canceled",
-                  "expired"
-                ]
-              },
-              "opentm": {
-                "description": "Unix timestamp of when the order was placed.",
-                "type": "number"
-              },
-              "starttm": {
-                "description": "Unix timestamp of order start time (or 0 if not set).",
-                "type": "number"
-              },
-              "expiretm": {
-                "description": "Unix timestamp of order end time (or 0 if not set).",
-                "type": "number"
-              },
-              "descr": {
-                "title": "OrderDescription",
-                "description": "Order description info.",
-                "type": "object",
-                "properties": {
-                  "pair": {
-                    "description": "Asset pair.",
-                    "type": "string"
-                  },
-                  "type": {
-                    "description": "Type of order.",
-                    "type": "string",
-                    "enum": [
-                      "buy",
-                      "sell"
-                    ]
-                  },
-                  "ordertype": {
-                    "description": "The execution model of the order.",
-                    "type": "string",
-                    "enum": [
-                      "market",
-                      "limit",
-                      "iceberg",
-                      "stop-loss",
-                      "take-profit",
-                      "stop-loss-limit",
-                      "take-profit-limit",
-                      "trailing-stop",
-                      "trailing-stop-limit",
-                      "settle-position"
-                    ]
-                  },
-                  "price": {
-                    "description": "Primary price.",
-                    "type": "string"
-                  },
-                  "price2": {
-                    "description": "Secondary price.",
-                    "type": "string"
-                  },
-                  "leverage": {
-                    "description": "Amount of leverage.",
-                    "type": "string"
-                  },
-                  "order": {
-                    "description": "Order description, as human-readable text.",
-                    "type": "string"
-                  },
-                  "close": {
-                    "description": "Conditional close order description (if conditional close set).",
-                    "type": "string"
-                  },
-                  "aclass": {
-                    "description": "Asset class of the pair.",
-                    "type": "string"
-                  }
-                }
-              },
-              "time_in_force": {
-                "description": "Time-in-force of the order: `gtc` (good till cancelled), `ioc` (immediate or cancel), `gtd` (good till date), or `fok` (fill or kill).",
-                "type": "string",
-                "enum": [
-                  "gtc",
-                  "ioc",
-                  "gtd",
-                  "fok"
-                ]
-              },
-              "vol": {
-                "description": "Volume of order (base currency).",
-                "type": "string"
-              },
-              "vol_exec": {
-                "description": "Volume executed (base currency).",
-                "type": "string"
-              },
-              "cost": {
-                "description": "Total cost (quote currency).",
-                "type": "string"
-              },
-              "fee": {
-                "description": "Total fee (quote currency).",
-                "type": "string"
-              },
-              "price": {
-                "description": "Average price (quote currency).",
-                "type": "string"
-              },
-              "stopprice": {
-                "description": "Stop price (quote currency).",
-                "type": "string"
-              },
-              "limitprice": {
-                "description": "Triggered limit price (quote currency, when limit-based order type triggered).",
-                "type": "string"
-              },
-              "trigger": {
-                "description": "Price signal used to trigger `stop-loss`/`take-profit`/`stop-loss-limit`/`take-profit-limit` orders. `last` is the implied trigger if this field is not set.",
-                "type": "string",
-                "enum": [
-                  "last",
-                  "index"
-                ],
-                "default": "last"
-              },
-              "margin": {
-                "description": "Indicates if the order is funded on margin.",
-                "type": "boolean"
-              },
-              "misc": {
-                "description": "Comma-delimited list of miscellaneous info: `stopped`, `touched`, `liquidated`, `partial`, `amended`.",
-                "type": "string"
-              },
-              "sender_sub_id": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "For institutional accounts, identifies the underlying sub-account/trader for Self Trade Prevention (STP)."
-              },
-              "oflags": {
-                "description": "Comma-delimited list of order flags: `post`, `fcib`, `fciq`, `nompp` (deprecated), `viqc`.",
-                "type": "string",
-                "example": "post"
-              },
-              "trades": {
-                "description": "List of trade IDs related to the order (if trades info requested and data available).",
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            }
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
+      "properties": {
+        "error": {
+          "type": "array",
+          "items": {
+            "type": "string"
           },
-          {
-            "title": "ClosedOrder",
-            "description": "One closed order.",
-            "type": "object",
-            "properties": {
-              "refid": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "Referral order transaction ID that created this order."
-              },
-              "userref": {
-                "anyOf": [
-                  {
-                    "type": "integer"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "Optional numeric client identifier associated with one or more orders."
-              },
-              "cl_ord_id": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "Optional alphanumeric client identifier associated with the order."
-              },
-              "status": {
-                "description": "Status of the order: `pending` (pending book entry), `open`, `closed`, `canceled`, or `expired`.",
-                "type": "string",
-                "enum": [
-                  "pending",
-                  "open",
-                  "closed",
-                  "canceled",
-                  "expired"
-                ]
-              },
-              "opentm": {
-                "description": "Unix timestamp of when the order was placed.",
-                "type": "number"
-              },
-              "starttm": {
-                "description": "Unix timestamp of order start time (or 0 if not set).",
-                "type": "number"
-              },
-              "expiretm": {
-                "description": "Unix timestamp of order end time (or 0 if not set).",
-                "type": "number"
-              },
-              "descr": {
-                "title": "OrderDescription",
-                "description": "Order description info.",
+          "description": "Wire envelope field; see the core."
+        },
+        "result": {
+          "title": "QueriedOrders",
+          "description": "The queried orders, keyed by transaction ID. Each is either still open or already closed.",
+          "type": "object",
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "title": "OpenOrder",
+                "description": "One open order.",
                 "type": "object",
                 "properties": {
-                  "pair": {
-                    "description": "Asset pair.",
+                  "refid": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Referral order transaction ID that created this order."
+                  },
+                  "userref": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Optional numeric client identifier associated with one or more orders."
+                  },
+                  "cl_ord_id": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Optional alphanumeric client identifier associated with the order."
+                  },
+                  "status": {
+                    "description": "Status of the order: `pending` (pending book entry), `open`, `closed`, `canceled`, or `expired`.",
+                    "type": "string",
+                    "enum": [
+                      "pending",
+                      "open",
+                      "closed",
+                      "canceled",
+                      "expired"
+                    ]
+                  },
+                  "opentm": {
+                    "description": "Unix timestamp of when the order was placed.",
+                    "type": "number"
+                  },
+                  "starttm": {
+                    "description": "Unix timestamp of order start time (or 0 if not set).",
+                    "type": "number"
+                  },
+                  "expiretm": {
+                    "description": "Unix timestamp of order end time (or 0 if not set).",
+                    "type": "number"
+                  },
+                  "descr": {
+                    "title": "OrderDescription",
+                    "description": "Order description info.",
+                    "type": "object",
+                    "properties": {
+                      "pair": {
+                        "description": "Asset pair.",
+                        "type": "string"
+                      },
+                      "type": {
+                        "description": "Type of order.",
+                        "type": "string",
+                        "enum": [
+                          "buy",
+                          "sell"
+                        ]
+                      },
+                      "ordertype": {
+                        "description": "The execution model of the order.",
+                        "type": "string",
+                        "enum": [
+                          "market",
+                          "limit",
+                          "iceberg",
+                          "stop-loss",
+                          "take-profit",
+                          "stop-loss-limit",
+                          "take-profit-limit",
+                          "trailing-stop",
+                          "trailing-stop-limit",
+                          "settle-position"
+                        ]
+                      },
+                      "price": {
+                        "description": "Primary price.",
+                        "type": "string"
+                      },
+                      "price2": {
+                        "description": "Secondary price.",
+                        "type": "string"
+                      },
+                      "leverage": {
+                        "description": "Amount of leverage.",
+                        "type": "string"
+                      },
+                      "order": {
+                        "description": "Order description, as human-readable text.",
+                        "type": "string"
+                      },
+                      "close": {
+                        "description": "Conditional close order description (if conditional close set).",
+                        "type": "string"
+                      },
+                      "aclass": {
+                        "description": "Asset class of the pair.",
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "time_in_force": {
+                    "description": "Time-in-force of the order: `gtc` (good till cancelled), `ioc` (immediate or cancel), `gtd` (good till date), or `fok` (fill or kill).",
+                    "type": "string",
+                    "enum": [
+                      "gtc",
+                      "ioc",
+                      "gtd",
+                      "fok"
+                    ]
+                  },
+                  "vol": {
+                    "description": "Volume of order (base currency).",
                     "type": "string"
                   },
-                  "type": {
-                    "description": "Type of order.",
-                    "type": "string",
-                    "enum": [
-                      "buy",
-                      "sell"
-                    ]
+                  "vol_exec": {
+                    "description": "Volume executed (base currency).",
+                    "type": "string"
                   },
-                  "ordertype": {
-                    "description": "Order type.",
-                    "type": "string",
-                    "enum": [
-                      "market",
-                      "limit",
-                      "iceberg",
-                      "stop-loss",
-                      "take-profit",
-                      "trailing-stop",
-                      "stop-loss-limit",
-                      "take-profit-limit",
-                      "trailing-stop-limit",
-                      "settle-position"
-                    ]
+                  "cost": {
+                    "description": "Total cost (quote currency).",
+                    "type": "string"
+                  },
+                  "fee": {
+                    "description": "Total fee (quote currency).",
+                    "type": "string"
                   },
                   "price": {
-                    "description": "Primary price.",
+                    "description": "Average price (quote currency).",
                     "type": "string"
                   },
-                  "price2": {
-                    "description": "Secondary price.",
+                  "stopprice": {
+                    "description": "Stop price (quote currency).",
                     "type": "string"
                   },
-                  "leverage": {
-                    "description": "Amount of leverage.",
+                  "limitprice": {
+                    "description": "Triggered limit price (quote currency, when limit-based order type triggered).",
                     "type": "string"
                   },
-                  "order": {
-                    "description": "Order description, as human-readable text.",
+                  "trigger": {
+                    "description": "Price signal used to trigger `stop-loss`/`take-profit`/`stop-loss-limit`/`take-profit-limit` orders. `last` is the implied trigger if this field is not set.",
+                    "type": "string",
+                    "enum": [
+                      "last",
+                      "index"
+                    ],
+                    "default": "last"
+                  },
+                  "margin": {
+                    "description": "Indicates if the order is funded on margin.",
+                    "type": "boolean"
+                  },
+                  "misc": {
+                    "description": "Comma-delimited list of miscellaneous info: `stopped`, `touched`, `liquidated`, `partial`, `amended`.",
                     "type": "string"
                   },
-                  "close": {
-                    "description": "Conditional close order description (if conditional close set).",
-                    "type": "string"
+                  "sender_sub_id": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "For institutional accounts, identifies the underlying sub-account/trader for Self Trade Prevention (STP)."
                   },
-                  "aclass": {
-                    "description": "Asset class of the pair.",
-                    "type": "string"
+                  "oflags": {
+                    "description": "Comma-delimited list of order flags: `post`, `fcib`, `fciq`, `nompp` (deprecated), `viqc`.",
+                    "type": "string",
+                    "example": "post"
+                  },
+                  "trades": {
+                    "description": "List of trade IDs related to the order (if trades info requested and data available).",
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 }
               },
-              "time_in_force": {
-                "description": "Time-in-force of the order: `gtc` (good till cancelled), `ioc` (immediate or cancel), `gtd` (good till date), or `fok` (fill or kill).",
-                "type": "string",
-                "enum": [
-                  "gtc",
-                  "ioc",
-                  "gtd",
-                  "fok"
-                ]
-              },
-              "vol": {
-                "description": "Volume of order (base currency).",
-                "type": "string"
-              },
-              "vol_exec": {
-                "description": "Volume executed (base currency).",
-                "type": "string"
-              },
-              "cost": {
-                "description": "Total cost (quote currency).",
-                "type": "string"
-              },
-              "fee": {
-                "description": "Total fee (quote currency).",
-                "type": "string"
-              },
-              "price": {
-                "description": "Average price (quote currency).",
-                "type": "string"
-              },
-              "stopprice": {
-                "description": "Stop price (quote currency).",
-                "type": "string"
-              },
-              "limitprice": {
-                "description": "Triggered limit price (quote currency, when limit-based order type triggered).",
-                "type": "string"
-              },
-              "trigger": {
-                "description": "Price signal used to trigger `stop-loss`/`take-profit`/`stop-loss-limit`/`take-profit-limit` orders. `last` is the implied trigger if this field is not set.",
-                "type": "string",
-                "enum": [
-                  "last",
-                  "index"
-                ],
-                "default": "last"
-              },
-              "margin": {
-                "description": "Indicates if the order is funded on margin.",
-                "type": "boolean"
-              },
-              "misc": {
-                "description": "Comma-delimited list of miscellaneous info: `stopped`, `touched`, `liquidated`, `partial`, `amended`.",
-                "type": "string"
-              },
-              "oflags": {
-                "description": "Comma-delimited list of order flags: `post`, `fcib`, `fciq`, `nompp`, `viqc`.",
-                "type": "string"
-              },
-              "trades": {
-                "description": "List of trade IDs related to the order (if trades info requested and data available).",
-                "type": "array",
-                "items": {
-                  "type": "string"
+              {
+                "title": "ClosedOrder",
+                "description": "One closed order.",
+                "type": "object",
+                "properties": {
+                  "refid": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Referral order transaction ID that created this order."
+                  },
+                  "userref": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Optional numeric client identifier associated with one or more orders."
+                  },
+                  "cl_ord_id": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Optional alphanumeric client identifier associated with the order."
+                  },
+                  "status": {
+                    "description": "Status of the order: `pending` (pending book entry), `open`, `closed`, `canceled`, or `expired`.",
+                    "type": "string",
+                    "enum": [
+                      "pending",
+                      "open",
+                      "closed",
+                      "canceled",
+                      "expired"
+                    ]
+                  },
+                  "opentm": {
+                    "description": "Unix timestamp of when the order was placed.",
+                    "type": "number"
+                  },
+                  "starttm": {
+                    "description": "Unix timestamp of order start time (or 0 if not set).",
+                    "type": "number"
+                  },
+                  "expiretm": {
+                    "description": "Unix timestamp of order end time (or 0 if not set).",
+                    "type": "number"
+                  },
+                  "descr": {
+                    "title": "OrderDescription",
+                    "description": "Order description info.",
+                    "type": "object",
+                    "properties": {
+                      "pair": {
+                        "description": "Asset pair.",
+                        "type": "string"
+                      },
+                      "type": {
+                        "description": "Type of order.",
+                        "type": "string",
+                        "enum": [
+                          "buy",
+                          "sell"
+                        ]
+                      },
+                      "ordertype": {
+                        "description": "Order type.",
+                        "type": "string",
+                        "enum": [
+                          "market",
+                          "limit",
+                          "iceberg",
+                          "stop-loss",
+                          "take-profit",
+                          "trailing-stop",
+                          "stop-loss-limit",
+                          "take-profit-limit",
+                          "trailing-stop-limit",
+                          "settle-position"
+                        ]
+                      },
+                      "price": {
+                        "description": "Primary price.",
+                        "type": "string"
+                      },
+                      "price2": {
+                        "description": "Secondary price.",
+                        "type": "string"
+                      },
+                      "leverage": {
+                        "description": "Amount of leverage.",
+                        "type": "string"
+                      },
+                      "order": {
+                        "description": "Order description, as human-readable text.",
+                        "type": "string"
+                      },
+                      "close": {
+                        "description": "Conditional close order description (if conditional close set).",
+                        "type": "string"
+                      },
+                      "aclass": {
+                        "description": "Asset class of the pair.",
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "time_in_force": {
+                    "description": "Time-in-force of the order: `gtc` (good till cancelled), `ioc` (immediate or cancel), `gtd` (good till date), or `fok` (fill or kill).",
+                    "type": "string",
+                    "enum": [
+                      "gtc",
+                      "ioc",
+                      "gtd",
+                      "fok"
+                    ]
+                  },
+                  "vol": {
+                    "description": "Volume of order (base currency).",
+                    "type": "string"
+                  },
+                  "vol_exec": {
+                    "description": "Volume executed (base currency).",
+                    "type": "string"
+                  },
+                  "cost": {
+                    "description": "Total cost (quote currency).",
+                    "type": "string"
+                  },
+                  "fee": {
+                    "description": "Total fee (quote currency).",
+                    "type": "string"
+                  },
+                  "price": {
+                    "description": "Average price (quote currency).",
+                    "type": "string"
+                  },
+                  "stopprice": {
+                    "description": "Stop price (quote currency).",
+                    "type": "string"
+                  },
+                  "limitprice": {
+                    "description": "Triggered limit price (quote currency, when limit-based order type triggered).",
+                    "type": "string"
+                  },
+                  "trigger": {
+                    "description": "Price signal used to trigger `stop-loss`/`take-profit`/`stop-loss-limit`/`take-profit-limit` orders. `last` is the implied trigger if this field is not set.",
+                    "type": "string",
+                    "enum": [
+                      "last",
+                      "index"
+                    ],
+                    "default": "last"
+                  },
+                  "margin": {
+                    "description": "Indicates if the order is funded on margin.",
+                    "type": "boolean"
+                  },
+                  "misc": {
+                    "description": "Comma-delimited list of miscellaneous info: `stopped`, `touched`, `liquidated`, `partial`, `amended`.",
+                    "type": "string"
+                  },
+                  "oflags": {
+                    "description": "Comma-delimited list of order flags: `post`, `fcib`, `fciq`, `nompp`, `viqc`.",
+                    "type": "string"
+                  },
+                  "trades": {
+                    "description": "List of trade IDs related to the order (if trades info requested and data available).",
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "sender_sub_id": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "For institutional accounts, identifies the underlying sub-account/trader for Self Trade Prevention (STP)."
+                  },
+                  "closetm": {
+                    "description": "Unix timestamp of when the order was closed.",
+                    "type": "number"
+                  },
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Additional info on status (if any)."
+                  }
                 }
-              },
-              "sender_sub_id": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "For institutional accounts, identifies the underlying sub-account/trader for Self Trade Prevention (STP)."
-              },
-              "closetm": {
-                "description": "Unix timestamp of when the order was closed.",
-                "type": "number"
-              },
-              "reason": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "Additional info on status (if any)."
               }
-            }
+            ]
           }
-        ]
+        }
       }
     }
   },

@@ -47,14 +47,32 @@
       }
     },
     "response": {
-      "title": "OrderCancelled",
+      "title": "OrderCancelledFrame",
       "type": "object",
-      "description": "Result of a cancel request.",
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
       "properties": {
-        "count": {
-          "type": "integer",
-          "format": "int32",
-          "description": "Number of orders cancelled."
+        "error": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Wire envelope field; see the core."
+        },
+        "result": {
+          "title": "OrderCancelled",
+          "type": "object",
+          "description": "Result of a cancel request.",
+          "properties": {
+            "count": {
+              "type": "integer",
+              "format": "int32",
+              "description": "Number of orders cancelled."
+            }
+          }
         }
       }
     }

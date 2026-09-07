@@ -1,5 +1,5 @@
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing_extensions import Annotated, Any, Literal
 
@@ -156,7 +156,9 @@ def payload_path(value: str) -> str:
 
 
 PayloadPath = Annotated[str, AfterValidator(payload_path)]
-"""Dotted key naming one field of the wire frame, or `''` for the frame itself."""
+"""Dotted key naming one field of the wire frame, or `''` for the frame itself. On an rpc
+endpoint it selects, inside the response schema (which describes the whole frame, ADR
+0010), the value the generated method returns -- see `select_schema`."""
 
 
 class PaginationModel(BaseModel):
@@ -692,6 +694,73 @@ def write_dotted_path(value: Any, path: str, new_value: Any) -> Any:
   return out
 
 
+def select_schema(
+  schema: dict[str, Any], path: str, *, shared: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+  """
+  The sub-schema a `PayloadPath` names inside a wire-body schema (ADR 0010).
+
+  Walks `path` the way `read_dotted_path` walks a value: a key segment steps through
+  `properties`, an index segment through `prefixItems` (a positional row, rule 4) or a
+  homogeneous array's `items`. A `$ref` met on the way is resolved against `shared`
+  (`spec/schemas.json`'s raw schemas, keyed by id) when given; without it, or for an id
+  `shared` lacks, the walk cannot continue and says so rather than guess. An `anyOf` on
+  the way is refused for the same reason: the endpoint alone cannot say which branch
+  carries the field.
+
+  Args:
+    schema: Response schema, as written in `endpoint.json`.
+    path: A validated `PayloadPath`; `''` returns `schema` itself.
+    shared: Raw shared schemas, for resolving a `$ref` on the path.
+
+  Returns:
+    The schema node at `path`, as written (a `$ref` node is returned unresolved, so a
+    caller can render it as the reference it is).
+
+  Raises:
+    LookupError: When a segment names nothing the schema declares, or the walk meets a
+      node it cannot step into; the message names the segment.
+  """
+  node: Any = schema
+  walked: list[str] = []
+  for kind, key in path_segments(path):
+    label = f'[{key}]' if kind == 'index' else str(key)
+    if isinstance(node, dict) and isinstance(node.get('$ref'), str):
+      ref = node['$ref']
+      if shared is None or ref not in shared:
+        raise LookupError(
+          f'`{ref}` is a `$ref` the walk to `{label}` cannot resolve'
+          + ('' if shared is None else ' (no such shared schema)')
+        )
+      node = shared[ref]
+    if not isinstance(node, dict):
+      raise LookupError(f'`{".".join(walked) or "<root>"}` is not a schema object')
+    if node.get('anyOf'):
+      raise LookupError(f'`{".".join(walked) or "<root>"}` is an `anyOf`; which branch carries `{label}` is undecidable')
+    if kind == 'index':
+      prefix_items = node.get('prefixItems')
+      if isinstance(prefix_items, list):
+        index = key if key >= 0 else len(prefix_items) + key  # type: ignore[operator]
+        if not (0 <= index < len(prefix_items)):
+          raise LookupError(f'`{label}` is outside the {len(prefix_items)} positions `prefixItems` declares')
+        node = prefix_items[index]
+      else:
+        items = node.get('items')
+        if not isinstance(items, dict):
+          raise LookupError(f'`{".".join(walked) or "<root>"}` declares no `items` to index with `{label}`')
+        node = items
+    else:
+      properties = node.get('properties')
+      if not isinstance(properties, dict) or key not in properties:
+        declared = ', '.join(f'`{name}`' for name in properties) if isinstance(properties, dict) and properties else 'no properties'
+        raise LookupError(f'`{label}` is not a property of `{".".join(walked) or "<root>"}`, which declares {declared}')
+      node = properties[key]
+    walked.append(label)
+  if not isinstance(node, dict):
+    raise LookupError(f'`{path}` names a non-schema value')
+  return node
+
+
 class CorrelatePaths(BaseModel):
   """Distinct request/response paths for an API whose correlation field names differ."""
 
@@ -708,7 +777,10 @@ class EnvelopeSpecBase(BaseModel):
   model_config = ConfigDict(extra='forbid')
   payload: PayloadPath
   """Dotted path from the raw wire frame to the value the client core hands the caller, or
-  `''` when the whole frame already is that value."""
+  `''` when the whole frame already is that value. For an rpc endpoint the response schema
+  describes the whole frame and this path selects the returned value inside it (ADR 0010):
+  the generator types the method's return value from the schema at this path, and
+  `truewire check` validates a recording against the whole schema, extracting nothing."""
   correlate: ResponsePath | CorrelatePaths | None = None
   """How to thread a request's correlation value into a served response. `None` when the
   envelope carries nothing request-echoed."""
@@ -1201,9 +1273,11 @@ class Endpoint(BaseModel):
   """
   How this endpoint's raw wire response is unwrapped into what the client core returns,
   when the core does. A sibling of `spec`/`pagination` for the same reason: OpenAPI has
-  nothing to say about it, and it is generation/validation metadata. Left unset on any
-  endpoint whose response schema already describes the whole frame (rule 5's "keep the
-  envelope" branch) -- most endpoints, including every REST-passthrough one.
+  nothing to say about it, and it is generation/validation metadata. The response schema
+  describes the whole wire frame either way (`docs/spec/authoring.md` rule 6, ADR 0010);
+  `payload` selects the returned value inside it. Left unset on any endpoint whose core
+  returns the frame itself (rule 6's "keep the envelope" branch) -- most endpoints,
+  including every REST-passthrough one.
   """
   push: Push | None = None
   """

@@ -26,19 +26,54 @@
       }
     },
     "response": {
-      "title": "CancelAllOrdersAfterResult",
+      "title": "CancelAllOrdersAfterResultFrame",
       "type": "object",
-      "description": "Result of a successful `cancel_all_orders_after` call.",
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "method",
+        "req_id",
+        "result",
+        "success",
+        "time_in",
+        "time_out"
+      ],
       "properties": {
-        "currentTime": {
+        "method": {
           "type": "string",
-          "format": "date-time",
-          "description": "RFC3339 engine time at which the request was received."
+          "description": "Wire envelope field; see the core."
         },
-        "triggerTime": {
+        "req_id": {
+          "type": "integer",
+          "description": "Wire envelope field; see the core."
+        },
+        "result": {
+          "title": "CancelAllOrdersAfterResult",
+          "type": "object",
+          "description": "Result of a successful `cancel_all_orders_after` call.",
+          "properties": {
+            "currentTime": {
+              "type": "string",
+              "format": "date-time",
+              "description": "RFC3339 engine time at which the request was received."
+            },
+            "triggerTime": {
+              "type": "string",
+              "format": "date-time",
+              "description": "RFC3339 time after which all orders will be cancelled, unless the timer is extended or disabled first."
+            }
+          }
+        },
+        "success": {
+          "type": "boolean",
+          "description": "Wire envelope field; see the core."
+        },
+        "time_in": {
           "type": "string",
-          "format": "date-time",
-          "description": "RFC3339 time after which all orders will be cancelled, unless the timer is extended or disabled first."
+          "description": "Wire envelope field; see the core."
+        },
+        "time_out": {
+          "type": "string",
+          "description": "Wire envelope field; see the core."
         }
       }
     }

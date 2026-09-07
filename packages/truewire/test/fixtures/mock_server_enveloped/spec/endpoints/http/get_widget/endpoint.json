@@ -2,13 +2,23 @@
   "function": "widgets.get",
   "spec": {
     "kind": "rpc",
-    "transports": ["http"],
+    "transports": [
+      "http"
+    ],
     "path": "/widgets/{id}",
     "method": "GET",
     "openapi": {
       "description": "Get one widget by id.",
       "parameters": [
-        {"name": "id", "in": "path", "required": true, "description": "Widget id.", "schema": {"type": "string"}}
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "Widget id.",
+          "schema": {
+            "type": "string"
+          }
+        }
       ],
       "responses": {
         "200": {
@@ -16,12 +26,51 @@
           "content": {
             "application/json": {
               "schema": {
-                "title": "Widget", "type": "object", "description": "One widget.",
+                "title": "WidgetFrame",
+                "type": "object",
+                "description": "Wire frame around one widget.",
+                "required": [
+                  "retCode",
+                  "result"
+                ],
                 "properties": {
-                  "name": {"type": "string", "description": "Widget name."},
-                  "stock": {"type": "integer", "description": "Units in stock."}
-                },
-                "required": ["name", "stock"]
+                  "retCode": {
+                    "type": "integer",
+                    "description": "Wire envelope field; see the core."
+                  },
+                  "retMsg": {
+                    "type": "string",
+                    "description": "Wire envelope field; see the core."
+                  },
+                  "result": {
+                    "title": "Widget",
+                    "type": "object",
+                    "description": "One widget.",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "description": "Widget name."
+                      },
+                      "stock": {
+                        "type": "integer",
+                        "description": "Units in stock."
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "stock"
+                    ]
+                  },
+                  "retExtInfo": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "description": "Wire envelope field; see the core."
+                  },
+                  "time": {
+                    "type": "integer",
+                    "description": "Wire envelope field; see the core."
+                  }
+                }
               }
             }
           }
@@ -29,5 +78,8 @@
       }
     }
   },
-  "envelope": {"payload": "result", "correlate": "id"}
+  "envelope": {
+    "payload": "result",
+    "correlate": "id"
+  }
 }

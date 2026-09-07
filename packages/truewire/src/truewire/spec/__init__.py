@@ -56,6 +56,7 @@ from .endpoint import (
   last_row_field,
   path_segments,
   read_dotted_path,
+  select_schema,
   write_dotted_path,
 )
 from .repo import (

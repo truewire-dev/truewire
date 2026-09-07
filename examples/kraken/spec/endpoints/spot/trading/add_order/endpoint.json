@@ -1395,30 +1395,48 @@
       ]
     },
     "response": {
-      "title": "OrderAdded",
+      "title": "OrderAddedFrame",
       "type": "object",
-      "description": "Result of placing a new order.",
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
       "properties": {
-        "descr": {
-          "title": "OrderDescription",
-          "type": "object",
-          "description": "Human-readable description of the order (and its conditional close, if one was attached).",
-          "properties": {
-            "order": {
-              "type": "string",
-              "description": "Human-readable order description."
-            },
-            "close": {
-              "type": "string",
-              "description": "Human-readable conditional close order description, if one was attached."
-            }
-          }
-        },
-        "txid": {
+        "error": {
           "type": "array",
-          "description": "Transaction ID(s) for the order -- present only once the order actually reaches the matching engine, i.e. absent when `validate` was set.",
           "items": {
             "type": "string"
+          },
+          "description": "Wire envelope field; see the core."
+        },
+        "result": {
+          "title": "OrderAdded",
+          "type": "object",
+          "description": "Result of placing a new order.",
+          "properties": {
+            "descr": {
+              "title": "OrderDescription",
+              "type": "object",
+              "description": "Human-readable description of the order (and its conditional close, if one was attached).",
+              "properties": {
+                "order": {
+                  "type": "string",
+                  "description": "Human-readable order description."
+                },
+                "close": {
+                  "type": "string",
+                  "description": "Human-readable conditional close order description, if one was attached."
+                }
+              }
+            },
+            "txid": {
+              "type": "array",
+              "description": "Transaction ID(s) for the order -- present only once the order actually reaches the matching engine, i.e. absent when `validate` was set.",
+              "items": {
+                "type": "string"
+              }
+            }
           }
         }
       }

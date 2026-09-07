@@ -1,6 +1,6 @@
 # ADR 0004: Envelope extraction is declared per endpoint, and examples store the raw wire body
 
-- Status: accepted
+- Status: accepted, amended by [0010](0010-response-schema-describes-the-wire-body.md) (the response schema now describes the whole wire body; `payload` selects the returned value instead of guiding extraction in `truewire check`)
 - Date: 2026-08-08 (carried over 2026-09-06)
 
 ## Context

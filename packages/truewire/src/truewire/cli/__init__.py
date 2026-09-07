@@ -9,6 +9,7 @@ from .generate import generate
 from .import_ import app as import_app
 from .init import init
 from .mcp import mcp
+from .migrate import migrate
 from .mock import mock
 from .standards import standards
 from .surface import surface
@@ -23,5 +24,6 @@ app.command('surface')(surface)
 app.command('generate')(generate)
 app.command('mock')(mock)
 app.command('mcp')(mcp)
+app.command('migrate')(migrate)
 app.command('standards')(standards)
 app.add_typer(docs_app, name='docs')

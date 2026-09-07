@@ -42,71 +42,89 @@
       }
     },
     "response": {
-      "title": "TradeBalance",
-      "description": "Summary of collateral balances, margin position valuations, equity, and margin level.",
+      "title": "TradeBalanceFrame",
       "type": "object",
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
       "properties": {
-        "eb": {
-          "description": "Equivalent balance (combined balance of all currencies).",
-          "type": "string",
-          "example": "3224744.0162"
+        "error": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Wire envelope field; see the core."
         },
-        "tb": {
-          "description": "Trade balance (combined balance of all equity currencies).",
-          "type": "string",
-          "example": "3224744.0162"
-        },
-        "m": {
-          "description": "Margin amount of open positions.",
-          "type": "string",
-          "example": "0.0000"
-        },
-        "n": {
-          "description": "Unrealized net profit/loss of open positions.",
-          "type": "string",
-          "example": "0.0000"
-        },
-        "c": {
-          "description": "Cost basis of open positions.",
-          "type": "string",
-          "example": "0.0000"
-        },
-        "v": {
-          "description": "Current floating valuation of open positions.",
-          "type": "string",
-          "example": "0.0000"
-        },
-        "e": {
-          "description": "Equity: trade balance plus unrealized net profit/loss.",
-          "type": "string",
-          "example": "3224744.0162"
-        },
-        "mf": {
-          "description": "Free margin: equity minus initial margin (maximum margin available to open new positions).",
-          "type": "string",
-          "example": "3224744.0162"
-        },
-        "mfo": {
-          "description": "Margin free for orders: available margin that can be used for new orders.",
-          "type": "string",
-          "example": "3224744.0162"
-        },
-        "ml": {
-          "anyOf": [
-            {
+        "result": {
+          "title": "TradeBalance",
+          "description": "Summary of collateral balances, margin position valuations, equity, and margin level.",
+          "type": "object",
+          "properties": {
+            "eb": {
+              "description": "Equivalent balance (combined balance of all currencies).",
+              "type": "string",
+              "example": "3224744.0162"
+            },
+            "tb": {
+              "description": "Trade balance (combined balance of all equity currencies).",
+              "type": "string",
+              "example": "3224744.0162"
+            },
+            "m": {
+              "description": "Margin amount of open positions.",
               "type": "string",
               "example": "0.0000"
             },
-            {
-              "type": "null"
+            "n": {
+              "description": "Unrealized net profit/loss of open positions.",
+              "type": "string",
+              "example": "0.0000"
+            },
+            "c": {
+              "description": "Cost basis of open positions.",
+              "type": "string",
+              "example": "0.0000"
+            },
+            "v": {
+              "description": "Current floating valuation of open positions.",
+              "type": "string",
+              "example": "0.0000"
+            },
+            "e": {
+              "description": "Equity: trade balance plus unrealized net profit/loss.",
+              "type": "string",
+              "example": "3224744.0162"
+            },
+            "mf": {
+              "description": "Free margin: equity minus initial margin (maximum margin available to open new positions).",
+              "type": "string",
+              "example": "3224744.0162"
+            },
+            "mfo": {
+              "description": "Margin free for orders: available margin that can be used for new orders.",
+              "type": "string",
+              "example": "3224744.0162"
+            },
+            "ml": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "example": "0.0000"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Margin level: `(equity / initial margin) * 100`. Only present when margin positions are open."
+            },
+            "uv": {
+              "description": "Unexecuted value: value of unfilled and partially filled orders.",
+              "type": "string",
+              "example": "0.0000"
             }
-          ],
-          "description": "Margin level: `(equity / initial margin) * 100`. Only present when margin positions are open."
-        },
-        "uv": {
-          "description": "Unexecuted value: value of unfilled and partially filled orders.",
-          "type": "string",
-          "example": "0.0000"
+          }
         }
       }
     }

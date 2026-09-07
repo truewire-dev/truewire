@@ -81,104 +81,26 @@
       }
     },
     "response": {
-      "anyOf": [
-        {
+      "title": "DepositStatusFrame",
+      "type": "object",
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
+      "properties": {
+        "error": {
           "type": "array",
-          "description": "Deposit records, returned when `cursor` is unset or `false`.",
           "items": {
-            "title": "Deposit",
-            "type": "object",
-            "description": "One deposit record.",
-            "required": [
-              "method",
-              "aclass",
-              "asset",
-              "refid",
-              "txid",
-              "info",
-              "amount",
-              "time",
-              "status"
-            ],
-            "properties": {
-              "method": {
-                "type": "string",
-                "description": "Name of deposit method."
-              },
-              "aclass": {
-                "type": "string",
-                "description": "Asset class."
-              },
-              "asset": {
-                "type": "string",
-                "description": "Asset."
-              },
-              "refid": {
-                "type": "string",
-                "description": "Reference ID."
-              },
-              "txid": {
-                "type": "string",
-                "description": "Method transaction ID."
-              },
-              "info": {
-                "type": "string",
-                "description": "Method transaction information."
-              },
-              "amount": {
-                "type": "string",
-                "description": "Amount deposited."
-              },
-              "fee": {
-                "type": "string",
-                "description": "Fees paid. Not always present (e.g. omitted for some Ether deposits in Kraken's own documented example); type inferred as `string` by analogy with every other `fee` field in this operation family, since upstream declares no `type` for this property."
-              },
-              "time": {
-                "type": "integer",
-                "format": "epoch-seconds",
-                "description": "Unix timestamp when the request was made."
-              },
-              "status": {
-                "type": "string",
-                "description": "Status of the deposit. See the IFEX financial transaction states reference linked from upstream docs for background.",
-                "enum": [
-                  "Initial",
-                  "Pending",
-                  "EarlyConfirmed",
-                  "Settled",
-                  "Success",
-                  "Failure"
-                ]
-              },
-              "status-prop": {
-                "type": "string",
-                "description": "Additional status property, if available: `return` for a return transaction initiated by Kraken, `onhold` when the deposit is on hold pending review.",
-                "enum": [
-                  "return",
-                  "onhold"
-                ]
-              },
-              "originators": {
-                "type": "array",
-                "description": "Sending transaction id(s), for deposits credited via a sweeping transaction.",
-                "items": {
-                  "type": "string"
-                }
-              }
-            }
-          }
+            "type": "string"
+          },
+          "description": "Wire envelope field; see the core."
         },
-        {
-          "title": "DepositStatusPage",
-          "type": "object",
-          "description": "Paginated deposit results, returned when the `cursor` request parameter is set.",
-          "required": [
-            "deposits"
-          ],
-          "properties": {
-            "deposits": {
+        "result": {
+          "anyOf": [
+            {
               "type": "array",
-              "description": "Page of deposit records. Confirmed live as `deposits` (plural) -- the endpoint's OpenAPI schema had documented this key as `deposit` (singular).",
+              "description": "Deposit records, returned when `cursor` is unset or `false`.",
               "items": {
                 "title": "Deposit",
                 "type": "object",
@@ -262,20 +184,117 @@
                 }
               }
             },
-            "next_cursor": {
-              "description": "Cursor to pass back as `cursor` to fetch the next page of results. `null` once there is no further page -- confirmed live.",
-              "anyOf": [
-                {
-                  "type": "string"
+            {
+              "title": "DepositStatusPage",
+              "type": "object",
+              "description": "Paginated deposit results, returned when the `cursor` request parameter is set.",
+              "required": [
+                "deposits"
+              ],
+              "properties": {
+                "deposits": {
+                  "type": "array",
+                  "description": "Page of deposit records. Confirmed live as `deposits` (plural) -- the endpoint's OpenAPI schema had documented this key as `deposit` (singular).",
+                  "items": {
+                    "title": "Deposit",
+                    "type": "object",
+                    "description": "One deposit record.",
+                    "required": [
+                      "method",
+                      "aclass",
+                      "asset",
+                      "refid",
+                      "txid",
+                      "info",
+                      "amount",
+                      "time",
+                      "status"
+                    ],
+                    "properties": {
+                      "method": {
+                        "type": "string",
+                        "description": "Name of deposit method."
+                      },
+                      "aclass": {
+                        "type": "string",
+                        "description": "Asset class."
+                      },
+                      "asset": {
+                        "type": "string",
+                        "description": "Asset."
+                      },
+                      "refid": {
+                        "type": "string",
+                        "description": "Reference ID."
+                      },
+                      "txid": {
+                        "type": "string",
+                        "description": "Method transaction ID."
+                      },
+                      "info": {
+                        "type": "string",
+                        "description": "Method transaction information."
+                      },
+                      "amount": {
+                        "type": "string",
+                        "description": "Amount deposited."
+                      },
+                      "fee": {
+                        "type": "string",
+                        "description": "Fees paid. Not always present (e.g. omitted for some Ether deposits in Kraken's own documented example); type inferred as `string` by analogy with every other `fee` field in this operation family, since upstream declares no `type` for this property."
+                      },
+                      "time": {
+                        "type": "integer",
+                        "format": "epoch-seconds",
+                        "description": "Unix timestamp when the request was made."
+                      },
+                      "status": {
+                        "type": "string",
+                        "description": "Status of the deposit. See the IFEX financial transaction states reference linked from upstream docs for background.",
+                        "enum": [
+                          "Initial",
+                          "Pending",
+                          "EarlyConfirmed",
+                          "Settled",
+                          "Success",
+                          "Failure"
+                        ]
+                      },
+                      "status-prop": {
+                        "type": "string",
+                        "description": "Additional status property, if available: `return` for a return transaction initiated by Kraken, `onhold` when the deposit is on hold pending review.",
+                        "enum": [
+                          "return",
+                          "onhold"
+                        ]
+                      },
+                      "originators": {
+                        "type": "array",
+                        "description": "Sending transaction id(s), for deposits credited via a sweeping transaction.",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
                 },
-                {
-                  "type": "null"
+                "next_cursor": {
+                  "description": "Cursor to pass back as `cursor` to fetch the next page of results. `null` once there is no further page -- confirmed live.",
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
-              ]
+              }
             }
-          }
+          ],
+          "description": "The value the generated method returns."
         }
-      ]
+      }
     }
   },
   "envelope": {

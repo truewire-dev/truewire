@@ -38,15 +38,33 @@
       ]
     },
     "response": {
-      "description": "`true` when the deallocation request was accepted, `null` when an error occurred.",
-      "anyOf": [
-        {
-          "type": "boolean"
+      "title": "EarnDeallocateFrame",
+      "type": "object",
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
+      "properties": {
+        "error": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Wire envelope field; see the core."
         },
-        {
-          "type": "null"
+        "result": {
+          "description": "`true` when the deallocation request was accepted, `null` when an error occurred.",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
-      ]
+      }
     }
   },
   "envelope": {

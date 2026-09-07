@@ -29,19 +29,37 @@
       }
     },
     "response": {
-      "title": "DeadMansSwitchStatus",
+      "title": "DeadMansSwitchStatusFrame",
       "type": "object",
-      "description": "Current state of the dead man's switch timer after this call.",
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
       "properties": {
-        "currentTime": {
-          "type": "string",
-          "format": "date-time",
-          "description": "RFC3339 timestamp at which the request was received."
+        "error": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Wire envelope field; see the core."
         },
-        "triggerTime": {
-          "type": "string",
-          "format": "date-time",
-          "description": "RFC3339 timestamp after which all orders will be cancelled, unless the timer is extended or disabled first. Equal to `currentTime` when the timer was disabled (`timeout: 0`)."
+        "result": {
+          "title": "DeadMansSwitchStatus",
+          "type": "object",
+          "description": "Current state of the dead man's switch timer after this call.",
+          "properties": {
+            "currentTime": {
+              "type": "string",
+              "format": "date-time",
+              "description": "RFC3339 timestamp at which the request was received."
+            },
+            "triggerTime": {
+              "type": "string",
+              "format": "date-time",
+              "description": "RFC3339 timestamp after which all orders will be cancelled, unless the timer is extended or disabled first. Equal to `currentTime` when the timer was disabled (`timeout: 0`)."
+            }
+          }
         }
       }
     }

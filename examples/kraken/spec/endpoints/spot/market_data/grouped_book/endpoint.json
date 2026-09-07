@@ -58,52 +58,70 @@
       ]
     },
     "response": {
-      "title": "GroupedOrderBook",
-      "description": "One pair's grouped order book.",
+      "title": "GroupedOrderBookFrame",
       "type": "object",
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
       "properties": {
-        "pair": {
-          "type": "string",
-          "description": "Asset pair."
-        },
-        "grouping": {
-          "type": "integer",
-          "description": "The grouping value used."
-        },
-        "bids": {
+        "error": {
           "type": "array",
-          "description": "Aggregated bid levels.",
           "items": {
-            "title": "GroupedPriceLevel",
-            "description": "One grouped price level.",
-            "type": "object",
-            "properties": {
-              "price": {
-                "type": "string",
-                "description": "Grouped price level."
-              },
-              "qty": {
-                "type": "string",
-                "description": "Aggregated quantity at this price level."
+            "type": "string"
+          },
+          "description": "Wire envelope field; see the core."
+        },
+        "result": {
+          "title": "GroupedOrderBook",
+          "description": "One pair's grouped order book.",
+          "type": "object",
+          "properties": {
+            "pair": {
+              "type": "string",
+              "description": "Asset pair."
+            },
+            "grouping": {
+              "type": "integer",
+              "description": "The grouping value used."
+            },
+            "bids": {
+              "type": "array",
+              "description": "Aggregated bid levels.",
+              "items": {
+                "title": "GroupedPriceLevel",
+                "description": "One grouped price level.",
+                "type": "object",
+                "properties": {
+                  "price": {
+                    "type": "string",
+                    "description": "Grouped price level."
+                  },
+                  "qty": {
+                    "type": "string",
+                    "description": "Aggregated quantity at this price level."
+                  }
+                }
               }
-            }
-          }
-        },
-        "asks": {
-          "type": "array",
-          "description": "Aggregated ask levels.",
-          "items": {
-            "title": "GroupedPriceLevel",
-            "description": "One grouped price level.",
-            "type": "object",
-            "properties": {
-              "price": {
-                "type": "string",
-                "description": "Grouped price level."
-              },
-              "qty": {
-                "type": "string",
-                "description": "Aggregated quantity at this price level."
+            },
+            "asks": {
+              "type": "array",
+              "description": "Aggregated ask levels.",
+              "items": {
+                "title": "GroupedPriceLevel",
+                "description": "One grouped price level.",
+                "type": "object",
+                "properties": {
+                  "price": {
+                    "type": "string",
+                    "description": "Grouped price level."
+                  },
+                  "qty": {
+                    "type": "string",
+                    "description": "Aggregated quantity at this price level."
+                  }
+                }
               }
             }
           }

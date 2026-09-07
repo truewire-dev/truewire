@@ -42,41 +42,59 @@
       ]
     },
     "response": {
-      "title": "SpreadResult",
-      "description": "Spreads keyed by pair, plus the polling cursor.",
+      "title": "SpreadResultFrame",
       "type": "object",
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
       "properties": {
-        "last": {
-          "type": "integer",
-          "description": "ID to be used as `since` when polling for new spread data."
-        }
-      },
-      "additionalProperties": {
-        "description": "This pair's recent top-of-book spreads, oldest first.",
-        "type": "array",
-        "items": {
-          "title": "SpreadEntry",
-          "description": "One top-of-book spread `[time, bid, ask]`.",
+        "error": {
           "type": "array",
-          "prefixItems": [
-            {
-              "title": "time",
+          "items": {
+            "type": "string"
+          },
+          "description": "Wire envelope field; see the core."
+        },
+        "result": {
+          "title": "SpreadResult",
+          "description": "Spreads keyed by pair, plus the polling cursor.",
+          "type": "object",
+          "properties": {
+            "last": {
               "type": "integer",
-              "description": "Unix timestamp."
-            },
-            {
-              "title": "bid",
-              "type": "string",
-              "description": "Best bid price."
-            },
-            {
-              "title": "ask",
-              "type": "string",
-              "description": "Best ask price."
+              "description": "ID to be used as `since` when polling for new spread data."
             }
-          ],
-          "minItems": 3,
-          "maxItems": 3
+          },
+          "additionalProperties": {
+            "description": "This pair's recent top-of-book spreads, oldest first.",
+            "type": "array",
+            "items": {
+              "title": "SpreadEntry",
+              "description": "One top-of-book spread `[time, bid, ask]`.",
+              "type": "array",
+              "prefixItems": [
+                {
+                  "title": "time",
+                  "type": "integer",
+                  "description": "Unix timestamp."
+                },
+                {
+                  "title": "bid",
+                  "type": "string",
+                  "description": "Best bid price."
+                },
+                {
+                  "title": "ask",
+                  "type": "string",
+                  "description": "Best ask price."
+                }
+              ],
+              "minItems": 3,
+              "maxItems": 3
+            }
+          }
         }
       }
     }

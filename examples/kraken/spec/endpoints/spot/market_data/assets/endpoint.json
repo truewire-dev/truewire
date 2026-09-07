@@ -36,46 +36,64 @@
       }
     },
     "response": {
-      "description": "Asset id (or display name, per `assetVersion`) mapped to its info.",
+      "title": "AssetsFrame",
       "type": "object",
-      "additionalProperties": {
-        "title": "AssetInfo",
-        "description": "One asset's deposit/withdrawal/trading/earn info.",
-        "type": "object",
-        "properties": {
-          "aclass": {
-            "type": "string",
-            "description": "Asset class."
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
+      "properties": {
+        "error": {
+          "type": "array",
+          "items": {
+            "type": "string"
           },
-          "altname": {
-            "type": "string",
-            "description": "Alternate name."
-          },
-          "decimals": {
-            "type": "integer",
-            "description": "Number of decimal places for record keeping amounts of this asset."
-          },
-          "display_decimals": {
-            "type": "integer",
-            "description": "Number of decimal places shown for display purposes in frontends."
-          },
-          "collateral_value": {
-            "type": "number",
-            "description": "Valuation as margin collateral, if applicable."
-          },
-          "status": {
-            "type": "string",
-            "description": "Status of the asset.",
-            "enum": [
-              "enabled",
-              "deposit_only",
-              "withdrawal_only",
-              "funding_temporarily_disabled"
-            ]
-          },
-          "margin_rate": {
-            "type": "string",
-            "description": "Interest rate charged when borrowing this asset for margin trading, as a decimal string."
+          "description": "Wire envelope field; see the core."
+        },
+        "result": {
+          "description": "Asset id (or display name, per `assetVersion`) mapped to its info.",
+          "type": "object",
+          "additionalProperties": {
+            "title": "AssetInfo",
+            "description": "One asset's deposit/withdrawal/trading/earn info.",
+            "type": "object",
+            "properties": {
+              "aclass": {
+                "type": "string",
+                "description": "Asset class."
+              },
+              "altname": {
+                "type": "string",
+                "description": "Alternate name."
+              },
+              "decimals": {
+                "type": "integer",
+                "description": "Number of decimal places for record keeping amounts of this asset."
+              },
+              "display_decimals": {
+                "type": "integer",
+                "description": "Number of decimal places shown for display purposes in frontends."
+              },
+              "collateral_value": {
+                "type": "number",
+                "description": "Valuation as margin collateral, if applicable."
+              },
+              "status": {
+                "type": "string",
+                "description": "Status of the asset.",
+                "enum": [
+                  "enabled",
+                  "deposit_only",
+                  "withdrawal_only",
+                  "funding_temporarily_disabled"
+                ]
+              },
+              "margin_rate": {
+                "type": "string",
+                "description": "Interest rate charged when borrowing this asset for margin trading, as a decimal string."
+              }
+            }
           }
         }
       }

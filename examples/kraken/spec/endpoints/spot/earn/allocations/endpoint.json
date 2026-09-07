@@ -55,61 +55,284 @@
       }
     },
     "response": {
-      "title": "EarnAllocationsResult",
-      "description": "The user's Earn allocations across all strategies.",
+      "title": "EarnAllocationsResultFrame",
       "type": "object",
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
       "properties": {
-        "converted_asset": {
-          "description": "The secondary asset used to show the value of allocations, as chosen in the request.",
-          "type": "string"
-        },
-        "converted_asset_class": {
-          "description": "Asset class of `converted_asset`, e.g. `currency`. Confirmed present live, not in upstream's own published field list.",
-          "type": "string"
-        },
-        "next_cursor": {
-          "description": "Cursor for the next page. Present as `null` on a live call even though upstream's own response schema doesn't declare it (only its worked example does, likely copied from `Strategies`); see `notes` -- paging is not documented as implemented for this endpoint either.",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "total_allocated": {
-          "description": "Total amount allocated across all strategies, denominated in `converted_asset`.",
-          "type": "string"
-        },
-        "total_rewarded": {
-          "description": "Amount earned across all strategies over the account's lifetime, denominated in `converted_asset`.",
-          "type": "string"
-        },
-        "items": {
-          "description": "One entry per strategy the user has (or has had) an allocation in.",
+        "error": {
           "type": "array",
           "items": {
-            "title": "EarnAllocation",
-            "description": "The user's allocation to a single Earn strategy.",
-            "type": "object",
-            "properties": {
-              "strategy_id": {
-                "description": "Unique ID of the Earn strategy.",
-                "type": "string"
-              },
-              "native_asset": {
-                "description": "The native asset of this allocation.",
-                "type": "string"
-              },
-              "amount_allocated": {
-                "title": "EarnAllocationAmount",
-                "description": "Amounts allocated to this Earn strategy, broken down by state.",
+            "type": "string"
+          },
+          "description": "Wire envelope field; see the core."
+        },
+        "result": {
+          "title": "EarnAllocationsResult",
+          "description": "The user's Earn allocations across all strategies.",
+          "type": "object",
+          "properties": {
+            "converted_asset": {
+              "description": "The secondary asset used to show the value of allocations, as chosen in the request.",
+              "type": "string"
+            },
+            "converted_asset_class": {
+              "description": "Asset class of `converted_asset`, e.g. `currency`. Confirmed present live, not in upstream's own published field list.",
+              "type": "string"
+            },
+            "next_cursor": {
+              "description": "Cursor for the next page. Present as `null` on a live call even though upstream's own response schema doesn't declare it (only its worked example does, likely copied from `Strategies`); see `notes` -- paging is not documented as implemented for this endpoint either.",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "total_allocated": {
+              "description": "Total amount allocated across all strategies, denominated in `converted_asset`.",
+              "type": "string"
+            },
+            "total_rewarded": {
+              "description": "Amount earned across all strategies over the account's lifetime, denominated in `converted_asset`.",
+              "type": "string"
+            },
+            "items": {
+              "description": "One entry per strategy the user has (or has had) an allocation in.",
+              "type": "array",
+              "items": {
+                "title": "EarnAllocation",
+                "description": "The user's allocation to a single Earn strategy.",
                 "type": "object",
                 "properties": {
-                  "total": {
+                  "strategy_id": {
+                    "description": "Unique ID of the Earn strategy.",
+                    "type": "string"
+                  },
+                  "native_asset": {
+                    "description": "The native asset of this allocation.",
+                    "type": "string"
+                  },
+                  "amount_allocated": {
+                    "title": "EarnAllocationAmount",
+                    "description": "Amounts allocated to this Earn strategy, broken down by state.",
+                    "type": "object",
+                    "properties": {
+                      "total": {
+                        "title": "EarnAllocationAmountValue",
+                        "description": "Total amount allocated to this Earn strategy, across every state.",
+                        "type": "object",
+                        "properties": {
+                          "native": {
+                            "description": "Amount in the native asset.",
+                            "type": "string"
+                          },
+                          "converted": {
+                            "description": "Amount converted into the requested asset.",
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "bonding": {
+                        "description": "Amount in the bonding state. Present only when there are bonding allocations.",
+                        "anyOf": [
+                          {
+                            "title": "EarnAllocationState",
+                            "description": "Amount allocated in one transitional state (bonding, exit-queue, or unbonding), with the individual allocations composing it.",
+                            "type": "object",
+                            "properties": {
+                              "allocation_count": {
+                                "description": "Number of individual allocations in this state for this asset.",
+                                "type": "integer"
+                              },
+                              "allocations": {
+                                "description": "Individual allocations composing this state, and when each expires into the next.",
+                                "type": "array",
+                                "items": {
+                                  "title": "EarnAllocationEntry",
+                                  "description": "One individual allocation contributing to a bonding/exit-queue/unbonding state, and when it transitions to the next state.",
+                                  "type": "object",
+                                  "properties": {
+                                    "created_at": {
+                                      "description": "When the request that created this allocation (allocate, or deallocate for exit-queue/unbonding) was received and processed.",
+                                      "type": "string",
+                                      "format": "date-time"
+                                    },
+                                    "expires": {
+                                      "description": "When these funds finish unbonding. For `exit_queue`, this is the unbonding completion time, not the time the funds leave the exit queue.",
+                                      "type": "string",
+                                      "format": "date-time"
+                                    },
+                                    "native": {
+                                      "description": "Amount in the native asset.",
+                                      "type": "string"
+                                    },
+                                    "converted": {
+                                      "description": "Amount converted into the requested asset.",
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              },
+                              "native": {
+                                "description": "Total amount in this state, in the native asset.",
+                                "type": "string"
+                              },
+                              "converted": {
+                                "description": "Total amount in this state, converted into the requested asset.",
+                                "type": "string"
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "exit_queue": {
+                        "description": "Amount in the exit-queue state (ETH only). Present only when there are exit-queue allocations.",
+                        "anyOf": [
+                          {
+                            "title": "EarnAllocationState",
+                            "description": "Amount allocated in one transitional state (bonding, exit-queue, or unbonding), with the individual allocations composing it.",
+                            "type": "object",
+                            "properties": {
+                              "allocation_count": {
+                                "description": "Number of individual allocations in this state for this asset.",
+                                "type": "integer"
+                              },
+                              "allocations": {
+                                "description": "Individual allocations composing this state, and when each expires into the next.",
+                                "type": "array",
+                                "items": {
+                                  "title": "EarnAllocationEntry",
+                                  "description": "One individual allocation contributing to a bonding/exit-queue/unbonding state, and when it transitions to the next state.",
+                                  "type": "object",
+                                  "properties": {
+                                    "created_at": {
+                                      "description": "When the request that created this allocation (allocate, or deallocate for exit-queue/unbonding) was received and processed.",
+                                      "type": "string",
+                                      "format": "date-time"
+                                    },
+                                    "expires": {
+                                      "description": "When these funds finish unbonding. For `exit_queue`, this is the unbonding completion time, not the time the funds leave the exit queue.",
+                                      "type": "string",
+                                      "format": "date-time"
+                                    },
+                                    "native": {
+                                      "description": "Amount in the native asset.",
+                                      "type": "string"
+                                    },
+                                    "converted": {
+                                      "description": "Amount converted into the requested asset.",
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              },
+                              "native": {
+                                "description": "Total amount in this state, in the native asset.",
+                                "type": "string"
+                              },
+                              "converted": {
+                                "description": "Total amount in this state, converted into the requested asset.",
+                                "type": "string"
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "unbonding": {
+                        "description": "Amount in the unbonding state. Present only when there are unbonding allocations.",
+                        "anyOf": [
+                          {
+                            "title": "EarnAllocationState",
+                            "description": "Amount allocated in one transitional state (bonding, exit-queue, or unbonding), with the individual allocations composing it.",
+                            "type": "object",
+                            "properties": {
+                              "allocation_count": {
+                                "description": "Number of individual allocations in this state for this asset.",
+                                "type": "integer"
+                              },
+                              "allocations": {
+                                "description": "Individual allocations composing this state, and when each expires into the next.",
+                                "type": "array",
+                                "items": {
+                                  "title": "EarnAllocationEntry",
+                                  "description": "One individual allocation contributing to a bonding/exit-queue/unbonding state, and when it transitions to the next state.",
+                                  "type": "object",
+                                  "properties": {
+                                    "created_at": {
+                                      "description": "When the request that created this allocation (allocate, or deallocate for exit-queue/unbonding) was received and processed.",
+                                      "type": "string",
+                                      "format": "date-time"
+                                    },
+                                    "expires": {
+                                      "description": "When these funds finish unbonding. For `exit_queue`, this is the unbonding completion time, not the time the funds leave the exit queue.",
+                                      "type": "string",
+                                      "format": "date-time"
+                                    },
+                                    "native": {
+                                      "description": "Amount in the native asset.",
+                                      "type": "string"
+                                    },
+                                    "converted": {
+                                      "description": "Amount converted into the requested asset.",
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              },
+                              "native": {
+                                "description": "Total amount in this state, in the native asset.",
+                                "type": "string"
+                              },
+                              "converted": {
+                                "description": "Total amount in this state, converted into the requested asset.",
+                                "type": "string"
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "pending": {
+                        "description": "Pending (de)allocation amount -- negative when the pending operation is a deallocation. Present only when there is a pending operation.",
+                        "anyOf": [
+                          {
+                            "title": "EarnAllocationAmountValue",
+                            "type": "object",
+                            "properties": {
+                              "native": {
+                                "description": "Amount in the native asset.",
+                                "type": "string"
+                              },
+                              "converted": {
+                                "description": "Amount converted into the requested asset.",
+                                "type": "string"
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "total_rewarded": {
                     "title": "EarnAllocationAmountValue",
-                    "description": "Total amount allocated to this Earn strategy, across every state.",
+                    "description": "Amount earned using this strategy over the account's whole lifetime.",
                     "type": "object",
                     "properties": {
                       "native": {
@@ -122,54 +345,52 @@
                       }
                     }
                   },
-                  "bonding": {
-                    "description": "Amount in the bonding state. Present only when there are bonding allocations.",
+                  "payout": {
+                    "description": "Information about the current payout period. Absent when there is no current payout period.",
                     "anyOf": [
                       {
-                        "title": "EarnAllocationState",
-                        "description": "Amount allocated in one transitional state (bonding, exit-queue, or unbonding), with the individual allocations composing it.",
+                        "title": "EarnAllocationPayout",
                         "type": "object",
                         "properties": {
-                          "allocation_count": {
-                            "description": "Number of individual allocations in this state for this asset.",
-                            "type": "integer"
+                          "period_start": {
+                            "description": "When the current payout period started -- either the last payout date or when it was enabled.",
+                            "type": "string",
+                            "format": "date-time"
                           },
-                          "allocations": {
-                            "description": "Individual allocations composing this state, and when each expires into the next.",
-                            "type": "array",
-                            "items": {
-                              "title": "EarnAllocationEntry",
-                              "description": "One individual allocation contributing to a bonding/exit-queue/unbonding state, and when it transitions to the next state.",
-                              "type": "object",
-                              "properties": {
-                                "created_at": {
-                                  "description": "When the request that created this allocation (allocate, or deallocate for exit-queue/unbonding) was received and processed.",
-                                  "type": "string",
-                                  "format": "date-time"
-                                },
-                                "expires": {
-                                  "description": "When these funds finish unbonding. For `exit_queue`, this is the unbonding completion time, not the time the funds leave the exit queue.",
-                                  "type": "string",
-                                  "format": "date-time"
-                                },
-                                "native": {
-                                  "description": "Amount in the native asset.",
-                                  "type": "string"
-                                },
-                                "converted": {
-                                  "description": "Amount converted into the requested asset.",
-                                  "type": "string"
-                                }
+                          "period_end": {
+                            "description": "Tentative date of the next reward payout.",
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "accumulated_reward": {
+                            "title": "EarnAllocationAmountValue",
+                            "description": "Reward accumulated in the payout period so far.",
+                            "type": "object",
+                            "properties": {
+                              "native": {
+                                "description": "Amount in the native asset.",
+                                "type": "string"
+                              },
+                              "converted": {
+                                "description": "Amount converted into the requested asset.",
+                                "type": "string"
                               }
                             }
                           },
-                          "native": {
-                            "description": "Total amount in this state, in the native asset.",
-                            "type": "string"
-                          },
-                          "converted": {
-                            "description": "Total amount in this state, converted into the requested asset.",
-                            "type": "string"
+                          "estimated_reward": {
+                            "title": "EarnAllocationAmountValue",
+                            "description": "Estimated reward from now until the payout.",
+                            "type": "object",
+                            "properties": {
+                              "native": {
+                                "description": "Amount in the native asset.",
+                                "type": "string"
+                              },
+                              "converted": {
+                                "description": "Amount converted into the requested asset.",
+                                "type": "string"
+                              }
+                            }
                           }
                         }
                       },
@@ -178,218 +399,15 @@
                       }
                     ]
                   },
-                  "exit_queue": {
-                    "description": "Amount in the exit-queue state (ETH only). Present only when there are exit-queue allocations.",
-                    "anyOf": [
-                      {
-                        "title": "EarnAllocationState",
-                        "description": "Amount allocated in one transitional state (bonding, exit-queue, or unbonding), with the individual allocations composing it.",
-                        "type": "object",
-                        "properties": {
-                          "allocation_count": {
-                            "description": "Number of individual allocations in this state for this asset.",
-                            "type": "integer"
-                          },
-                          "allocations": {
-                            "description": "Individual allocations composing this state, and when each expires into the next.",
-                            "type": "array",
-                            "items": {
-                              "title": "EarnAllocationEntry",
-                              "description": "One individual allocation contributing to a bonding/exit-queue/unbonding state, and when it transitions to the next state.",
-                              "type": "object",
-                              "properties": {
-                                "created_at": {
-                                  "description": "When the request that created this allocation (allocate, or deallocate for exit-queue/unbonding) was received and processed.",
-                                  "type": "string",
-                                  "format": "date-time"
-                                },
-                                "expires": {
-                                  "description": "When these funds finish unbonding. For `exit_queue`, this is the unbonding completion time, not the time the funds leave the exit queue.",
-                                  "type": "string",
-                                  "format": "date-time"
-                                },
-                                "native": {
-                                  "description": "Amount in the native asset.",
-                                  "type": "string"
-                                },
-                                "converted": {
-                                  "description": "Amount converted into the requested asset.",
-                                  "type": "string"
-                                }
-                              }
-                            }
-                          },
-                          "native": {
-                            "description": "Total amount in this state, in the native asset.",
-                            "type": "string"
-                          },
-                          "converted": {
-                            "description": "Total amount in this state, converted into the requested asset.",
-                            "type": "string"
-                          }
-                        }
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "unbonding": {
-                    "description": "Amount in the unbonding state. Present only when there are unbonding allocations.",
-                    "anyOf": [
-                      {
-                        "title": "EarnAllocationState",
-                        "description": "Amount allocated in one transitional state (bonding, exit-queue, or unbonding), with the individual allocations composing it.",
-                        "type": "object",
-                        "properties": {
-                          "allocation_count": {
-                            "description": "Number of individual allocations in this state for this asset.",
-                            "type": "integer"
-                          },
-                          "allocations": {
-                            "description": "Individual allocations composing this state, and when each expires into the next.",
-                            "type": "array",
-                            "items": {
-                              "title": "EarnAllocationEntry",
-                              "description": "One individual allocation contributing to a bonding/exit-queue/unbonding state, and when it transitions to the next state.",
-                              "type": "object",
-                              "properties": {
-                                "created_at": {
-                                  "description": "When the request that created this allocation (allocate, or deallocate for exit-queue/unbonding) was received and processed.",
-                                  "type": "string",
-                                  "format": "date-time"
-                                },
-                                "expires": {
-                                  "description": "When these funds finish unbonding. For `exit_queue`, this is the unbonding completion time, not the time the funds leave the exit queue.",
-                                  "type": "string",
-                                  "format": "date-time"
-                                },
-                                "native": {
-                                  "description": "Amount in the native asset.",
-                                  "type": "string"
-                                },
-                                "converted": {
-                                  "description": "Amount converted into the requested asset.",
-                                  "type": "string"
-                                }
-                              }
-                            }
-                          },
-                          "native": {
-                            "description": "Total amount in this state, in the native asset.",
-                            "type": "string"
-                          },
-                          "converted": {
-                            "description": "Total amount in this state, converted into the requested asset.",
-                            "type": "string"
-                          }
-                        }
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "pending": {
-                    "description": "Pending (de)allocation amount -- negative when the pending operation is a deallocation. Present only when there is a pending operation.",
-                    "anyOf": [
-                      {
-                        "title": "EarnAllocationAmountValue",
-                        "type": "object",
-                        "properties": {
-                          "native": {
-                            "description": "Amount in the native asset.",
-                            "type": "string"
-                          },
-                          "converted": {
-                            "description": "Amount converted into the requested asset.",
-                            "type": "string"
-                          }
-                        }
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  }
-                }
-              },
-              "total_rewarded": {
-                "title": "EarnAllocationAmountValue",
-                "description": "Amount earned using this strategy over the account's whole lifetime.",
-                "type": "object",
-                "properties": {
-                  "native": {
-                    "description": "Amount in the native asset.",
+                  "asset_class": {
+                    "description": "Asset class of native_asset, e.g. `currency`. Confirmed present live, not in upstream's own published field list.",
                     "type": "string"
                   },
-                  "converted": {
-                    "description": "Amount converted into the requested asset.",
-                    "type": "string"
+                  "is_utilized": {
+                    "description": "Whether this allocation is actively earning rewards. Confirmed present live, not in upstream's own published field list.",
+                    "type": "boolean"
                   }
                 }
-              },
-              "payout": {
-                "description": "Information about the current payout period. Absent when there is no current payout period.",
-                "anyOf": [
-                  {
-                    "title": "EarnAllocationPayout",
-                    "type": "object",
-                    "properties": {
-                      "period_start": {
-                        "description": "When the current payout period started -- either the last payout date or when it was enabled.",
-                        "type": "string",
-                        "format": "date-time"
-                      },
-                      "period_end": {
-                        "description": "Tentative date of the next reward payout.",
-                        "type": "string",
-                        "format": "date-time"
-                      },
-                      "accumulated_reward": {
-                        "title": "EarnAllocationAmountValue",
-                        "description": "Reward accumulated in the payout period so far.",
-                        "type": "object",
-                        "properties": {
-                          "native": {
-                            "description": "Amount in the native asset.",
-                            "type": "string"
-                          },
-                          "converted": {
-                            "description": "Amount converted into the requested asset.",
-                            "type": "string"
-                          }
-                        }
-                      },
-                      "estimated_reward": {
-                        "title": "EarnAllocationAmountValue",
-                        "description": "Estimated reward from now until the payout.",
-                        "type": "object",
-                        "properties": {
-                          "native": {
-                            "description": "Amount in the native asset.",
-                            "type": "string"
-                          },
-                          "converted": {
-                            "description": "Amount converted into the requested asset.",
-                            "type": "string"
-                          }
-                        }
-                      }
-                    }
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "asset_class": {
-                "description": "Asset class of native_asset, e.g. `currency`. Confirmed present live, not in upstream's own published field list.",
-                "type": "string"
-              },
-              "is_utilized": {
-                "description": "Whether this allocation is actively earning rewards. Confirmed present live, not in upstream's own published field list.",
-                "type": "boolean"
               }
             }
           }

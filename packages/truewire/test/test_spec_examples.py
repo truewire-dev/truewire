@@ -512,12 +512,14 @@ def test_example_coverage_ws_rpc_endpoint_with_reply_is_still_covered(tmp_path):
   assert coverage.is_partial is False
 
 
-def test_spec_test_extracts_before_validating_an_enveloped_client(capsys):
-  """A client with per-endpoint `envelope` declarations validates the extracted value, not the raw frame.
+def test_spec_test_validates_the_whole_frame_of_an_enveloped_client(capsys):
+  """A client with per-endpoint `envelope` declarations validates each recording as the
+  wire frame it is, against a response schema that describes the whole frame (ADR 0010);
+  `envelope.payload` selects nothing here.
 
-  Covers both an HTTP endpoint (`get_widget`) and a WS RPC endpoint (`get_balance`,
-  added for the WS RPC matching suite) under the same fixture root, each declaring its
-  own `envelope`.
+  Covers both an HTTP endpoint (`get_widget`, a `{retCode, retMsg, result, ...}` frame)
+  and a WS RPC endpoint (`get_balance`, a JSON-RPC `{jsonrpc, id, result}` reply) under
+  the same fixture root, each declaring its own `envelope`.
   """
   fixture_root = Path(__file__).resolve().parent / 'fixtures' / 'mock_server_enveloped'
 

@@ -33,7 +33,7 @@ Rule = Literal[
   'error-responses', 'title', 'title-empty-object', 'enum', 'const', 'positional-rows',
   'unions', 'description', 'pagination', 'identifier-templating', 'ws-verb',
   'timestamp-format', 'reserved-param', 'meta-collision', 'meta-schema',
-  'router-core-missing', 'schemas-shadowing', 'mixed-leaf-router',
+  'router-core-missing', 'schemas-shadowing', 'mixed-leaf-router', 'envelope',
 ]
 """Mechanizable checks of the spec-authoring contract, in contract order."""
 
@@ -119,8 +119,9 @@ RULE_HEADINGS: dict[Rule, str] = {
   'const': '2. Closed sets use `enum` — prefer a single-value `enum` over `const`',
   'positional-rows': '3. Positional rows use `prefixItems`, bounded by `minItems`/`maxItems`',
   'unions': '4. Unions are `anyOf`, and only `anyOf`',
-  'description': '6. Describe everything that becomes a docstring',
-  'pagination': '7. Pagination is declared, not inferred',
+  'envelope': '6. Schemas describe the wire body — `envelope.payload` names a property of the response schema',
+  'description': '7. Describe everything that becomes a docstring',
+  'pagination': '8. Pagination is declared, not inferred',
   'identifier-templating': (
     'ADR 0006 — `in: "path"` parameters must match `{name}` in the operation identifier'
   ),
@@ -215,6 +216,9 @@ CLOSED_SET_NAMES = frozenset({
 """Field names that usually denote a closed set of values across real APIs."""
 
 SCALAR_TYPES = frozenset({'string', 'integer', 'number'})
+
+KEYLESS_TYPES = frozenset({'string', 'integer', 'number', 'boolean', 'null'})
+"""JSON Schema types that decidably carry no property, for a dotted-path walk."""
 """Types on which a closed set would be declared."""
 
 TIMESTAMP_FORMATS = frozenset({
@@ -1034,7 +1038,9 @@ def _resolve_schema_path(
       continue
     properties = node.get('properties')
     if not isinstance(properties, dict) or not properties:
-      return None, None
+      # A scalar-typed node decidably carries no key at all; anything else (a map, an
+      # untyped node) might, and is left undecided.
+      return None, (False if node.get('type') in KEYLESS_TYPES else None)
     if key not in properties:
       return None, False
     node = properties[key]
@@ -1170,9 +1176,63 @@ def pagination_paths(pagination: Pagination) -> list[tuple[str, str]]:
       out.append(('pagination.done.rows', done.rows))
   return out
 
+def returned_schemas(endpoint: Endpoint, operation: dict[str, Any]) -> list[dict[str, Any]]:
+  """
+  The schema of the value the generated method returns, per success response: the
+  payload schema itself, or, for an rpc endpoint declaring `envelope.payload`, the node
+  that path selects inside it (ADR 0010). A response the path does not resolve in is
+  dropped -- `check_envelope` reports that on its own, and an undecidable walk (a `$ref`
+  or `anyOf` on the path) is nothing to check a pagination path against.
+
+  Args:
+    endpoint: Endpoint record loaded from an `endpoint.json`.
+    operation: Plain-JSON operation, from `operation_json`.
+  """
+  payloads = payload_schemas(operation)
+  envelope = endpoint.envelope
+  if not isinstance(endpoint.spec, RpcEndpointSpec) or envelope is None or envelope.payload == '':
+    return payloads
+  out: list[dict[str, Any]] = []
+  for schema in payloads:
+    node, verdict = _resolve_schema_path(schema, envelope.payload)
+    if verdict and isinstance(node, dict):
+      out.append(node)
+  return out
+
+def check_envelope(endpoint: Endpoint, operation: dict[str, Any]) -> list[Violation]:
+  """
+  Rule 6: `envelope.payload` names a property of the response schema.
+
+  The response schema describes the whole wire frame and `envelope.payload` selects the
+  value the generated method returns (ADR 0010), so a path the schema does not carry
+  leaves the generator nothing to type the return value from. A `$ref` or `anyOf` on the
+  path is undecidable from the operation alone and reports nothing, the same stance
+  `check_pagination` takes for its own paths.
+
+  Args:
+    endpoint: Endpoint record loaded from an `endpoint.json`.
+    operation: Plain-JSON operation, from `operation_json`.
+  """
+  envelope = endpoint.envelope
+  if not isinstance(endpoint.spec, RpcEndpointSpec) or envelope is None or envelope.payload == '':
+    return []
+  verdicts = [resolves(schema, envelope.payload) for schema in payload_schemas(operation)]
+  if True in verdicts or False not in verdicts:
+    return []
+  return [Violation(
+    rule='envelope',
+    location='envelope.payload',
+    message=(
+      f'`{envelope.payload}` names no property of the response schema, so the generated '
+      f'method has nothing to type its return value from; the schema describes the whole '
+      f'wire frame and `envelope.payload` selects the returned value inside it (ADR 0010). '
+      f'A schema written for the unwrapped value is rewritten by `truewire migrate`'
+    ),
+  )]
+
 def check_pagination(endpoint: Endpoint, operation: dict[str, Any]) -> list[Violation]:
   """
-  Rule 7: a pagination declaration is internally consistent with the operation it sits on.
+  Rule 8: a pagination declaration is internally consistent with the operation it sits on.
 
   This check cannot know that an undeclared endpoint paginates — that is the name-sniffing
   the declaration replaces — so it says nothing about a missing block. What it can settle
@@ -1219,7 +1279,10 @@ def check_pagination(endpoint: Endpoint, operation: dict[str, Any]) -> list[Viol
         f'API documenting every query parameter as a string still takes a number here'
       ),
     ))
-  payloads = payload_schemas(operation)
+  # Relative to what the method returns -- the schema at `envelope.payload`, when one is
+  # declared -- since the generated walk reads every path off the value the core handed
+  # back, never off the wire frame (ADR 0010).
+  payloads = returned_schemas(endpoint, operation)
   for location, path in pagination_paths(pagination):
     verdicts = [resolves(schema, path) for schema in payloads]
     if True in verdicts or False not in verdicts:
@@ -1754,6 +1817,7 @@ def audit(endpoint: Endpoint) -> list[Violation]:
   out: list[Violation] = []
   for check in CHECKS:
     out.extend(check(operation))
+  out.extend(check_envelope(endpoint, operation))
   out.extend(check_pagination(endpoint, operation))
   out.extend(check_identifier_templating(endpoint, operation))
   out.extend(check_ws_verb(endpoint))

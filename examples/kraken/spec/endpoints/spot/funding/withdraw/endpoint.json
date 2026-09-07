@@ -75,16 +75,34 @@
       }
     },
     "response": {
-      "title": "WithdrawReceipt",
+      "title": "WithdrawReceiptFrame",
       "type": "object",
-      "description": "Reference to the created withdrawal.",
+      "description": "Wire frame; the generated method returns `result`.",
       "required": [
-        "refid"
+        "error",
+        "result"
       ],
       "properties": {
-        "refid": {
-          "type": "string",
-          "description": "Reference ID."
+        "error": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Wire envelope field; see the core."
+        },
+        "result": {
+          "title": "WithdrawReceipt",
+          "type": "object",
+          "description": "Reference to the created withdrawal.",
+          "required": [
+            "refid"
+          ],
+          "properties": {
+            "refid": {
+              "type": "string",
+              "description": "Reference ID."
+            }
+          }
         }
       }
     }

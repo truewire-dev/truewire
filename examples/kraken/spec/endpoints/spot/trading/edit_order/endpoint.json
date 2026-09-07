@@ -87,60 +87,78 @@
       }
     },
     "response": {
-      "title": "OrderEdited",
+      "title": "OrderEditedFrame",
       "type": "object",
-      "description": "Result of a cancel-replace edit.",
+      "description": "Wire frame; the generated method returns `result`.",
+      "required": [
+        "error",
+        "result"
+      ],
       "properties": {
-        "status": {
-          "type": "string",
-          "description": "Outcome of the edit request."
+        "error": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Wire envelope field; see the core."
         },
-        "txid": {
-          "type": "string",
-          "description": "New transaction ID, present if the order was successfully replaced."
-        },
-        "originaltxid": {
-          "type": "string",
-          "description": "The original order's transaction ID."
-        },
-        "descr": {
-          "title": "OrderDescription",
+        "result": {
+          "title": "OrderEdited",
           "type": "object",
-          "description": "Human-readable description of the replacement order.",
+          "description": "Result of a cancel-replace edit.",
           "properties": {
-            "order": {
+            "status": {
               "type": "string",
-              "description": "Human-readable order description."
+              "description": "Outcome of the edit request."
+            },
+            "txid": {
+              "type": "string",
+              "description": "New transaction ID, present if the order was successfully replaced."
+            },
+            "originaltxid": {
+              "type": "string",
+              "description": "The original order's transaction ID."
+            },
+            "descr": {
+              "title": "OrderDescription",
+              "type": "object",
+              "description": "Human-readable description of the replacement order.",
+              "properties": {
+                "order": {
+                  "type": "string",
+                  "description": "Human-readable order description."
+                }
+              }
+            },
+            "volume": {
+              "type": "string",
+              "description": "Updated order volume."
+            },
+            "price": {
+              "type": "string",
+              "description": "Updated order price."
+            },
+            "price2": {
+              "type": "string",
+              "description": "Updated order secondary price."
+            },
+            "orders_cancelled": {
+              "type": "integer",
+              "description": "Number of orders cancelled by this edit -- either 0 or 1."
+            },
+            "newuserref": {
+              "type": "string",
+              "description": "The `userref` passed with this edit request, if any."
+            },
+            "olduserref": {
+              "type": "string",
+              "description": "The original order's `userref`, if any."
+            },
+            "error_message": {
+              "type": "string",
+              "description": "Error message, present if the edit was unsuccessful."
             }
           }
-        },
-        "volume": {
-          "type": "string",
-          "description": "Updated order volume."
-        },
-        "price": {
-          "type": "string",
-          "description": "Updated order price."
-        },
-        "price2": {
-          "type": "string",
-          "description": "Updated order secondary price."
-        },
-        "orders_cancelled": {
-          "type": "integer",
-          "description": "Number of orders cancelled by this edit -- either 0 or 1."
-        },
-        "newuserref": {
-          "type": "string",
-          "description": "The `userref` passed with this edit request, if any."
-        },
-        "olduserref": {
-          "type": "string",
-          "description": "The original order's `userref`, if any."
-        },
-        "error_message": {
-          "type": "string",
-          "description": "Error message, present if the edit was unsuccessful."
         }
       }
     }

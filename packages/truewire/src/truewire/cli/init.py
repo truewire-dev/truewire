@@ -156,13 +156,32 @@ DateIso = Annotated[
 """A `date` (RFC 3339 full-date) field."""
 '''
 
+PYPROJECT_TEMPLATE = '''[project]
+name = "{package}"
+version = "0.1.0"
+description = "Typed client generated with Truewire."
+requires-python = ">=3.11"
+dependencies = ["truewire-core>=0.1.0"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+{package} = ["py.typed"]
+'''
+"""The project's own packaging file, so `pip install -e .` makes the generated client importable."""
+
 
 def init(
   name: str = typer.Argument(..., help='Project name; also the directory and Python package name.'),
   directory: Path | None = typer.Option(None, '--dir', help='Where to create the project; defaults to ./<name>.'),
   base_url: str = typer.Option('https://api.example.com', '--base-url', help='Upstream base URL baked into the core template.'),
 ):
-  """Create a new Truewire project: `truewire.toml`, an empty `spec/`, and a core skeleton.
+  """Create a new Truewire project: `truewire.toml`, `pyproject.toml`, an empty `spec/`, and a core skeleton.
 
   Follow with `truewire import openapi <doc>` to seed the spec, or author
   `spec/endpoints/<group>/<name>/endpoint.json` by hand, then `truewire check` and
@@ -210,6 +229,8 @@ base = "{name}.core:Endpoint"
     CORE_TEMPLATE.format(package=name, base_url=base_url)
   )
   (root / 'src' / name / 'core' / 'types.py').write_text(TYPES_TEMPLATE)
+  if not (root / 'pyproject.toml').exists():
+    (root / 'pyproject.toml').write_text(PYPROJECT_TEMPLATE.format(package=name))
   (root / '.gitignore').write_text('.truewire/\n__pycache__/\n.venv/\n')
   typer.echo(f'Created {root}')
   typer.echo('Next: `truewire import openapi <document>` or write spec/endpoints/**/endpoint.json, then `truewire check` and `truewire generate python`.')

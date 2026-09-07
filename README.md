@@ -19,6 +19,7 @@ cd petstore
 truewire import openapi spec.yaml     # optional: seed spec/ from an OpenAPI 3.0/3.1 document
 truewire check                        # lint the spec: titles, enums, formats, pagination, envelopes
 truewire generate python              # write the typed client into src/petstore
+pip install -e .                      # the project ships its own pyproject.toml
 truewire mock                         # serve every recorded example over HTTP and WS on localhost
 ```
 

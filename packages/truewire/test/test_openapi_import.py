@@ -4,6 +4,7 @@ client that answers through the mock server."""
 import asyncio
 import json
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -119,6 +120,10 @@ def test_init_import_check_generate_and_call_through_the_mock(tmp_path: Path, mo
   assert imported.exit_code == 0, imported.output
   checked = runner.invoke(app, ['check', '--project', str(project)])
   assert checked.exit_code == 0, checked.output
+  pyproject = tomllib.loads((project / 'pyproject.toml').read_text())
+  assert pyproject['project']['name'] == 'petstore'
+  assert pyproject['tool']['setuptools']['packages']['find']['where'] == ['src']
+  assert any(dep.startswith('truewire-core') for dep in pyproject['project']['dependencies'])
   generated = runner.invoke(app, ['generate', 'python', '--project', str(project)])
   assert generated.exit_code == 0, generated.output
   assert (project / 'src' / 'petstore' / 'pets' / 'get_pet.py').is_file()

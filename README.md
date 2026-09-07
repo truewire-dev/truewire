@@ -8,7 +8,7 @@ Turn any API, documented or not, REST or WebSocket, into a typed, validated clie
 
 SDK generators assume two things: that you own the API, and that you have a good OpenAPI document. Most of the APIs people actually integrate are neither. They belong to someone else. Their docs are prose, examples and a few tables. Half of them push data over WebSocket, where OpenAPI has nothing to say. The pagination scheme is described in a sentence, if at all. Prices arrive as strings, timestamps as milliseconds, booleans as `"true"`.
 
-Truewire starts from the wire instead of the document. You record real request and response pairs against the live API. You declare the things a schema cannot express, pagination, envelopes, stream subscriptions, redacted fields, as data next to the endpoint. The generator turns that into an async, typed, runtime-validated client. A mock server replays the recorded examples over HTTP and WebSocket so tests never touch the network. Every step is gated: an endpoint is verified by a recorded example, or it says why it is not.
+We start from the wire, not the document, because the wire is what your code actually talks to. You record real request and response pairs against the live API. You declare what a schema cannot express, pagination, envelopes, stream subscriptions, redacted fields, as data next to the endpoint. The generator turns that into an async, typed, runtime-validated client. A mock server replays the recorded examples over HTTP and WebSocket so tests never touch the network. We gate every step: an endpoint is verified by a recorded example, or it states why it is not.
 
 ## Quickstart
 
@@ -75,7 +75,7 @@ truewire mcp --project petstore --new base_url=https://petstore.example.com/v1
 
 ## How it compares
 
-Where a cell reads `?`, we have not verified the claim and would rather say so than guess. Corrections welcome.
+A cell reads `?` where we have not verified the claim ourselves. We publish what we checked, not what we guessed. Send corrections and we will fix the table.
 
 | | Truewire | OpenAPI Generator | Speakeasy | Fern | hey-api |
 | --- | --- | --- | --- | --- | --- |
@@ -92,17 +92,17 @@ Where a cell reads `?`, we have not verified the claim and would rather say so t
 | TypeScript | Planned | Yes | Yes | Yes | Yes |
 | Python | Yes | Yes | Yes | Yes | Experimental |
 
-Truewire is aimed first at API consumers: people integrating an API they do not control. If you own your API and have a clean OpenAPI document, the tools above are all reasonable choices, and `truewire import openapi` will read your document too.
+We build Truewire for API consumers first: people integrating an API they do not control. If you own your API and have a clean OpenAPI document, any tool above will serve you, and `truewire import openapi` reads your document too.
 
 ## Status
 
-Alpha. Python only. Extracted from a private system that generates 14 production API clients covering 3,638 endpoints (3,272 request/reply, 316 streams, 50 gRPC) with 2,404 recorded HTTP example pairs and 384 WebSocket captures. Battle-tested on 14 production exchange and blockchain API clients, where the wire is the only reliable documentation.
+Alpha. Python only. We extracted it from a private system that generates 14 production API clients covering 3,638 endpoints (3,272 request/reply, 316 streams, 50 gRPC) with 2,404 recorded HTTP example pairs and 384 WebSocket captures. Those 14 clients serve exchange and blockchain APIs in production, where the wire is the only reliable documentation.
 
-Expect the spec format to change in small ways before 1.0. Changes are recorded in `docs/adr/`. The roadmap is in [ROADMAP.md](ROADMAP.md).
+We will change the spec format in small ways before 1.0, and we record each change in `docs/adr/`. We ship when the gate is green, and we publish the gate: every item in [ROADMAP.md](ROADMAP.md) ends with a "done when" line.
 
 ## About
 
-Truewire is a spinoff of the internal tooling behind [Tribulnation](https://github.com/tribulnation)'s typed exchange clients, founded by [Marcel Claramunt](https://claramunt.eu) ([@marcelclaramunt](https://x.com/marcelclaramunt)), who advises the project and is its public face. The day-to-day engineering, the docs and the roadmap are run by an AI operator; Marcel reviews and decides on anything public, financial or legal. We say this plainly because the commit history makes it obvious, and because we think it is a fair question to ask of any tool you depend on. The bar the code is held to is the one in [docs/standards.md](docs/standards.md), regardless of who wrote it.
+Truewire is a spinoff of the internal tooling behind [Tribulnation](https://github.com/tribulnation)'s typed exchange clients, founded by [Marcel Claramunt](https://claramunt.eu) ([@marcelclaramunt](https://x.com/marcelclaramunt)), who advises the project and is its public face. An AI operator runs the day-to-day engineering, the docs and the roadmap. Marcel decides on anything public, financial or legal. We say this plainly: the commit history shows it, and who writes a tool is a fair question to ask of anything you depend on. We hold the code to one bar, the one in [docs/standards.md](docs/standards.md), whoever wrote it.
 
 Questions, bugs and spec corrections: open an issue, or write to hello@truewire.dev.
 

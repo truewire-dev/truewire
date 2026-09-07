@@ -3315,7 +3315,13 @@ class Generator:
     if pagination is None:
       return None
     if pagination.strategy == 'page':
-      return self.paged_response_page_total(
+      if pagination.done.kind == 'total':
+        return self.paged_response_page_total(
+          endpoint, method_name=method_name, header=header, rows_type=rows_type,
+          response_accessor=response_accessor, response_optional=response_optional,
+          docstring=docstring,
+        )
+      return self.paged_response_page_exhausted(
         endpoint, method_name=method_name, header=header, rows_type=rows_type,
         response_accessor=response_accessor, response_optional=response_optional,
         docstring=docstring,
@@ -3695,6 +3701,128 @@ class Generator:
       f'{total_seen_local} = None',
       f'{total_poisoned_local} = False',
       f'{total_poison_message_local} = \'\'',
+      inner_code,
+      f'return PaginatedResponse({start}, {inner.name})',
+    ])
+    return outer.code() + '\n' + indent(outer_body)
+
+  def paged_response_page_exhausted(
+    self, endpoint: Endpoint, *,
+    method_name: str, header: Function, rows_type: str,
+    response_accessor: Literal['dict', 'attr'] = 'dict',
+    response_optional: bool = False,
+    docstring: 'Docstring | None' = None,
+  ) -> str | None:
+    """Generate a `PaginatedResponse`-shaped page wrapper for `page`-strategy pagination
+    terminated by a short or empty page -- `paged_response_method`'s own dispatch target
+    for `pagination.strategy == 'page'` when `done.kind` is not `total`, not meant to be
+    called directly.
+
+    The most common REST shape there is (`page`/`per_page`, no count anywhere, the walk
+    ends when a page comes back short): GitHub's list endpoints are the motivating case.
+    The state is the page index, seeded from `index.start` and incremented by one each
+    turn; `paged_rows_exhausted` supplies the same termination test `paged_method`'s
+    plain async-generator shape already uses, restructured into the
+    `next: state -> (rows, next_state | None)` expression `PaginatedResponse` requires.
+    Unlike `paged_response_page_total`, `done.rows` need not be declared: the response
+    itself is the row collection when it is not (`paged_rows`).
+
+    Args:
+      endpoint: The endpoint whose module is being generated.
+      method_name: Name of the single-request method the wrapper drives.
+      header: Rendered header of that method, after any project-specific renaming.
+      rows_type: Rendered type of one row (`PaginatedResponse`'s own `T`) -- the element
+        type of `pagination.done.rows`'s own field, or of the response itself when
+        `done.rows` is undeclared.
+      response_accessor: See `paged_method`.
+      response_optional: See `paged_response_method`.
+      docstring: See `paged_method`.
+
+    Returns:
+      Source for the `<method_name>_paged` method, or None when nothing is declared.
+
+    Raises:
+      ValueError: `pagination.done` is not a `short_page` or `empty` terminator, or a
+        `short_page` terminator has no page size on the method to measure against.
+    """
+    pagination = endpoint.pagination
+    assert pagination is not None and pagination.strategy == 'page'
+    done = pagination.done
+    if done.kind not in ('short_page', 'empty'):
+      raise ValueError(
+        f'{endpoint.function}: paged_response_page_exhausted only supports page-strategy '
+        f'pagination terminated by a short or empty page'
+      )
+    start = pagination.index.start
+    parameters = [*header.args, *header.kwargs]
+    driver = self.identifier(pagination.index.parameter)
+    size = self.paged_size(pagination, parameters)
+    if done.kind == 'short_page' and size is None:
+      raise ValueError(
+        f'{endpoint.function}: a short page is only short relative to a page size on the '
+        f'method'
+      )
+
+    positional = [param for param in header.args if param.name != driver]
+    keyword = [
+      param for param in header.kwargs if param.name != driver and param.name != 'validate'
+    ]
+    validate = next((param for param in header.kwargs if param.name == 'validate'), None)
+
+    taken = {
+      'self', 'next', driver,
+      *(param.name for param in positional), *(param.name for param in keyword),
+      *({validate.name} if validate is not None else set()),
+    }
+    response = self.paged_local('response', taken)
+
+    call = [param.name for param in positional]
+    call.extend(f'{param.name}={param.name}' for param in keyword)
+    call.append(f'{driver}={driver}')
+    if validate is not None:
+      call.append(f'{validate.name}={validate.name}')
+
+    rows_read: list[str] = []
+    rows_local = self.paged_rows(
+      done.rows, response=response, taken=taken, lines=rows_read,
+      response_accessor=response_accessor,
+    )
+    if done.rows is None:
+      # The payload is the collection; give the walk its own local so the `None`
+      # normalisation below never rebinds `response`.
+      rows_local = self.paged_local('rows', {*taken, response})
+      rows_read = [f'{rows_local} = {response}']
+    exhausted = self.paged_rows_exhausted(rows=rows_local, size=size, done_kind=done.kind)
+
+    inner = Function(
+      name='next', asyn=True, method=False,
+      args=[Function.Param(name=driver, type='int')],
+      return_type=f'tuple[list[{rows_type}], int | None]',
+    )
+    inner_body = '\n'.join([
+      f'{response} = await self.{method_name}({", ".join(call)})',
+      *rows_read,
+      f'{rows_local} = list({rows_local}) if {rows_local} is not None else []',
+      exhausted,
+      f'  return {rows_local}, None',
+      f'return {rows_local}, {driver} + 1',
+    ])
+    inner_code = inner.code() + '\n' + indent(inner_body)
+
+    outer = Function(
+      name=self.paged_name(method_name), asyn=False, method=True,
+      args=list(positional), kwargs=list(keyword),
+      return_type=f'PaginatedResponse[{rows_type}, int]',
+    )
+    if validate is not None:
+      outer.kwargs.append(validate)
+    outer_doc = self.paged_summary(
+      method_name,
+      body='Awaitable (flattens every page) or async-iterable (one page at a time).',
+      docstring=docstring, outer=outer,
+    )
+    outer_body = '\n'.join([
+      outer_doc,
       inner_code,
       f'return PaginatedResponse({start}, {inner.name})',
     ])
@@ -4654,10 +4782,13 @@ class Generator:
           types, pagination.done.rows or '', response_ref=response_ref, references=references,
           imports=rows_type_imports,
         )
-      elif (
-        pagination.strategy == 'page'
-        and pagination.done.kind == 'total'
-        and pagination.done.rows is not None
+      elif pagination.strategy == 'page' and (
+        (pagination.done.kind == 'total' and pagination.done.rows is not None)
+        or pagination.done.kind == 'empty'
+        or (
+          pagination.done.kind == 'short_page'
+          and self.paged_size(pagination, [*header.args, *header.kwargs]) is not None
+        )
       ):
         # S24's second `PaginatedResponse`-shaped shape: `page` strategy terminated by a
         # declared `total`, with `done.rows` also declared. `paged_response_method`'s own
@@ -4672,8 +4803,14 @@ class Generator:
         # user-reported validation error traced to the response schema's `total` field
         # led to inspecting the generated `_paged` method and finding it was a plain
         # `AsyncIterator`, not `PaginatedResponse`-shaped, despite qualifying.
+        # `short_page`/`empty` (GitHub's `page`/`per_page` shape, the fourth
+        # `PaginatedResponse`-shaped shape): `done.rows` may be unset, the response then
+        # being the row collection itself, which `paged_response_rows_type` resolves via
+        # its empty-`rows_path` branch the same way plain `seek` above does. A
+        # `short_page` with no size parameter on the method stays on the plain generator
+        # path, which refuses it with the same `ValueError` it always has.
         rows_type = self.paged_response_rows_type(
-          types, pagination.done.rows, response_ref=response_ref, references=references,
+          types, pagination.done.rows or '', response_ref=response_ref, references=references,
           imports=rows_type_imports,
         )
       # `paged_state_type` (a `get_transaction_log` may declare a genuinely

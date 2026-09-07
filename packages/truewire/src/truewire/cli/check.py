@@ -146,6 +146,7 @@ def check(
   """
   from jsonschema import Draft202012Validator
   from jsonschema.exceptions import ValidationError
+  from referencing.exceptions import Unresolvable
 
   max_errors_per_file = 20
 
@@ -199,6 +200,17 @@ def check(
         return False
       value = value[part]
     return True
+
+  def schema_errors(validator: Draft202012Validator, instance: Any) -> list[ValidationError]:
+    """Every schema violation for `instance`, in path order.
+
+    A `$ref` that resolves to nothing (a typo, or a shared schema that was renamed) is
+    reported as one violation naming the reference, instead of escaping as a traceback.
+    """
+    try:
+      return sorted(validator.iter_errors(instance), key=lambda err: list(err.path))
+    except Unresolvable as exc:
+      return [ValidationError(f'unresolvable $ref: {exc}')]
 
   def validator_for(
     schema: dict[str, Any], shared_schemas: dict[str, Any]
@@ -274,7 +286,7 @@ def check(
         return [f'{example_path}: response {status} has no application/json schema']
 
     validator = validator_for(schema, shared_schemas)
-    errors = sorted(validator.iter_errors(payload), key=lambda err: list(err.path))
+    errors = schema_errors(validator, payload)
     return format_validation_errors(example_path, errors)
 
   def validate_ws_reply_example(
@@ -340,7 +352,7 @@ def check(
       payload = read_dotted_path(payload, reply_payload)
 
     validator = validator_for(schema, shared_schemas)
-    errors = sorted(validator.iter_errors(payload), key=lambda err: list(err.path))
+    errors = schema_errors(validator, payload)
     return format_validation_errors(example_path, errors)
 
   def validate_ws_messages_example(
@@ -409,7 +421,7 @@ def check(
           )
           continue
         message = read_dotted_path(message, envelope.payload)
-      errors = sorted(validator.iter_errors(message), key=lambda err: list(err.path))
+      errors = schema_errors(validator, message)
       out.extend(format_validation_errors(example_path, errors, prefix=f'[{index}]'))
     return out
 

@@ -2161,15 +2161,114 @@ class TestPagedResponsePageTotal:
     ], page_size=1)
     assert [call['page'] for call in calls] == [0, 1]
 
-  def test_short_page_terminator_is_not_supported_yet(self, generator: Generator):
-    """Scoped deliberately to `total` termination for now (`docs/TODO.md` T12) -- a
-    `short_page`/`empty`-terminated `page` walk raises rather than silently mis-rendering."""
+  def test_short_page_terminator_dispatches_to_the_exhausted_shape(self, generator: Generator):
+    """A `short_page`-terminated `page` walk is no longer refused here: it renders through
+    `paged_response_page_exhausted` (see `TestPagedResponsePageExhausted`)."""
     pagination = {**PAGE_TOTAL_ROWS, 'done': {'kind': 'short_page', 'rows': 'rows'}}
-    with pytest.raises(ValueError, match='total'):
+    source = generator.paged_response_method(
+      paged_endpoint(pagination),
+      method_name='orders', header=paged_header(kwargs=['page', 'page_size']),
+      rows_type='dict',
+    ) or ''
+    assert '-> PaginatedResponse[dict, int]:' in source
+    assert 'total' not in source
+
+
+PAGE_SHORT_ROWS = {
+  'strategy': 'page',
+  'index': {'parameter': 'page', 'start': 1},
+  'size': {'parameter': 'pageSize'},
+  'done': {'kind': 'short_page', 'rows': 'data'},
+}
+"""A page walk ended by a short page, rows under `data`."""
+
+PAGE_SHORT_BARE = {
+  'strategy': 'page',
+  'index': {'parameter': 'page', 'start': 1},
+  'size': {'parameter': 'pageSize'},
+  'done': {'kind': 'short_page'},
+}
+"""GitHub's shape: `page`/`per_page`, the payload is the row collection, no count anywhere."""
+
+PAGE_EMPTY_BARE = {
+  'strategy': 'page',
+  'index': {'parameter': 'page', 'start': 1},
+  'size': {'parameter': 'pageSize'},
+  'done': {'kind': 'empty'},
+}
+
+
+class TestPagedResponsePageExhausted:
+  """`paged_response_method`'s `page`-strategy dispatch for a `short_page` or `empty`
+  terminator -- the `page`/`per_page` shape most REST APIs use, GitHub's list endpoints
+  being the motivating case. Before this, only a `page` walk with a declared `total` got
+  the awaitable `PaginatedResponse` shape; these fell back to a plain async generator.
+  """
+
+  def test_generates_a_paginatedresponse_shaped_wrapper(self, generator: Generator):
+    source = generator.paged_response_method(
+      paged_endpoint(PAGE_SHORT_BARE),
+      method_name='orders', header=paged_header(kwargs=['page', 'page_size']),
+      rows_type='dict',
+    ) or ''
+    assert source.startswith('def orders_paged(')
+    assert '-> PaginatedResponse[dict, int]:' in source
+    assert 'page:' not in source.split('"""')[0]
+
+  def test_short_page_ends_the_walk_on_the_declared_collection(self, generator: Generator):
+    source = generator.paged_response_method(
+      paged_endpoint(PAGE_SHORT_ROWS),
+      method_name='orders', header=paged_header(kwargs=['page', 'page_size']),
+      rows_type='int',
+    ) or ''
+    yielded, calls = walk_response(source, [{'data': [1, 2]}, {'data': [3]}], page_size=2)
+    assert yielded == [[1, 2], [3]]
+    assert [call['page'] for call in calls] == [1, 2]
+
+  def test_short_page_measures_the_payload_when_no_collection_is_named(self, generator: Generator):
+    source = generator.paged_response_method(
+      paged_endpoint(PAGE_SHORT_BARE),
+      method_name='orders', header=paged_header(kwargs=['page', 'page_size']),
+      rows_type='int',
+    ) or ''
+    yielded, calls = walk_response(source, [[1, 2, 3], [4, 5, 6], [7]], page_size=3)
+    assert yielded == [[1, 2, 3], [4, 5, 6], [7]]
+    assert [call['page'] for call in calls] == [1, 2, 3]
+
+  def test_empty_page_ends_the_walk_and_is_not_yielded(self, generator: Generator):
+    """An exact multiple of the page size costs one extra request; the empty page that
+    answers it is the terminator, not a page."""
+    source = generator.paged_response_method(
+      paged_endpoint(PAGE_EMPTY_BARE),
+      method_name='orders', header=paged_header(kwargs=['page', 'page_size']),
+      rows_type='int',
+    ) or ''
+    yielded, calls = walk_response(source, [[1, 2], [3, 4], []], page_size=2)
+    assert yielded == [[1, 2], [3, 4]]
+    assert [call['page'] for call in calls] == [1, 2, 3]
+
+  def test_omitted_size_ends_only_on_an_empty_page(self, generator: Generator):
+    """With no size sent, nothing is short: the API's own default page size is unknown to
+    the walk, so only an empty page can end it."""
+    source = generator.paged_response_method(
+      paged_endpoint(PAGE_SHORT_BARE),
+      method_name='orders', header=paged_header(kwargs=['page', 'page_size']),
+      rows_type='int',
+    ) or ''
+    yielded, calls = walk_response(source, [[1], [2], []])
+    assert yielded == [[1], [2]]
+    assert [call['page'] for call in calls] == [1, 2, 3]
+
+  def test_short_page_without_a_size_is_refused(self, generator: Generator):
+    with pytest.raises(ValueError):
       generator.paged_response_method(
-        paged_endpoint(pagination),
-        method_name='orders', header=paged_header(kwargs=['page', 'page_size']),
-        rows_type='dict',
+        paged_endpoint({
+          'strategy': 'page',
+          'index': {'parameter': 'page', 'start': 1},
+          'done': {'kind': 'short_page'},
+        }),
+        method_name='orders', header=paged_header(kwargs=['page']),
+        rows_type='int',
       )
 
 

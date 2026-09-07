@@ -46,3 +46,18 @@ jobs:
       - name: Test
         working-directory: examples/${{ matrix.example }}
         run: PYTHONPATH=src ../../.venv/bin/python -m pytest -q
+
+  runtime-ts:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/core-ts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: yarn install --frozen-lockfile
+      - run: yarn typecheck
+      - run: yarn test
+      - run: yarn build

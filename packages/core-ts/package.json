@@ -1,0 +1,62 @@
+{
+  "name": "@truewire/core",
+  "version": "0.1.0",
+  "description": "Runtime for Truewire-generated TypeScript clients: HTTP and WebSocket transport, codecs, paging, timestamps, errors.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./codec": {
+      "types": "./dist/validation.d.ts",
+      "default": "./dist/validation.js"
+    },
+    "./errors": {
+      "types": "./dist/errors.d.ts",
+      "default": "./dist/errors.js"
+    },
+    "./http": {
+      "types": "./dist/http.d.ts",
+      "default": "./dist/http.js"
+    },
+    "./paging": {
+      "types": "./dist/paging.d.ts",
+      "default": "./dist/paging.js"
+    },
+    "./times": {
+      "types": "./dist/times.d.ts",
+      "default": "./dist/times.js"
+    },
+    "./ws": {
+      "types": "./dist/ws/index.d.ts",
+      "default": "./dist/ws/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/truewire-dev/truewire",
+    "directory": "packages/core-ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^4.0.0"
+  }
+}

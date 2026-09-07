@@ -1,0 +1,65 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/trading/cancel-order",
+  "meta": {
+    "signed": true
+  },
+  "redacted": [
+    "nonce"
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/private/CancelOrder",
+    "method": "POST",
+    "description": "Cancel a particular open order (or set of open orders sharing a `userref`) by `txid`, `userref` or `cl_ord_id`.\n\n**API Key Permissions Required:** `Orders and trades - Create & modify orders` or `Orders and trades - Cancel & close orders`",
+    "request": {
+      "title": "CancelOrderRequest",
+      "description": "Parameters identifying the order(s) to cancel.",
+      "type": "object",
+      "properties": {
+        "txid": {
+          "description": "Kraken order identifier (txid), or a user reference (userref) to cancel every order sharing it.",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            }
+          ]
+        },
+        "cl_ord_id": {
+          "type": "string",
+          "description": "An alphanumeric client order identifier which uniquely identifies an open order for this client."
+        }
+      }
+    },
+    "response": {
+      "title": "OrderCancelled",
+      "type": "object",
+      "description": "Result of a cancel request.",
+      "properties": {
+        "count": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Number of orders cancelled."
+        },
+        "pending": {
+          "type": "boolean",
+          "description": "If true, orders are pending cancellation."
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "`nonce` is dropped from the request body -- transport-injected by the client core (authed_request), never a caller-supplied parameter.",
+    "`txid` converted from upstream's `oneOf: [string, integer]` to `anyOf` per spec-authoring rule 4.",
+    "Upstream's own request `example` includes a `pair` field that is not declared anywhere in the schema's `properties` (likely copy-pasted from AddOrder's example) -- omitted here since it isn't documented.",
+    "Neither `txid` nor `cl_ord_id` is marked required despite the description implying one must be given -- upstream's `required` list holds only `nonce`, so nothing remains required after dropping it."
+  ]
+}

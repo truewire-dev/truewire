@@ -1,0 +1,501 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/account-data/get-trade-volume",
+  "meta": {
+    "signed": true
+  },
+  "redacted": [
+    "nonce"
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/private/TradeVolume",
+    "method": "POST",
+    "description": "Returns 30-day USD trading volume and the resulting fee schedule for any asset pair(s) provided. Fees are not included if `pair` is not specified, since Kraken fees differ by asset pair. If an asset pair is on a maker/taker fee schedule, the taker side is given in `fees` and the maker side in `fees_maker`; for pairs not on maker/taker, both sides appear only in `fees`. Set `fee_schedule` to `true` to additionally receive the full fee schedule per trading pair, in `schedules`.\n\n**API Key Permissions Required:** `Funds permissions - Query`",
+    "request": {
+      "title": "TradeVolumeRequest",
+      "type": "object",
+      "properties": {
+        "pair": {
+          "description": "Asset pair(s) for which to retrieve fee info (optional, but required if any fee info is desired). Accepts either a comma-delimited list of pair names (each looked up as a forex pair), or a list of `{asset, aclass}` objects -- required to request fees for non-forex classes such as `equity_pair`, `derivatives`, or `futures_contract`.",
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "Comma-delimited list of pair names, each looked up as a forex pair."
+            },
+            {
+              "type": "array",
+              "description": "List of `{asset, aclass}` objects. Required for non-forex classes.",
+              "items": {
+                "title": "TradeVolumePairClass",
+                "description": "One asset pair, with its asset class.",
+                "type": "object",
+                "required": [
+                  "asset",
+                  "aclass"
+                ],
+                "properties": {
+                  "asset": {
+                    "description": "The pair name. All result amounts are expressed in units of this asset.",
+                    "type": "string"
+                  },
+                  "aclass": {
+                    "description": "The asset class of the pair.",
+                    "type": "string",
+                    "enum": [
+                      "currency",
+                      "forex",
+                      "equity",
+                      "equity_pair",
+                      "nft",
+                      "derivatives",
+                      "tokenized_asset",
+                      "futures_contract"
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "fee-info": {
+          "description": "Whether or not to include fee info in the results. Legacy parameter, accepted for backwards compatibility -- prefer omitting `pair` to exclude fee info.",
+          "default": false,
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "fee_schedule": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Whether to include the full fee schedule per trading pair in the response (returned in `schedules`)."
+        },
+        "rebase_multiplier": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "rebased",
+                "base"
+              ],
+              "default": "rebased"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional parameter for viewing xstocks data. `rebased` displays in terms of underlying equity, `base` displays in terms of SPV tokens."
+        }
+      }
+    },
+    "response": {
+      "title": "TradeVolume",
+      "description": "30-day trading volume and, if requested, the resulting fee schedule.",
+      "type": "object",
+      "required": [
+        "currency",
+        "volume",
+        "inputs"
+      ],
+      "properties": {
+        "currency": {
+          "description": "The asset used to express the trade volume value. `volume` is expressed in units of this asset.",
+          "type": "string"
+        },
+        "asset_class": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "currency",
+                "forex",
+                "equity",
+                "equity_pair",
+                "nft",
+                "derivatives",
+                "tokenized_asset",
+                "futures_contract"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The class of the asset used to express the trade volume value."
+        },
+        "volume": {
+          "description": "The total trading volume value.",
+          "type": "string"
+        },
+        "inputs": {
+          "title": "TradeVolumeInputs",
+          "description": "Domain-aggregated input values evaluated against fee-schedule tier conditions.",
+          "type": "object",
+          "required": [
+            "domain_assets_on_platform",
+            "domain_futures_volume_30d",
+            "domain_spot_volume_30d"
+          ],
+          "properties": {
+            "domain_spot_volume_30d": {
+              "description": "30-day rolling spot trading volume.",
+              "type": "string"
+            },
+            "domain_futures_volume_30d": {
+              "description": "30-day rolling futures trading volume.",
+              "type": "string"
+            },
+            "domain_assets_on_platform": {
+              "description": "Assets on platform.",
+              "type": "string"
+            }
+          }
+        },
+        "fees": {
+          "description": "Taker fee per trading pair requested (one entry per pair). `null` if `pair` was not requested.",
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": {
+                "title": "FeeTierInfo",
+                "description": "Fee and volume tier information. Fees are expressed as percentages, volumes as absolute values.",
+                "type": "object",
+                "required": [
+                  "fee",
+                  "minfee",
+                  "maxfee",
+                  "tiervolume"
+                ],
+                "properties": {
+                  "fee": {
+                    "description": "Current trading fee.",
+                    "type": "string"
+                  },
+                  "minfee": {
+                    "description": "Minimum trading fee (highest volume tier).",
+                    "type": "string"
+                  },
+                  "maxfee": {
+                    "description": "Maximum trading fee (lowest volume tier).",
+                    "type": "string"
+                  },
+                  "nextfee": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Next fee, applicable once the next volume tier is reached. `null` at the lowest fee tier."
+                  },
+                  "tiervolume": {
+                    "description": "Current spot-volume tier threshold.",
+                    "type": "string"
+                  },
+                  "tierfuturesvolume": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Current futures-volume tier threshold, when visible in the schedule."
+                  },
+                  "nextvolume": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Next spot-volume tier threshold. `null` at the highest volume tier."
+                  },
+                  "nextfuturesvolume": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Next futures-volume tier threshold, when visible in the schedule."
+                  },
+                  "volumeoffset": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Volume adjustment, added to the trade volume when computing fees."
+                  }
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fees_maker": {
+          "description": "Maker fee per trading pair requested (one entry per pair). `null` if `pair` was not requested.",
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": {
+                "title": "FeeTierInfo",
+                "description": "Fee and volume tier information. Fees are expressed as percentages, volumes as absolute values.",
+                "type": "object",
+                "required": [
+                  "fee",
+                  "minfee",
+                  "maxfee",
+                  "tiervolume"
+                ],
+                "properties": {
+                  "fee": {
+                    "description": "Current trading fee.",
+                    "type": "string"
+                  },
+                  "minfee": {
+                    "description": "Minimum trading fee (highest volume tier).",
+                    "type": "string"
+                  },
+                  "maxfee": {
+                    "description": "Maximum trading fee (lowest volume tier).",
+                    "type": "string"
+                  },
+                  "nextfee": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Next fee, applicable once the next volume tier is reached. `null` at the lowest fee tier."
+                  },
+                  "tiervolume": {
+                    "description": "Current spot-volume tier threshold.",
+                    "type": "string"
+                  },
+                  "tierfuturesvolume": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Current futures-volume tier threshold, when visible in the schedule."
+                  },
+                  "nextvolume": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Next spot-volume tier threshold. `null` at the highest volume tier."
+                  },
+                  "nextfuturesvolume": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Next futures-volume tier threshold, when visible in the schedule."
+                  },
+                  "volumeoffset": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Volume adjustment, added to the trade volume when computing fees."
+                  }
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "volume_subaccounts": {
+          "description": "Trade volume breakdown by subaccount. Only present when the requester is the domain's master account.",
+          "type": "array",
+          "items": {
+            "title": "SubaccountVolume",
+            "description": "Trade volume for one subaccount in a domain.",
+            "type": "object",
+            "required": [
+              "iiban",
+              "volume"
+            ],
+            "properties": {
+              "iiban": {
+                "description": "The subaccount IIBAN.",
+                "type": "string"
+              },
+              "volume": {
+                "description": "The subaccount trade volume.",
+                "type": "string"
+              }
+            }
+          }
+        },
+        "schedules": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "title": "FeeSchedule",
+                "description": "Full fee schedule for a trading pair.",
+                "type": "object",
+                "required": [
+                  "pair",
+                  "class",
+                  "tiers"
+                ],
+                "properties": {
+                  "pair": {
+                    "description": "The trading pair the fee schedule applies to.",
+                    "type": "string"
+                  },
+                  "class": {
+                    "description": "Trading pair class.",
+                    "type": "string",
+                    "enum": [
+                      "currency",
+                      "forex",
+                      "equity",
+                      "equity_pair",
+                      "nft",
+                      "derivatives",
+                      "tokenized_asset",
+                      "futures_contract",
+                      "volume"
+                    ]
+                  },
+                  "tiers": {
+                    "description": "The tiers of the fee schedule.",
+                    "type": "array",
+                    "items": {
+                      "title": "FeeScheduleTier",
+                      "description": "One tier of a fee schedule.",
+                      "type": "object",
+                      "required": [
+                        "maker_fee",
+                        "taker_fee"
+                      ],
+                      "properties": {
+                        "maker_fee": {
+                          "description": "Maker fee percentage for this tier.",
+                          "type": "string"
+                        },
+                        "taker_fee": {
+                          "description": "Taker fee percentage for this tier.",
+                          "type": "string"
+                        },
+                        "min_spot_volume": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "Minimum spot volume threshold for this tier, if applicable."
+                        },
+                        "min_futures_volume": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "Minimum 30-day futures volume threshold for this tier, if applicable."
+                        },
+                        "min_assets_on_platform": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "Minimum assets-on-platform threshold for this tier, if applicable."
+                        },
+                        "active": {
+                          "anyOf": [
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "Whether this is the currently active tier for the user."
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Full fee schedule per trading pair. Present only when `fee_schedule` was requested."
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "`fee-info` (legacy) converted from upstream's `oneOf` to `anyOf` per rule 4; each branch is a bare scalar so no per-branch titles are needed. Added a missing title (`TradeVolumePairClass`) to the `{asset, aclass}` array-item schema in `pair`'s second `anyOf` branch, which upstream left untitled despite having a properties map."
+  ]
+}

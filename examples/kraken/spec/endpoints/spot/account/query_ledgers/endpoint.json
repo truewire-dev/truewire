@@ -1,0 +1,127 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/account-data/query-ledgers",
+  "meta": {
+    "signed": true
+  },
+  "redacted": [
+    "nonce"
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/private/QueryLedgers",
+    "method": "POST",
+    "description": "Retrieve information about specific ledger entries, by ledger ID.\n\n**Note on Staking/Earn assets:** assets migrated from the legacy Staking system to the new Earn system may appear with symbol extensions -- `.B` (new yield-bearing products), `.F` (auto-earning Kraken Rewards) -- these are read-only for transacting; use the base asset instead.\n\n**API Key Permissions Required:** `Data - Query ledger entries`",
+    "request": {
+      "title": "QueryLedgersRequest",
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "description": "Comma-delimited list of ledger IDs to query info about (20 maximum).",
+          "type": "string"
+        },
+        "trades": {
+          "description": "Whether or not to include trades related to position in output.",
+          "type": "boolean",
+          "default": false
+        },
+        "rebase_multiplier": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "rebased",
+                "base"
+              ],
+              "default": "rebased"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional parameter for viewing xstocks data. `rebased` displays in terms of underlying equity, `base` displays in terms of SPV tokens."
+        }
+      }
+    },
+    "response": {
+      "title": "QueriedLedgers",
+      "description": "The queried ledger entries, keyed by ledger ID.",
+      "type": "object",
+      "additionalProperties": {
+        "title": "LedgerEntry",
+        "description": "One ledger entry.",
+        "type": "object",
+        "properties": {
+          "refid": {
+            "description": "Reference ID of the parent transaction (trade, deposit, withdrawal, etc.) that caused the ledger entry.",
+            "type": "string"
+          },
+          "time": {
+            "description": "Unix timestamp of the ledger entry.",
+            "type": "number",
+            "format": "epoch-seconds"
+          },
+          "type": {
+            "description": "Type of ledger entry.",
+            "type": "string",
+            "enum": [
+              "none",
+              "trade",
+              "deposit",
+              "withdrawal",
+              "transfer",
+              "margin",
+              "adjustment",
+              "rollover",
+              "spend",
+              "receive",
+              "settled",
+              "credit",
+              "staking",
+              "reward",
+              "dividend",
+              "sale",
+              "conversion",
+              "nfttrade",
+              "nftcreatorfee",
+              "nftrebate",
+              "custodytransfer"
+            ]
+          },
+          "subtype": {
+            "description": "Additional info relating to the ledger entry type, where applicable.",
+            "type": "string"
+          },
+          "aclass": {
+            "description": "Asset class.",
+            "type": "string"
+          },
+          "asset": {
+            "description": "Asset.",
+            "type": "string"
+          },
+          "amount": {
+            "description": "Transaction amount.",
+            "type": "string"
+          },
+          "fee": {
+            "description": "Transaction fee.",
+            "type": "string"
+          },
+          "balance": {
+            "description": "Resulting balance.",
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  }
+}

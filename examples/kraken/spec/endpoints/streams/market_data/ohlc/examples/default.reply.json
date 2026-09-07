@@ -1,0 +1,16 @@
+{
+  "method": "subscribe",
+  "req_id": 6,
+  "result": {
+    "channel": "ohlc",
+    "interval": 1,
+    "snapshot": true,
+    "symbol": "BTC/USD",
+    "warnings": [
+      "timestamp is deprecated, use interval_begin"
+    ]
+  },
+  "success": true,
+  "time_in": "2026-08-13T12:07:25.985994Z",
+  "time_out": "2026-08-13T12:07:25.986035Z"
+}

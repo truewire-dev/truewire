@@ -1,0 +1,117 @@
+{
+  "ConditionalCloseOrder": {
+    "title": "ConditionalCloseOrder",
+    "type": "object",
+    "description": "A conditional close order attached to a primary order.",
+    "properties": {
+      "ordertype": {
+        "type": "string",
+        "description": "Conditional close order's execution model.",
+        "enum": [
+          "limit",
+          "iceberg",
+          "stop-loss",
+          "take-profit",
+          "stop-loss-limit",
+          "take-profit-limit",
+          "trailing-stop",
+          "trailing-stop-limit"
+        ]
+      },
+      "price": {
+        "type": "string",
+        "description": "Conditional close order price."
+      },
+      "price2": {
+        "type": "string",
+        "description": "Conditional close order secondary price."
+      }
+    }
+  },
+  "WsConditionalCloseOrder": {
+    "title": "WsConditionalCloseOrder",
+    "type": "object",
+    "description": "Template for the secondary close order generated on each fill of the primary order (One-Triggers-Other). The secondary order matches the executed quantity and takes the opposite side.",
+    "properties": {
+      "order_type": {
+        "type": "string",
+        "enum": [
+          "limit",
+          "stop-loss",
+          "stop-loss-limit",
+          "take-profit",
+          "take-profit-limit",
+          "trailing-stop",
+          "trailing-stop-limit"
+        ],
+        "description": "Order type of the secondary close order created on each fill."
+      },
+      "limit_price": {
+        "type": "number",
+        "description": "Limit price on the secondary close order. Required for secondary order types that support a limit price: `limit`, `stop-loss-limit`, `take-profit-limit`."
+      },
+      "limit_price_type": {
+        "type": "string",
+        "enum": [
+          "static",
+          "pct",
+          "quote"
+        ],
+        "default": "quote",
+        "description": "Units for `limit_price` on the secondary order. Only available on trailing-stop-limit orders; for that order type the value is an offset from the trigger price (`0` sets the limit price equal to the trigger price)."
+      },
+      "trigger_price": {
+        "type": "number",
+        "description": "Amount for the trigger price on the secondary close order -- static or relative, per `trigger_price_type`. Required on triggered secondary order types: `stop-loss`, `stop-loss-limit`, `take-profit`, `take-profit-limit`."
+      },
+      "trigger_price_type": {
+        "type": "string",
+        "enum": [
+          "static",
+          "pct",
+          "quote"
+        ],
+        "default": "static",
+        "description": "Units for `trigger_price` on the secondary order."
+      },
+      "stop_price": {
+        "type": "number",
+        "deprecated": true,
+        "description": "Deprecated -- use `trigger_price`. Trigger price on the secondary close order, for triggered secondary order types."
+      }
+    }
+  },
+  "OrderTriggers": {
+    "title": "OrderTriggers",
+    "type": "object",
+    "description": "Trigger price conditions for triggered order types.",
+    "properties": {
+      "reference": {
+        "type": "string",
+        "enum": [
+          "index",
+          "last"
+        ],
+        "default": "last",
+        "description": "Reference price to track for triggering orders: `index` (the broader-market index price for this pair -- falls back to `last` during index-feed connectivity issues) or `last` (the last traded price in the Kraken order book for this pair)."
+      },
+      "price": {
+        "type": "number",
+        "description": "Amount for the trigger price -- static or relative, per `price_type`. E.g. 29000.5 with `price_type=static` triggers at that price; 5 with `pct` triggers when price rises 5%; -150 with `quote` triggers when price drops 150 quote-currency units. For `trailing-stop`/`trailing-stop-limit`, represents the reversion from the peak price and is always positive."
+      },
+      "price_type": {
+        "type": "string",
+        "enum": [
+          "static",
+          "pct",
+          "quote"
+        ],
+        "default": "static",
+        "description": "Units for `price`: `static` (a static market price), `pct` (a percentage offset from the reference price), or `quote` (a notional offset in the quote currency)."
+      }
+    },
+    "required": [
+      "price"
+    ]
+  }
+}

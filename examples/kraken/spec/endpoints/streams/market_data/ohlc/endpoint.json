@@ -1,0 +1,173 @@
+{
+  "docs": "https://docs.kraken.com/exchange/api-reference/spot-websocket-v2/ohlc",
+  "meta": {},
+  "redacted": [
+    "req_id"
+  ],
+  "spec": {
+    "kind": "stream",
+    "channel": "ohlc",
+    "description": "Subscribe to Open/High/Low/Close (OHLC) candle data at a given interval for one or more currency pairs. Updates are generated on trade events.",
+    "parameters": {
+      "title": "OhlcParams",
+      "type": "object",
+      "description": "Parameters for an `ohlc` channel subscription.",
+      "properties": {
+        "symbol": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Currency pairs to subscribe to, e.g. `[\"BTC/USD\", \"MATIC/GBP\"]`."
+        },
+        "interval": {
+          "type": "integer",
+          "enum": [
+            1,
+            5,
+            15,
+            30,
+            60,
+            240,
+            1440,
+            10080,
+            21600
+          ],
+          "description": "The interval timeframe, in minutes."
+        },
+        "snapshot": {
+          "type": "boolean",
+          "default": true,
+          "description": "Request a snapshot after subscribing."
+        }
+      },
+      "required": [
+        "symbol"
+      ]
+    },
+    "payload": {
+      "title": "OhlcMessage",
+      "type": "object",
+      "description": "An `ohlc` channel push.",
+      "properties": {
+        "channel": {
+          "type": "string",
+          "enum": [
+            "ohlc"
+          ],
+          "description": "The channel this push belongs to."
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "snapshot",
+            "update"
+          ],
+          "description": "Whether this push is the initial snapshot or an incremental update."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "RFC3339 timestamp of this push. Not documented in the channel's field reference, but present on every worked example on the doc page."
+        },
+        "data": {
+          "type": "array",
+          "description": "A list of candle events.",
+          "items": {
+            "title": "OhlcCandle",
+            "type": "object",
+            "description": "One symbol's OHLC candle for the subscribed interval.",
+            "properties": {
+              "symbol": {
+                "type": "string",
+                "description": "The symbol of the currency pair, e.g. `\"BTC/USD\"`."
+              },
+              "open": {
+                "type": "number",
+                "description": "The opening trade price within the interval."
+              },
+              "high": {
+                "type": "number",
+                "description": "The highest trade price within the interval."
+              },
+              "low": {
+                "type": "number",
+                "description": "The lowest trade price within the interval."
+              },
+              "close": {
+                "type": "number",
+                "description": "The last trade price within the interval."
+              },
+              "vwap": {
+                "type": "number",
+                "description": "Volume weighted average trade price within the interval."
+              },
+              "trades": {
+                "type": "integer",
+                "description": "Number of trades within the interval."
+              },
+              "volume": {
+                "type": "number",
+                "description": "Total traded volume, in base currency terms, within the interval."
+              },
+              "interval_begin": {
+                "type": "string",
+                "format": "date-time",
+                "description": "RFC3339 timestamp of the start of the interval."
+              },
+              "interval": {
+                "type": "integer",
+                "enum": [
+                  1,
+                  5,
+                  15,
+                  30,
+                  60,
+                  240,
+                  1440,
+                  10080,
+                  21600
+                ],
+                "description": "The timeframe of this candle's interval, in minutes."
+              },
+              "timestamp": {
+                "type": "string",
+                "deprecated": true,
+                "format": "date-time",
+                "description": "RFC3339 timestamp of the start of the interval. Deprecated -- use `interval_begin`."
+              }
+            },
+            "required": [
+              "symbol",
+              "open",
+              "high",
+              "low",
+              "close",
+              "vwap",
+              "trades",
+              "volume",
+              "interval_begin",
+              "interval"
+            ]
+          }
+        }
+      },
+      "required": [
+        "channel",
+        "type",
+        "data"
+      ]
+    }
+  },
+  "envelope": {
+    "payload": "",
+    "verb": {
+      "path": "method",
+      "subscribe": "subscribe",
+      "unsubscribe": "unsubscribe"
+    }
+  },
+  "notes": [
+    "The message frame's top-level `timestamp` (distinct from each candle's own deprecated `data[].timestamp`) is not in the page's `ResponseField` list for the Snapshot/Update section, but appears in both of its worked JSON examples, so it is kept as a documented-by-example field rather than dropped. `data[].timestamp` is kept despite being marked deprecated, per rule 7 (drop no documented field); `interval_begin` is its documented replacement. `interval` has no documented `default` (unlike `depth`/`snapshot` on sibling channels), so none is declared."
+  ]
+}

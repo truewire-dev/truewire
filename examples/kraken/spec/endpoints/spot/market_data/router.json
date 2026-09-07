@@ -1,0 +1,4 @@
+{
+  "description": "Public, unauthenticated market data: server time, system status, tradable asset\npairs, asset info, order book depth, recent trades/spreads, OHLC candles, ticker\nsnapshots, and pre-/post-trade transparency reports.",
+  "upstream": "https://docs.kraken.com/api-reference/market-data"
+}

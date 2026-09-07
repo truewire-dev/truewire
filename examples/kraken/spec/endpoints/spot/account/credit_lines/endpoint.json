@@ -1,0 +1,181 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/account-data/get-credit-lines",
+  "meta": {
+    "signed": true
+  },
+  "redacted": [
+    "nonce"
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/private/CreditLines",
+    "method": "POST",
+    "description": "Retrieve all credit line details for VIP accounts with this functionality. Several response fields are only present for accounts with an active credit line.\n\n**API Key Permissions Required:** `Funds permissions - Query`",
+    "request": {
+      "title": "CreditLinesRequest",
+      "type": "object",
+      "properties": {
+        "rebase_multiplier": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "rebased",
+                "base"
+              ],
+              "default": "rebased"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional parameter for viewing xstocks data. `rebased` displays in terms of underlying equity, `base` displays in terms of SPV tokens."
+        }
+      }
+    },
+    "response": {
+      "description": "Credit line details for a VIP account. `null` for accounts with no credit line functionality.",
+      "anyOf": [
+        {
+          "title": "CreditLines",
+          "type": "object",
+          "properties": {
+            "asset_details": {
+              "description": "Per-asset credit line balances, keyed by asset code.",
+              "type": "object",
+              "additionalProperties": {
+                "title": "CreditLinesAsset",
+                "description": "Credit line details for one asset.",
+                "type": "object",
+                "properties": {
+                  "balance": {
+                    "description": "Current balance for the asset.",
+                    "type": "string",
+                    "example": "1000.5000"
+                  },
+                  "hold_trade": {
+                    "description": "Amount on hold for open orders.",
+                    "type": "string",
+                    "example": "0.0000"
+                  },
+                  "collateral_value": {
+                    "description": "Collateral value factor for this asset (present for eligible collateral assets).",
+                    "type": "number",
+                    "example": 0.99
+                  },
+                  "credit_limit": {
+                    "description": "Credit limit for the asset (present only for accounts with a credit line).",
+                    "type": "string",
+                    "example": "50000.0000"
+                  },
+                  "credit_used": {
+                    "description": "Currently used credit for the asset (present only for accounts with a credit line).",
+                    "type": "string",
+                    "example": "12500.0000"
+                  },
+                  "available_credit": {
+                    "description": "Available credit for the asset (present only for accounts with a credit line).",
+                    "type": "string",
+                    "example": "37500.0000"
+                  }
+                }
+              }
+            },
+            "limits_monitor": {
+              "title": "CreditLinesMonitor",
+              "description": "Portfolio-wide credit summary.",
+              "type": "object",
+              "properties": {
+                "total_credit_usd": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "example": "100000.0000"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Aggregate credit limit across all assets, in USD."
+                },
+                "total_credit_used_usd": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "example": "25000.0000"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Aggregate utilized credit across all assets, in USD."
+                },
+                "total_collateral_value_usd": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "example": "150000.0000"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Sum of asset balances in USD times each asset's collateral factor."
+                },
+                "equity_usd": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "example": "125000.0000"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Total collateral value minus total credit used, in USD."
+                },
+                "ongoing_balance": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "example": "1.5000"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Ratio of total collateral value to total credit, in USD."
+                },
+                "debt_to_equity": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "example": "0.2000"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Ratio of total credit used to equity, in USD."
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "CreditLines"
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "`result` is documented as nullable -- accounts with no credit-line functionality get `null` rather than an empty object."
+  ]
+}

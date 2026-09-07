@@ -1,0 +1,74 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/funding/get-withdrawal-information",
+  "meta": {
+    "signed": true
+  },
+  "redacted": [
+    "nonce"
+  ],
+  "unverified": {
+    "reason": "requires_state",
+    "detail": "`key` must name a withdrawal key already set up in Kraken's own address book (see `withdraw_addresses`); calling with an unregistered `key` just returns an API error, not a meaningful example. The account's real `withdraw_addresses` currently has exactly one entry ('Deribit' -> an ETH address), which is not the address `client.toml`'s `[policy.permissions].withdraw_addresses` pre-approves (a different `0xE089aB95D28aCA5804a2F99c2cc259A88d3Be799`). The policy-approved address has not been added as a withdrawal key on the account, so there is no in-policy `key` to call this with yet. Needs that address registered as a withdrawal key (a manual/write-adjacent account step) before this can be captured."
+  },
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/private/WithdrawInfo",
+    "method": "POST",
+    "description": "Retrieve fee information about a potential withdrawal for a particular asset, key, and amount. Requires the `Funds permissions - Query` and `Funds permissions - Withdraw` API key permissions.",
+    "request": {
+      "title": "WithdrawInfoRequest",
+      "type": "object",
+      "required": [
+        "asset",
+        "key",
+        "amount"
+      ],
+      "properties": {
+        "asset": {
+          "type": "string",
+          "description": "Asset being withdrawn."
+        },
+        "key": {
+          "type": "string",
+          "description": "Withdrawal key name, as set up on the account."
+        },
+        "amount": {
+          "type": "string",
+          "description": "Amount to be withdrawn."
+        }
+      }
+    },
+    "response": {
+      "title": "WithdrawalInfo",
+      "type": "object",
+      "description": "Fee and limit information for a potential withdrawal.",
+      "properties": {
+        "method": {
+          "type": "string",
+          "description": "Name of the withdrawal method that will be used."
+        },
+        "limit": {
+          "type": "string",
+          "description": "Maximum net amount that can be withdrawn right now."
+        },
+        "amount": {
+          "type": "string",
+          "description": "Net amount that will be sent, after fees."
+        },
+        "fee": {
+          "type": "string",
+          "description": "Amount of fees that will be paid."
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "Upstream `requestBody` requires `nonce`; dropped from this schema since the core's `authed_request` (`core/transport/http.py`) injects a strictly-increasing nonce into every private call automatically -- it is never a caller-supplied parameter, matching the existing hand-written `deposit_methods(self, asset)` signature, which takes none."
+  ]
+}

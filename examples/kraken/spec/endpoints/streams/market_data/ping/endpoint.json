@@ -1,0 +1,60 @@
+{
+  "docs": "https://docs.kraken.com/exchange/api-reference/spot-websocket-v2/ping",
+  "meta": {},
+  "redacted": [
+    "req_id"
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "ws"
+    ],
+    "path": "ping",
+    "description": "Application-level ping to verify the WebSocket connection is alive -- distinct from the WebSocket protocol's own ping frames. The server answers with a `pong`. Useful to keep an otherwise-idle connection open (Kraken closes any connection after roughly a minute of inactivity).",
+    "request": null,
+    "response": {
+      "title": "PongReply",
+      "type": "object",
+      "description": "The reply to a `ping` request.",
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": [
+            "pong"
+          ],
+          "description": "Always `pong` -- note this differs from the request's own `method` value of `ping`."
+        },
+        "req_id": {
+          "type": "integer",
+          "description": "Client-originated request identifier, echoed back if one was sent."
+        },
+        "success": {
+          "type": "boolean",
+          "description": "Indicates if the request was successfully processed by the engine."
+        },
+        "error": {
+          "type": "string",
+          "description": "Error message, present when `success` is `false`."
+        },
+        "time_in": {
+          "type": "string",
+          "description": "RFC3339 timestamp when the request was received on the wire, just prior to parsing.",
+          "format": "date-time"
+        },
+        "time_out": {
+          "type": "string",
+          "description": "RFC3339 timestamp when the response was sent on the wire, just prior to transmitting.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "method",
+        "time_in",
+        "time_out"
+      ]
+    }
+  },
+  "notes": [
+    "Two deliberate judgment calls, per the assignment brief's instruction to check whether `ping` needs an `envelope`/`correlate` declaration like the trading commands do: (1) No `requestBody` is declared -- unlike every other WS command (e.g. `add_order`), the documented `ping` request frame carries no `params` object at all, just bare `{\"method\": \"ping\", \"req_id\": N}`; there is nothing to model as parameters. (2) No `envelope` is declared, unlike `add_order`'s `{\"extract\": \"result\", \"correlate\": \"req_id\"}`. Kraken's `pong` reply never carries a `result` field (confirmed by both the field reference and the worked example) -- routing it through the generic `KrakenSocketClient.request()` path used by the trading methods would always extract `null`, discarding the only informative content (`method: \"pong\"`, `time_in`/`time_out` for round-trip timing). The whole-frame default (no `envelope`) is used instead so the response schema stays useful. `ping` itself is not wired into `pkg/src/kraken/streams/market_data.py` yet -- this spec does not assume or invent how it will be; a future `WsRpcEndpoint`-based `ping()` method would call the generic `request('ping', ...)` primitive same as `add_order`, but that primitive's blanket `result`-extraction is exactly what makes an `envelope` declaration wrong for this one endpoint. Also note the doc page's own `ResponseField` tags mark only `method`/`req_id` (not `success`) with the `required` attribute in its Response tab, yet the worked JSON example omits `success` while showing `method`/`req_id`/`time_in`/`time_out` -- `required` here follows the worked example (the more concrete evidence) rather than the tag."
+  ]
+}

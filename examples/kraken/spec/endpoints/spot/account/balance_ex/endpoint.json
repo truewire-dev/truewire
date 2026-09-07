@@ -1,0 +1,77 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/account-data/get-extended-balance",
+  "meta": {
+    "signed": true
+  },
+  "redacted": [
+    "nonce"
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/private/BalanceEx",
+    "method": "POST",
+    "description": "Retrieve all extended account balances, including credit and held amounts. Balance available for trading is `balance + credit - credit_used - hold_trade`. Held amounts only include spot non-margin orders.\n\n**Note on Staking/Earn assets:** assets migrated from the legacy Staking system to the new Earn system may appear with symbol extensions -- `.B`, `.F`, `.S`, `.M`, `.T` -- these are read-only for transacting; use the base asset instead.\n\n**API Key Permissions Required:** `Funds permissions - Query`",
+    "request": {
+      "title": "BalanceExRequest",
+      "type": "object",
+      "properties": {
+        "rebase_multiplier": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "rebased",
+                "base"
+              ],
+              "default": "rebased"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional parameter for viewing xstocks data. `rebased` displays in terms of underlying equity, `base` displays in terms of SPV tokens."
+        }
+      }
+    },
+    "response": {
+      "title": "ExtendedBalances",
+      "description": "Extended balances, keyed by asset code.",
+      "type": "object",
+      "additionalProperties": {
+        "title": "ExtendedBalance",
+        "description": "Extended balance detail for one asset.",
+        "type": "object",
+        "properties": {
+          "balance": {
+            "description": "Total balance amount for this asset.",
+            "type": "string",
+            "example": "3.46840030",
+            "format": "decimal-string"
+          },
+          "credit": {
+            "description": "Total credit amount. Only present if the account has a credit line.",
+            "type": "string",
+            "example": "1.26844502"
+          },
+          "credit_used": {
+            "description": "Used credit amount. Only present if the account has a credit line.",
+            "type": "string",
+            "example": "0.10002300"
+          },
+          "hold_trade": {
+            "description": "Total held amount for this asset (spot non-margin orders only).",
+            "type": "string",
+            "example": "2.14560458",
+            "format": "decimal-string"
+          }
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  }
+}

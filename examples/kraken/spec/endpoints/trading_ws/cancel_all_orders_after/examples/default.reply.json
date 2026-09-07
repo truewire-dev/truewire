@@ -1,0 +1,11 @@
+{
+  "method": "cancel_all_orders_after",
+  "req_id": 7,
+  "result": {
+    "currentTime": "2026-08-13T12:10:49Z",
+    "triggerTime": "2026-08-13T12:11:49Z"
+  },
+  "success": true,
+  "time_in": "2026-08-13T12:10:48.261848Z",
+  "time_out": "2026-08-13T12:10:48.263026Z"
+}

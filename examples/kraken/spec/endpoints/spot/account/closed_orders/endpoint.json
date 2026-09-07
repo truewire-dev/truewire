@@ -1,0 +1,314 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/account-data/get-closed-orders",
+  "meta": {
+    "signed": true
+  },
+  "redacted": [
+    "nonce"
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/private/ClosedOrders",
+    "method": "POST",
+    "description": "Retrieve information about orders that have been closed (filled or cancelled). 50 results are returned at a time, the most recent by default. If an order's tx ID is given for `start` or `end`, the order's opening time (`opentm`) is used.\n\n**API Key Permissions Required:** `Orders and trades - Query closed orders & trades`",
+    "request": {
+      "title": "ClosedOrdersRequest",
+      "type": "object",
+      "properties": {
+        "trades": {
+          "description": "Whether or not to include trades related to position in output.",
+          "type": "boolean",
+          "default": false
+        },
+        "userref": {
+          "description": "Restrict results to the given user reference id.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "cl_ord_id": {
+          "description": "Restrict results to the given client order id.",
+          "type": "string"
+        },
+        "start": {
+          "description": "Starting unix timestamp or order tx ID of results (exclusive).",
+          "type": "integer"
+        },
+        "end": {
+          "description": "Ending unix timestamp or order tx ID of results (inclusive).",
+          "type": "integer"
+        },
+        "ofs": {
+          "description": "Result offset for pagination.",
+          "type": "integer"
+        },
+        "closetime": {
+          "description": "Which time to use to search.",
+          "type": "string",
+          "enum": [
+            "open",
+            "close",
+            "both"
+          ],
+          "default": "both"
+        },
+        "consolidate_taker": {
+          "description": "Whether or not to consolidate trades by individual taker trades.",
+          "type": "boolean",
+          "default": true
+        },
+        "without_count": {
+          "description": "Whether or not to include the page count in the result (`true` is much faster for users with many closed orders).",
+          "type": "boolean",
+          "default": false
+        },
+        "rebase_multiplier": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "rebased",
+                "base"
+              ],
+              "default": "rebased"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional parameter for viewing xstocks data. `rebased` displays in terms of underlying equity, `base` displays in terms of SPV tokens."
+        }
+      }
+    },
+    "response": {
+      "title": "ClosedOrders",
+      "description": "Closed (filled or cancelled) orders.",
+      "type": "object",
+      "properties": {
+        "closed": {
+          "description": "Closed orders, keyed by transaction ID.",
+          "type": "object",
+          "additionalProperties": {
+            "title": "ClosedOrder",
+            "description": "One closed order.",
+            "type": "object",
+            "properties": {
+              "refid": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Referral order transaction ID that created this order."
+              },
+              "userref": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Optional numeric client identifier associated with one or more orders."
+              },
+              "cl_ord_id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Optional alphanumeric client identifier associated with the order."
+              },
+              "status": {
+                "description": "Status of the order: `pending` (pending book entry), `open`, `closed`, `canceled`, or `expired`.",
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "open",
+                  "closed",
+                  "canceled",
+                  "expired"
+                ]
+              },
+              "opentm": {
+                "description": "Unix timestamp of when the order was placed.",
+                "type": "number"
+              },
+              "starttm": {
+                "description": "Unix timestamp of order start time (or 0 if not set).",
+                "type": "number"
+              },
+              "expiretm": {
+                "description": "Unix timestamp of order end time (or 0 if not set).",
+                "type": "number"
+              },
+              "descr": {
+                "title": "OrderDescription",
+                "description": "Order description info.",
+                "type": "object",
+                "properties": {
+                  "pair": {
+                    "description": "Asset pair.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "description": "Type of order.",
+                    "type": "string",
+                    "enum": [
+                      "buy",
+                      "sell"
+                    ]
+                  },
+                  "ordertype": {
+                    "description": "Order type.",
+                    "type": "string",
+                    "enum": [
+                      "market",
+                      "limit",
+                      "iceberg",
+                      "stop-loss",
+                      "take-profit",
+                      "trailing-stop",
+                      "stop-loss-limit",
+                      "take-profit-limit",
+                      "trailing-stop-limit",
+                      "settle-position"
+                    ]
+                  },
+                  "price": {
+                    "description": "Primary price.",
+                    "type": "string"
+                  },
+                  "price2": {
+                    "description": "Secondary price.",
+                    "type": "string"
+                  },
+                  "leverage": {
+                    "description": "Amount of leverage.",
+                    "type": "string"
+                  },
+                  "order": {
+                    "description": "Order description, as human-readable text.",
+                    "type": "string"
+                  },
+                  "close": {
+                    "description": "Conditional close order description (if conditional close set).",
+                    "type": "string"
+                  },
+                  "aclass": {
+                    "description": "Asset class of the pair.",
+                    "type": "string"
+                  }
+                }
+              },
+              "time_in_force": {
+                "description": "Time-in-force of the order: `gtc` (good till cancelled), `ioc` (immediate or cancel), `gtd` (good till date), or `fok` (fill or kill).",
+                "type": "string",
+                "enum": [
+                  "gtc",
+                  "ioc",
+                  "gtd",
+                  "fok"
+                ]
+              },
+              "vol": {
+                "description": "Volume of order (base currency).",
+                "type": "string"
+              },
+              "vol_exec": {
+                "description": "Volume executed (base currency).",
+                "type": "string"
+              },
+              "cost": {
+                "description": "Total cost (quote currency).",
+                "type": "string"
+              },
+              "fee": {
+                "description": "Total fee (quote currency).",
+                "type": "string"
+              },
+              "price": {
+                "description": "Average price (quote currency).",
+                "type": "string"
+              },
+              "stopprice": {
+                "description": "Stop price (quote currency).",
+                "type": "string"
+              },
+              "limitprice": {
+                "description": "Triggered limit price (quote currency, when limit-based order type triggered).",
+                "type": "string"
+              },
+              "trigger": {
+                "description": "Price signal used to trigger `stop-loss`/`take-profit`/`stop-loss-limit`/`take-profit-limit` orders. `last` is the implied trigger if this field is not set.",
+                "type": "string",
+                "enum": [
+                  "last",
+                  "index"
+                ],
+                "default": "last"
+              },
+              "margin": {
+                "description": "Indicates if the order is funded on margin.",
+                "type": "boolean"
+              },
+              "misc": {
+                "description": "Comma-delimited list of miscellaneous info: `stopped` (triggered by stop price), `touched` (triggered by touch price), `liquidated`, `partial` (partial fill), `amended` (order parameters modified).",
+                "type": "string"
+              },
+              "oflags": {
+                "description": "Comma-delimited list of order flags: `post` (post-only, available when ordertype = limit), `fcib` (prefer fee in base currency, default if selling), `fciq` (prefer fee in quote currency, default if buying, mutually exclusive with `fcib`), `nompp` (disable Market Price Protection for market orders), `viqc` (order volumes expressed in quote currency).",
+                "type": "string"
+              },
+              "trades": {
+                "description": "List of trade IDs related to the order (if trades info requested and data available).",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "sender_sub_id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "For institutional accounts, identifies the underlying sub-account/trader for Self Trade Prevention (STP)."
+              },
+              "closetm": {
+                "description": "Unix timestamp of when the order was closed.",
+                "type": "number"
+              },
+              "reason": {
+                "description": "Additional info on status (if any).",
+                "type": "string"
+              }
+            }
+          }
+        },
+        "count": {
+          "description": "Amount of available order info matching criteria. Omitted from the response when `without_count` is `true`.",
+          "type": "integer"
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "This endpoint genuinely paginates -- `ofs` offsets a fixed 50-row page and `count` (total matching orders) would terminate the walk -- but this format's `pagination` block cannot state it: an item-counted `total` (rule 7) requires a declared `size` parameter to convert the count into a number of pages, and Kraken exposes no parameter to set (or otherwise learn) the page size for this endpoint, only the offset. No `pagination` block is declared, matching rule 7's guidance to say so in `notes` rather than invent one; `count` is also absent entirely when `without_count: true` is passed."
+  ]
+}

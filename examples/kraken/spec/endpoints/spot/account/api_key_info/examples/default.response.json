@@ -1,0 +1,35 @@
+{
+  "status": 200,
+  "payload": {
+    "error": [],
+    "result": {
+      "api_key_name": "Typed Dev",
+      "api_key": "FAKEPLACEHOLDERKEYaBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789A/BCD",
+      "nonce": "1786622480727",
+      "nonce_window": "0",
+      "permissions": [
+        "query-funds",
+        "add-funds",
+        "withdraw-funds",
+        "earn-funds",
+        "query-open-trades",
+        "query-closed-trades",
+        "modify-trades",
+        "close-trades",
+        "query-ledger",
+        "export-data",
+        "create-ws-token"
+      ],
+      "iban": "AA32 F00B AR12 34ZZ",
+      "valid_until": "0",
+      "query_from": "0",
+      "query_to": "0",
+      "created_time": "1786616871",
+      "modified_time": "1786616871",
+      "ip_allowlist": [
+        "203.0.113.5/32"
+      ],
+      "last_used": "1786622480"
+    }
+  }
+}

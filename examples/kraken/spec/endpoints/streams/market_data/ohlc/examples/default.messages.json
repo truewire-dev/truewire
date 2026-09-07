@@ -1,0 +1,179 @@
+[
+  {
+    "channel": "ohlc",
+    "type": "snapshot",
+    "timestamp": "2026-08-13T12:07:25.986062415Z",
+    "data": [
+      {
+        "symbol": "BTC/USD",
+        "open": 63401.0,
+        "high": 63405.2,
+        "low": 63401.0,
+        "close": 63401.8,
+        "trades": 10,
+        "volume": 0.00366411,
+        "vwap": 63404.1,
+        "interval_begin": "2026-08-13T11:58:00.000000000Z",
+        "interval": 1,
+        "timestamp": "2026-08-13T11:59:00.000000Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "open": 63401.0,
+        "high": 63406.0,
+        "low": 63401.0,
+        "close": 63406.0,
+        "trades": 16,
+        "volume": 0.54650289,
+        "vwap": 63405.9,
+        "interval_begin": "2026-08-13T11:59:00.000000000Z",
+        "interval": 1,
+        "timestamp": "2026-08-13T12:00:00.000000Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "open": 63406.0,
+        "high": 63408.1,
+        "low": 63397.4,
+        "close": 63397.4,
+        "trades": 104,
+        "volume": 2.94987562,
+        "vwap": 63405.4,
+        "interval_begin": "2026-08-13T12:00:00.000000000Z",
+        "interval": 1,
+        "timestamp": "2026-08-13T12:01:00.000000Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "open": 63393.2,
+        "high": 63404.9,
+        "low": 63377.1,
+        "close": 63404.9,
+        "trades": 56,
+        "volume": 2.50434104,
+        "vwap": 63385.9,
+        "interval_begin": "2026-08-13T12:01:00.000000000Z",
+        "interval": 1,
+        "timestamp": "2026-08-13T12:02:00.000000Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "open": 63404.8,
+        "high": 63414.4,
+        "low": 63404.8,
+        "close": 63414.4,
+        "trades": 11,
+        "volume": 0.01901658,
+        "vwap": 63410.5,
+        "interval_begin": "2026-08-13T12:02:00.000000000Z",
+        "interval": 1,
+        "timestamp": "2026-08-13T12:03:00.000000Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "open": 63400.6,
+        "high": 63400.6,
+        "low": 63398.2,
+        "close": 63398.3,
+        "trades": 8,
+        "volume": 0.02134216,
+        "vwap": 63400.4,
+        "interval_begin": "2026-08-13T12:03:00.000000000Z",
+        "interval": 1,
+        "timestamp": "2026-08-13T12:04:00.000000Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "open": 63398.3,
+        "high": 63398.3,
+        "low": 63397.0,
+        "close": 63397.0,
+        "trades": 21,
+        "volume": 0.05753185,
+        "vwap": 63397.1,
+        "interval_begin": "2026-08-13T12:04:00.000000000Z",
+        "interval": 1,
+        "timestamp": "2026-08-13T12:05:00.000000Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "open": 63397.1,
+        "high": 63407.4,
+        "low": 63390.7,
+        "close": 63407.4,
+        "trades": 39,
+        "volume": 1.4696083,
+        "vwap": 63392.9,
+        "interval_begin": "2026-08-13T12:05:00.000000000Z",
+        "interval": 1,
+        "timestamp": "2026-08-13T12:06:00.000000Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "open": 63407.4,
+        "high": 63452.2,
+        "low": 63407.4,
+        "close": 63449.3,
+        "trades": 23,
+        "volume": 0.06813903,
+        "vwap": 63425.2,
+        "interval_begin": "2026-08-13T12:06:00.000000000Z",
+        "interval": 1,
+        "timestamp": "2026-08-13T12:07:00.000000Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "open": 63449.4,
+        "high": 63449.4,
+        "low": 63444.2,
+        "close": 63449.0,
+        "trades": 12,
+        "volume": 0.1284474,
+        "vwap": 63445.8,
+        "interval_begin": "2026-08-13T12:07:00.000000000Z",
+        "interval": 1,
+        "timestamp": "2026-08-13T12:08:00.000000Z"
+      }
+    ]
+  },
+  {
+    "channel": "ohlc",
+    "type": "update",
+    "timestamp": "2026-08-13T12:07:33.259639422Z",
+    "data": [
+      {
+        "symbol": "BTC/USD",
+        "open": 63449.4,
+        "high": 63449.4,
+        "low": 63444.2,
+        "close": 63448.9,
+        "trades": 14,
+        "volume": 0.12998964,
+        "vwap": 63445.8,
+        "interval_begin": "2026-08-13T12:07:00.000000000Z",
+        "interval": 1,
+        "timestamp": "2026-08-13T12:08:00.000000Z"
+      }
+    ]
+  },
+  {
+    "channel": "ohlc",
+    "type": "update",
+    "timestamp": "2026-08-13T12:07:37.570857786Z",
+    "data": [
+      {
+        "symbol": "BTC/USD",
+        "open": 63449.4,
+        "high": 63449.4,
+        "low": 63444.2,
+        "close": 63448.9,
+        "trades": 15,
+        "volume": 0.13004385,
+        "vwap": 63445.8,
+        "interval_begin": "2026-08-13T12:07:00.000000000Z",
+        "interval": 1,
+        "timestamp": "2026-08-13T12:08:00.000000Z"
+      }
+    ]
+  }
+]

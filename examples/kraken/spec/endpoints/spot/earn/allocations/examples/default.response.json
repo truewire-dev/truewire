@@ -1,0 +1,43 @@
+{
+  "status": 200,
+  "payload": {
+    "error": [],
+    "result": {
+      "converted_asset": "USD",
+      "converted_asset_class": "currency",
+      "total_allocated": "0.0002",
+      "total_rewarded": "0.0002",
+      "next_cursor": null,
+      "items": [
+        {
+          "strategy_id": "ESSR5EH-CKYSY-NUQNZI",
+          "native_asset": "ETH",
+          "asset_class": "currency",
+          "amount_allocated": {
+            "total": {
+              "native": "0.0000001109",
+              "converted": "0.0002"
+            }
+          },
+          "total_rewarded": {
+            "native": "0.0000001109",
+            "converted": "0.0002"
+          },
+          "payout": {
+            "period_start": "2026-08-06T19:54:03Z",
+            "period_end": "2026-08-13T19:54:03Z",
+            "accumulated_reward": {
+              "native": "0.0000000000",
+              "converted": "0.0000"
+            },
+            "estimated_reward": {
+              "native": "0.0000000000",
+              "converted": "0.0000"
+            }
+          },
+          "is_utilized": false
+        }
+      ]
+    }
+  }
+}

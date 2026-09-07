@@ -1,0 +1,40 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/trading/get-websockets-token",
+  "meta": {
+    "signed": true
+  },
+  "redacted": [
+    "nonce"
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/private/GetWebSocketsToken",
+    "method": "POST",
+    "description": "Request an authentication token for connecting to and authenticating with Kraken's private WebSocket API. The token should be used within 15 minutes of issuance; once a successful connection and private subscription has been made, it does not expire for the life of that connection.\n\n**API Key Permissions Required:** `WebSocket interface - On`",
+    "request": null,
+    "response": {
+      "title": "WebSocketsToken",
+      "type": "object",
+      "description": "A short-lived token authenticating a private WebSocket connection.",
+      "properties": {
+        "token": {
+          "type": "string",
+          "description": "WebSocket authentication token."
+        },
+        "expires": {
+          "type": "integer",
+          "description": "Seconds after which the token expires (~900), unless already consumed by a private WebSocket subscription."
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "Upstream's request body declares only `nonce`, which is transport-injected by the client core (authed_request) rather than a caller-supplied parameter -- so once dropped there is nothing left to describe, and `requestBody` is omitted entirely rather than declared as an empty object."
+  ]
+}

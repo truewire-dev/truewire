@@ -1,0 +1,297 @@
+{
+  "status": 200,
+  "payload": {
+    "error": [],
+    "result": {
+      "count": 26,
+      "ledger": {
+        "LECRYU-2KORF-Q4DV5Y": {
+          "aclass": "currency",
+          "amount": "10.00000000",
+          "asset": "USDC",
+          "balance": "10.00000000",
+          "fee": "0.00000000",
+          "refid": "FTCmumN-faghQBkeUHreU4KCzDhgnK",
+          "time": 1786617186.301008,
+          "type": "deposit",
+          "subtype": ""
+        },
+        "LEMGHI-MQESL-XJGCDP": {
+          "aclass": "currency",
+          "amount": "0.0000000001",
+          "asset": "XETH",
+          "balance": "0.0000001109",
+          "fee": "0.0000000000",
+          "refid": "ELS3UQ5-LIYEO-CTTDO3",
+          "time": 1785441248.771268,
+          "type": "staking",
+          "subtype": ""
+        },
+        "LTHITG-E3RPS-7GZLXG": {
+          "aclass": "currency",
+          "amount": "0.0000000001",
+          "asset": "XETH",
+          "balance": "0.0000001108",
+          "fee": "0.0000000000",
+          "refid": "ELJ3V4C-ODVMT-MI7ILB",
+          "time": 1783022059.761098,
+          "type": "staking",
+          "subtype": ""
+        },
+        "L4UHFW-PUNZ7-C6RK2U": {
+          "aclass": "currency",
+          "amount": "0.0000000001",
+          "asset": "XETH",
+          "balance": "0.0000001107",
+          "fee": "0.0000000000",
+          "refid": "ELXGG2Y-G2OGM-RUDPJF",
+          "time": 1780602859.571722,
+          "type": "staking",
+          "subtype": ""
+        },
+        "L724KX-D6IZ5-YTZTCH": {
+          "aclass": "currency",
+          "amount": "0.0000000001",
+          "asset": "XETH",
+          "balance": "0.0000001106",
+          "fee": "0.0000000000",
+          "refid": "EL64KCN-O2ODI-XUPLNN",
+          "time": 1778788461.490633,
+          "type": "staking",
+          "subtype": ""
+        },
+        "LIFFVP-5KAB2-Q4OBOM": {
+          "aclass": "currency",
+          "amount": "0.0000000001",
+          "asset": "XETH",
+          "balance": "0.0000001105",
+          "fee": "0.0000000000",
+          "refid": "ELFHDOJ-5T2IS-RIATTN",
+          "time": 1776369285.451108,
+          "type": "staking",
+          "subtype": ""
+        },
+        "L7RWWX-V2XVH-XFUOJF": {
+          "aclass": "currency",
+          "amount": "0.0000000001",
+          "asset": "XETH",
+          "balance": "0.0000001104",
+          "fee": "0.0000000000",
+          "refid": "ELQK5UW-ZCD4E-66GSEX",
+          "time": 1773950084.166545,
+          "type": "staking",
+          "subtype": ""
+        },
+        "LJXEZS-H65G6-D3AOMW": {
+          "aclass": "currency",
+          "amount": "0.0000000001",
+          "asset": "XETH",
+          "balance": "0.0000001103",
+          "fee": "0.0000000000",
+          "refid": "ELFIJP6-HQCHT-IMYY73",
+          "time": 1771530859.100488,
+          "type": "staking",
+          "subtype": ""
+        },
+        "LBOZKP-UJYT7-NG3LZM": {
+          "aclass": "currency",
+          "amount": "0.0000000001",
+          "asset": "XETH",
+          "balance": "0.0000001102",
+          "fee": "0.0000000000",
+          "refid": "ELBVKTC-PA5ZI-E7JP33",
+          "time": 1769716460.953949,
+          "type": "staking",
+          "subtype": ""
+        },
+        "L6KNY4-LESL5-3RMRRX": {
+          "aclass": "currency",
+          "amount": "0.0000000001",
+          "asset": "XETH",
+          "balance": "0.0000001101",
+          "fee": "0.0000000000",
+          "refid": "ELYCVY3-4IPHD-WDTG4F",
+          "time": 1767902062.858874,
+          "type": "staking",
+          "subtype": ""
+        },
+        "LI3NHZ-EQ5OZ-X6IBKW": {
+          "aclass": "currency",
+          "amount": "0.0000000001",
+          "asset": "XETH",
+          "balance": "0.0000001100",
+          "fee": "0.0000000000",
+          "refid": "ELR52YO-HPO7J-IF36LT",
+          "time": 1766087654.975138,
+          "type": "staking",
+          "subtype": ""
+        },
+        "LTSIKS-PXRCO-QPC2JJ": {
+          "aclass": "currency",
+          "amount": "0.0000000001",
+          "asset": "XETH",
+          "balance": "0.0000001099",
+          "fee": "0.0000000000",
+          "refid": "ELRJAHE-U3ARN-M7ONZ7",
+          "time": 1764273265.721748,
+          "type": "staking",
+          "subtype": ""
+        },
+        "L2E57C-SOZL2-DNFCSO": {
+          "aclass": "currency",
+          "amount": "0.0000001098",
+          "asset": "XETH",
+          "balance": "0.0000001098",
+          "fee": "0.0000000000",
+          "refid": "ELSYG4R-GG4FE-ZTYKVA",
+          "time": 1763410056.903966,
+          "type": "transfer",
+          "subtype": "autoallocation"
+        },
+        "LS3K22-IKEL2-YTK4VS": {
+          "aclass": "currency",
+          "amount": "-0.0000001098",
+          "asset": "XETH.F",
+          "balance": "0.0000000000",
+          "fee": "0.0000000000",
+          "refid": "ELSYG4R-GG4FE-ZTYKVA",
+          "time": 1763410056.903966,
+          "type": "transfer",
+          "subtype": "autoallocation"
+        },
+        "LTXDIW-V4RJ6-ZGCJWQ": {
+          "aclass": "currency",
+          "amount": "0.0000000001",
+          "asset": "XETH.F",
+          "balance": "0.0000001098",
+          "fee": "0.0000000000",
+          "refid": "EL5NBC4-J6SIY-QYSZXL",
+          "time": 1762459341.26936,
+          "type": "staking",
+          "subtype": ""
+        },
+        "LYO7CX-JEJSA-7DZQA3": {
+          "aclass": "currency",
+          "amount": "0.0000000001",
+          "asset": "XETH.F",
+          "balance": "0.0000001097",
+          "fee": "0.0000000000",
+          "refid": "ELN43TJ-YQP54-TFW2FL",
+          "time": 1760644467.018085,
+          "type": "staking",
+          "subtype": ""
+        },
+        "L5PTHE-N4OSE-SAGJ6N": {
+          "aclass": "currency",
+          "amount": "0.0000000001",
+          "asset": "XETH.F",
+          "balance": "0.0000001096",
+          "fee": "0.0000000000",
+          "refid": "ELVULPI-HNW5O-WECMHW",
+          "time": 1758830062.862888,
+          "type": "staking",
+          "subtype": ""
+        },
+        "L45MCS-4HUSN-VZIKXN": {
+          "aclass": "currency",
+          "amount": "0.0000000001",
+          "asset": "XETH.F",
+          "balance": "0.0000001095",
+          "fee": "0.0000000000",
+          "refid": "ELQ4VZE-326UC-UZ5X43",
+          "time": 1756410885.244627,
+          "type": "staking",
+          "subtype": ""
+        },
+        "LXMNN4-M27MH-6OUUIN": {
+          "aclass": "currency",
+          "amount": "0.0000001562",
+          "asset": "XETH.F",
+          "balance": "0.0000001094",
+          "fee": "0.0000000468",
+          "refid": "ELWBLMY-NAWM7-PXPA6M",
+          "time": 1755201268.427113,
+          "type": "staking",
+          "subtype": ""
+        },
+        "LMTNDP-XLJIB-TKKYVD": {
+          "aclass": "currency",
+          "amount": "-0.4898500000",
+          "asset": "XETH.F",
+          "balance": "0.0000000000",
+          "fee": "0.0001500000",
+          "refid": "FTZlDDS-Sl7hQHiOKvrLB43Uxki959",
+          "time": 1754762167.452424,
+          "type": "withdrawal",
+          "subtype": ""
+        },
+        "LICIFH-HBR4P-COJUCG": {
+          "aclass": "currency",
+          "amount": "0.3900000000",
+          "asset": "XETH.F",
+          "balance": "0.4900000000",
+          "fee": "0.0000000000",
+          "refid": "ELRRTJO-A4FTJ-3T46E7",
+          "time": 1754762040.977872,
+          "type": "transfer",
+          "subtype": "autoallocation"
+        },
+        "LQEBVU-O4IOK-GUXASW": {
+          "aclass": "currency",
+          "amount": "-0.3900000000",
+          "asset": "XETH",
+          "balance": "0.0000000000",
+          "fee": "0.0000000000",
+          "refid": "ELRRTJO-A4FTJ-3T46E7",
+          "time": 1754762040.977872,
+          "type": "transfer",
+          "subtype": "autoallocation"
+        },
+        "LZKY4I-4ZPRL-RUWTLC": {
+          "aclass": "currency",
+          "amount": "0.3900000000",
+          "asset": "XETH",
+          "balance": "0.3900000000",
+          "fee": "0.0000000000",
+          "refid": "FTdrEWB-Su4vPYtlqprRRNubWQTXor",
+          "time": 1754762040.622388,
+          "type": "deposit",
+          "subtype": ""
+        },
+        "LV4FO7-GUCTI-NOTYIG": {
+          "aclass": "currency",
+          "amount": "0.1000000000",
+          "asset": "XETH.F",
+          "balance": "0.1000000000",
+          "fee": "0.0000000000",
+          "refid": "ELKVBX2-25JRY-QABHHI",
+          "time": 1754759190.963363,
+          "type": "transfer",
+          "subtype": "autoallocation"
+        },
+        "L4QOWC-TUTTK-FMEOF7": {
+          "aclass": "currency",
+          "amount": "-0.1000000000",
+          "asset": "XETH",
+          "balance": "0.0000000000",
+          "fee": "0.0000000000",
+          "refid": "ELKVBX2-25JRY-QABHHI",
+          "time": 1754759190.963363,
+          "type": "transfer",
+          "subtype": "autoallocation"
+        },
+        "LVTMQO-ELVJC-Q3MHJA": {
+          "aclass": "currency",
+          "amount": "0.1000000000",
+          "asset": "XETH",
+          "balance": "0.1000000000",
+          "fee": "0.0000000000",
+          "refid": "FTkdl8w-iEr9zixRU7sBDnlSbcd7V2",
+          "time": 1754759190.065198,
+          "type": "deposit",
+          "subtype": ""
+        }
+      }
+    }
+  }
+}

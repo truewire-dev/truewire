@@ -1,0 +1,104 @@
+{
+  "status": 200,
+  "payload": {
+    "error": [],
+    "result": {
+      "closed": {
+        "OFQUZN-MPYKK-LHYJOJ": {
+          "refid": null,
+          "userref": 0,
+          "status": "canceled",
+          "opentm": 1786622607.676426,
+          "starttm": 0,
+          "expiretm": 0,
+          "descr": {
+            "pair": "XBTUSDC",
+            "aclass": "forex",
+            "type": "buy",
+            "ordertype": "limit",
+            "price": "10002.00",
+            "price2": "0",
+            "leverage": "none",
+            "order": "buy 0.00010000 XBTUSDC @ limit 10002.00",
+            "close": ""
+          },
+          "vol": "0.00010000",
+          "vol_exec": "0.00000000",
+          "cost": "0.00000",
+          "fee": "0.00000",
+          "price": "0.00000",
+          "stopprice": "0.00000",
+          "limitprice": "0.00000",
+          "misc": "",
+          "oflags": "fciq",
+          "time_in_force": "gtc",
+          "reason": "User requested",
+          "closetm": 1786622607.714511
+        },
+        "OUPKP4-EXQSC-6V6ULE": {
+          "refid": null,
+          "userref": 0,
+          "status": "canceled",
+          "opentm": 1786622607.63996,
+          "starttm": 0,
+          "expiretm": 0,
+          "descr": {
+            "pair": "XBTUSDC",
+            "aclass": "forex",
+            "type": "buy",
+            "ordertype": "limit",
+            "price": "10000.00",
+            "price2": "0",
+            "leverage": "none",
+            "order": "buy 0.00010000 XBTUSDC @ limit 10000.00",
+            "close": ""
+          },
+          "vol": "0.00010000",
+          "vol_exec": "0.00000000",
+          "cost": "0.00000",
+          "fee": "0.00000",
+          "price": "0.00000",
+          "stopprice": "0.00000",
+          "limitprice": "0.00000",
+          "misc": "",
+          "oflags": "fciq",
+          "time_in_force": "gtc",
+          "reason": "Order replaced",
+          "closetm": 1786622607.676426
+        },
+        "OURPSH-QDPAT-5RPR6H": {
+          "refid": null,
+          "userref": 0,
+          "status": "canceled",
+          "opentm": 1786622607.33334,
+          "starttm": 0,
+          "expiretm": 0,
+          "descr": {
+            "pair": "XBTUSDC",
+            "aclass": "forex",
+            "type": "buy",
+            "ordertype": "limit",
+            "price": "10001.00",
+            "price2": "0",
+            "leverage": "none",
+            "order": "buy 0.00010000 XBTUSDC @ limit 10001.00",
+            "close": ""
+          },
+          "vol": "0.00010000",
+          "vol_exec": "0.00000000",
+          "cost": "0.00000",
+          "fee": "0.00000",
+          "price": "0.00000",
+          "stopprice": "0.00000",
+          "limitprice": "0.00000",
+          "misc": "amended",
+          "oflags": "fciq",
+          "time_in_force": "gtc",
+          "reason": "User requested",
+          "closetm": 1786622607.521759
+        }
+      },
+      "count": 3
+    }
+  }
+}

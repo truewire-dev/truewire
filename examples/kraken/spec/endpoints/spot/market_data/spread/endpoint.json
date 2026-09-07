@@ -1,0 +1,90 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/market-data/get-recent-spreads",
+  "meta": {},
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/public/Spread",
+    "method": "GET",
+    "description": "Returns the last ~200 top-of-book spreads for a given pair.",
+    "request": {
+      "title": "SpreadRequest",
+      "type": "object",
+      "properties": {
+        "pair": {
+          "type": "string",
+          "description": "Asset pair to get data for."
+        },
+        "assetVersion": {
+          "type": "integer",
+          "enum": [
+            1
+          ],
+          "description": "Controls whether response keys use Kraken's internal names or display names. Omitted (default): internal names are used. `assetVersion=1`: display names are used. Only `assetVersion=1` is currently supported."
+        },
+        "since": {
+          "type": "integer",
+          "format": "epoch-seconds",
+          "description": "Returns spread data since given timestamp. Optional, intended for incremental updates within available dataset (does not contain all historical spreads)."
+        },
+        "asset_class": {
+          "type": "string",
+          "enum": [
+            "tokenized_asset"
+          ],
+          "description": "This parameter is required on requests for non-crypto pairs, i.e. use `tokenized_asset` for xstocks."
+        }
+      },
+      "required": [
+        "pair"
+      ]
+    },
+    "response": {
+      "title": "SpreadResult",
+      "description": "Spreads keyed by pair, plus the polling cursor.",
+      "type": "object",
+      "properties": {
+        "last": {
+          "type": "integer",
+          "description": "ID to be used as `since` when polling for new spread data."
+        }
+      },
+      "additionalProperties": {
+        "description": "This pair's recent top-of-book spreads, oldest first.",
+        "type": "array",
+        "items": {
+          "title": "SpreadEntry",
+          "description": "One top-of-book spread `[time, bid, ask]`.",
+          "type": "array",
+          "prefixItems": [
+            {
+              "title": "time",
+              "type": "integer",
+              "description": "Unix timestamp."
+            },
+            {
+              "title": "bid",
+              "type": "string",
+              "description": "Best bid price."
+            },
+            {
+              "title": "ask",
+              "type": "string",
+              "description": "Best ask price."
+            }
+          ],
+          "minItems": 3,
+          "maxItems": 3
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "No pagination block: `since`/`last` is an incremental-update cursor over a live feed that 'does not contain all historical spreads' per the docs, not a bounded, walkable collection."
+  ]
+}

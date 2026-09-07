@@ -1,0 +1,10 @@
+{
+  "status": 200,
+  "payload": {
+    "error": [],
+    "result": {
+      "expires": 900,
+      "token": "4507BwO6rtp6DDm1z6ApbYH01wkaYdxoK5lBLRHHIfI"
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "status": 200,
+  "payload": {
+    "error": [],
+    "result": {
+      "count": 3,
+      "trades": {
+        "TP1AAA-33333-CCCCCC": {
+          "ordertxid": "OP1AAA-33333-CCCCCC",
+          "pair": "XXBTZUSD",
+          "time": 1786600200.9012,
+          "type": "buy",
+          "ordertype": "market",
+          "price": "62100.30000",
+          "cost": "6.21003",
+          "fee": "0.01614",
+          "vol": "0.00010000",
+          "margin": "0.00000",
+          "leverage": "none",
+          "misc": "",
+          "trade_id": 100003,
+          "maker": false
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,4 @@
+{
+  "description": "Kraken Earn: list strategies, allocate/deallocate funds to one, and poll the\nasynchronous (de)allocation status.",
+  "upstream": "https://docs.kraken.com/api-reference/earn"
+}

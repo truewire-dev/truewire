@@ -1,0 +1,13 @@
+{
+  "method": "subscribe",
+  "req_id": 2,
+  "result": {
+    "channel": "book",
+    "depth": 10,
+    "snapshot": true,
+    "symbol": "BTC/USD"
+  },
+  "success": true,
+  "time_in": "2026-08-13T12:07:05.781019Z",
+  "time_out": "2026-08-13T12:07:05.781057Z"
+}

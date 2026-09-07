@@ -1,0 +1,8 @@
+{
+  "parameters": {},
+  "payload": {
+    "method": "cancel_all",
+    "params": {},
+    "req_id": 6
+  }
+}

@@ -1,0 +1,4 @@
+{
+  "description": "Funding: deposit addresses/methods/status, withdrawal addresses/methods/status,\nwithdrawal requests and cancellation, and internal wallet transfers.",
+  "upstream": "https://docs.kraken.com/api-reference/funding"
+}

@@ -1,0 +1,5 @@
+{
+  "description": "Order entry over the private, token-authenticated Spot WebSocket v2 connection:\nadd/amend/edit orders, batch add/cancel, cancel-all, and the Dead Man's Switch\n(cancel-all-orders-after).",
+  "upstream": "https://docs.kraken.com/exchange/api-reference/spot-websocket",
+  "core": "socket"
+}

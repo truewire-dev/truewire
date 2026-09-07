@@ -1,0 +1,160 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/account-data/get-export-report-status",
+  "meta": {
+    "signed": true
+  },
+  "redacted": [
+    "nonce"
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/private/ExportStatus",
+    "method": "POST",
+    "description": "Get the status of requested data exports.\n\n**API Key Permissions Required:** `Data - Export data`",
+    "request": {
+      "title": "ExportStatusRequest",
+      "type": "object",
+      "required": [
+        "report"
+      ],
+      "properties": {
+        "report": {
+          "description": "Type of reports to inquire about.",
+          "type": "string",
+          "enum": [
+            "trades",
+            "ledgers"
+          ]
+        }
+      }
+    },
+    "response": {
+      "title": "ExportReports",
+      "description": "Every export report of the requested type, most recent last.",
+      "type": "array",
+      "items": {
+        "title": "ExportReport",
+        "description": "The status of one requested export.",
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "Report ID.",
+            "type": "string"
+          },
+          "descr": {
+            "description": "Report description, as given to `AddExport`.",
+            "type": "string"
+          },
+          "format": {
+            "description": "File format of the report.",
+            "type": "string"
+          },
+          "report": {
+            "description": "Report type.",
+            "type": "string",
+            "enum": [
+              "trades",
+              "ledgers"
+            ]
+          },
+          "subtype": {
+            "description": "Report subtype.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Current status of the report.",
+            "type": "string",
+            "enum": [
+              "Queued",
+              "Processing",
+              "Processed"
+            ]
+          },
+          "error": {
+            "description": "Error code, if the report failed.",
+            "type": "string",
+            "enum": [
+              "EExport:Internal error",
+              "EExport:Unexpected error",
+              "EExport:Canceled",
+              "EExport:Deleted",
+              "EExport:Exported size too big"
+            ]
+          },
+          "flags": {
+            "description": "Deprecated, no longer populated.",
+            "type": "string",
+            "deprecated": true
+          },
+          "fields": {
+            "description": "Comma-delimited list of fields included in the report.",
+            "type": "string"
+          },
+          "createdtm": {
+            "description": "UNIX timestamp of when the report was requested.",
+            "type": "string"
+          },
+          "expiretm": {
+            "description": "Deprecated, no longer populated.",
+            "type": "string",
+            "deprecated": true
+          },
+          "starttm": {
+            "description": "UNIX timestamp of when report processing began.",
+            "type": "string"
+          },
+          "completedtm": {
+            "description": "UNIX timestamp of when report processing finished.",
+            "type": "string"
+          },
+          "datastarttm": {
+            "description": "UNIX timestamp of the report data's start time.",
+            "type": "string"
+          },
+          "dataendtm": {
+            "description": "UNIX timestamp of the report data's end time.",
+            "type": "string"
+          },
+          "aclass": {
+            "description": "Deprecated -- superseded by `asset_classes`.",
+            "type": "string",
+            "deprecated": true
+          },
+          "asset": {
+            "description": "Asset filter applied to the report.",
+            "type": "string"
+          },
+          "assets": {
+            "description": "Plural sibling of `asset`, e.g. `\"all\"`. Confirmed present live alongside `asset` on the same response, not in upstream's own published field list -- possibly the newer replacement, unconfirmed against current docs.",
+            "type": "string"
+          },
+          "asset_classes": {
+            "description": "Asset classes included in the report.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "endtm": {
+            "description": "Deprecated -- superseded by `dataendtm`.",
+            "type": "string",
+            "deprecated": true
+          },
+          "delete": {
+            "description": "Whether the report is pending deletion.",
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "`flags`/`expiretm`/`aclass`/`endtm` are kept and marked `deprecated: true` per upstream (`aclass`/`endtm` are superseded by `asset_classes`/`dataendtm`) rather than dropped, per rule 7 (keep every documented field)."
+  ]
+}

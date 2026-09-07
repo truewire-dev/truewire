@@ -1,0 +1,153 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/transparency/post-trade-data",
+  "meta": {},
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/public/PostTrade",
+    "method": "GET",
+    "description": "Returns a list of trades on the spot exchange. If no filter parameters are specified, the last 1000 trades for all pairs are received.",
+    "request": {
+      "title": "PostTradeRequest",
+      "type": "object",
+      "properties": {
+        "symbol": {
+          "type": "string",
+          "description": "Filter the results to the currency pair."
+        },
+        "from_ts": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Filter the results to include the trades after this timestamp."
+        },
+        "to_ts": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Filter the results to include the trades before or at this timestamp."
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000,
+          "default": 1000,
+          "description": "The maximum number of trades to return."
+        }
+      }
+    },
+    "response": {
+      "title": "PostTradeResult",
+      "description": "A list of executed trades in ascending timestamp order.",
+      "type": "object",
+      "properties": {
+        "last_ts": {
+          "description": "Timestamp of the latest trade in the list, or an empty string when the result contains no trades. Can be used as the `from_ts` parameter when requesting the next batch of trades.",
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "description": "Timestamp of the latest trade in the list."
+            },
+            {
+              "type": "string",
+              "enum": [
+                ""
+              ],
+              "description": "Empty when the result contains no trades."
+            }
+          ]
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000,
+          "description": "The number of trades returned."
+        },
+        "trades": {
+          "type": "array",
+          "description": "The trades, in ascending timestamp order.",
+          "items": {
+            "title": "PostTradeEntry",
+            "description": "One executed trade.",
+            "type": "object",
+            "properties": {
+              "trade_id": {
+                "type": "string",
+                "maxLength": 19,
+                "description": "Kraken unique trade identifier."
+              },
+              "price": {
+                "type": "string",
+                "description": "Trade price excluding fees and commissions."
+              },
+              "quantity": {
+                "type": "string",
+                "description": "Unconsolidated trade quantity from execution."
+              },
+              "symbol": {
+                "type": "string",
+                "maxLength": 32,
+                "description": "The symbol of the currency pair."
+              },
+              "description": {
+                "type": "string",
+                "maxLength": 350,
+                "description": "The full description of the currency pair."
+              },
+              "base_asset": {
+                "type": "string",
+                "description": "ISO 4217 currency code for the base asset."
+              },
+              "base_notation": {
+                "type": "string",
+                "description": "Indicates that the quantity is expressed in nominal units.",
+                "enum": [
+                  "UNIT"
+                ]
+              },
+              "quote_asset": {
+                "type": "string",
+                "description": "ISO 4217 currency in which the trading price is expressed."
+              },
+              "quote_notation": {
+                "type": "string",
+                "description": "Indicates that the price is expressed in monetary value.",
+                "enum": [
+                  "MONE"
+                ]
+              },
+              "trade_venue": {
+                "type": "string",
+                "maxLength": 12,
+                "description": "ISO 10383 Market Identifier Code (MIC) of the trading platform where the trade was executed."
+              },
+              "trade_ts": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Timestamp the trade was matched in the engine, to microsecond precision."
+              },
+              "publication_venue": {
+                "type": "string",
+                "maxLength": 12,
+                "description": "ISO 10383 Market Identifier Code (MIC) of the trading platform where the trade was published."
+              },
+              "publication_ts": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Timestamp the trade was published to market data streams."
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "trade_venue/publication_venue and base_asset/quote_asset dropped upstream's non-standard `format: \"ISO 10383\"`/`format: \"ISO 4217\"` (not real JSON Schema formats) in favor of description text; every *_ts field uses the real `format: \"date-time\"` in place of upstream's non-standard `format: \"ISO 8601\"`. No `pagination` block declared: `from_ts`/`to_ts` genuinely walk a time range (ascending, `from_ts` exclusive-after / `to_ts` inclusive-before-or-at per the docs, and `last_ts` is explicitly documented as reusable as the next page's `from_ts`), which is shaped like this format's `window` strategy -- but the bounds are ISO-8601 strings, not the integers a `window` walk needs to do `end - start` arithmetic on (rule 7), and Kraken publishes no integer/epoch variant here. Left unspecced rather than forced into a strategy the format's arithmetic assumptions don't fit.",
+    "`last_ts` is `anyOf[date-time, \"\"]`, not a bare `date-time`: when `from_ts`/`to_ts` bound an empty result, Kraken sends `last_ts` as a literal empty string rather than omitting the key or sending `null` (confirmed live and captured in `examples/empty.*`; see `.agents/handoff/kraken-post-trade-empty-last-ts-not-parseable.md`). A bare `format: \"date-time\"` here rejects that real response under `validate=True`. Modeled honestly as a union rather than coercing `''` to absent in the shared `IsoConverter` -- that converter is shared by every client's `TimestampIso`/`TimestampMillis`/etc, and silently treating a malformed timestamp as `None` there would hide a genuinely malformed wire value on every other client using it."
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "request": {
+    "report": "ledgers",
+    "description": "typed-dev capture test export",
+    "format": "CSV"
+  }
+}

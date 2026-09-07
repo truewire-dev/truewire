@@ -1,0 +1,20 @@
+{
+  "parameters": {
+    "order_type": "limit",
+    "side": "buy",
+    "order_qty": 0.0001,
+    "symbol": "XBT/USDC",
+    "limit_price": 10000.0
+  },
+  "payload": {
+    "method": "add_order",
+    "params": {
+      "order_type": "limit",
+      "side": "buy",
+      "order_qty": 0.0001,
+      "symbol": "XBT/USDC",
+      "limit_price": 10000.0
+    },
+    "req_id": 1
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "description": "Kraken's Spot WebSocket v2 API: public real-time market data channels (ticker,\nbook, trade, OHLC, instrument, status) over one connection, and authenticated private\naccount channels (balances, executions) over a second, token-authenticated connection.",
+  "upstream": "https://docs.kraken.com/exchange/api-reference/spot-websocket",
+  "core": "streams"
+}

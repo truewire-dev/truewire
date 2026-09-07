@@ -1,0 +1,14 @@
+{
+  "parameters": {
+    "order_id": "O4T3A2-GIXBY-2BLT6M",
+    "limit_price": 10001.0
+  },
+  "payload": {
+    "method": "amend_order",
+    "params": {
+      "order_id": "O4T3A2-GIXBY-2BLT6M",
+      "limit_price": 10001.0
+    },
+    "req_id": 2
+  }
+}

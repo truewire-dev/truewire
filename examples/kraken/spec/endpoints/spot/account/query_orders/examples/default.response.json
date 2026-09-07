@@ -1,0 +1,38 @@
+{
+  "status": 200,
+  "payload": {
+    "error": [],
+    "result": {
+      "OFECRN-KRUVM-H6NSCI": {
+        "refid": null,
+        "userref": 0,
+        "status": "open",
+        "opentm": 1786622784.282609,
+        "starttm": 0,
+        "expiretm": 0,
+        "descr": {
+          "pair": "XBTUSDC",
+          "aclass": "forex",
+          "type": "buy",
+          "ordertype": "limit",
+          "price": "10000.00",
+          "price2": "0",
+          "leverage": "none",
+          "order": "buy 0.00010000 XBTUSDC @ limit 10000.00",
+          "close": ""
+        },
+        "vol": "0.00010000",
+        "vol_exec": "0.00000000",
+        "cost": "0.00000",
+        "fee": "0.00000",
+        "price": "0.00000",
+        "stopprice": "0.00000",
+        "limitprice": "0.00000",
+        "misc": "",
+        "oflags": "fciq",
+        "time_in_force": "gtc",
+        "reason": null
+      }
+    }
+  }
+}

@@ -1,0 +1,90 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/funding/get-withdrawal-addresses",
+  "meta": {
+    "signed": true
+  },
+  "redacted": [
+    "nonce"
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/private/WithdrawAddresses",
+    "method": "POST",
+    "description": "Retrieve a list of withdrawal addresses available for the user. Requires the `Funds permissions - Query` and `Funds permissions - Withdraw` API key permissions.",
+    "request": {
+      "title": "WithdrawAddressesRequest",
+      "type": "object",
+      "properties": {
+        "asset": {
+          "type": "string",
+          "description": "Filter addresses for a specific asset."
+        },
+        "aclass": {
+          "type": "string",
+          "description": "Filter addresses for a specific asset class.",
+          "enum": [
+            "currency",
+            "tokenized_asset"
+          ],
+          "default": "currency"
+        },
+        "method": {
+          "type": "string",
+          "description": "Filter addresses for a specific method."
+        },
+        "key": {
+          "type": "string",
+          "description": "Find the address set up under this withdrawal key name."
+        },
+        "verified": {
+          "type": "boolean",
+          "description": "Filter by verification status. Withdrawal addresses that have successfully completed email confirmation have a verification status of `true`."
+        }
+      }
+    },
+    "response": {
+      "type": "array",
+      "description": "Withdrawal addresses available for the user.",
+      "items": {
+        "title": "WithdrawalAddress",
+        "type": "object",
+        "description": "One withdrawal address available for the user.",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Withdrawal address."
+          },
+          "asset": {
+            "type": "string",
+            "description": "Name of asset being withdrawn."
+          },
+          "method": {
+            "type": "string",
+            "description": "Name of the withdrawal method."
+          },
+          "key": {
+            "type": "string",
+            "description": "Withdrawal key name, as set up on the account."
+          },
+          "tag": {
+            "type": "string",
+            "description": "Tag for XRP, or memo for STX/XLM/EOS, deposit addresses associated with this withdrawal address."
+          },
+          "verified": {
+            "type": "boolean",
+            "description": "Verification status of the withdrawal address."
+          }
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "Upstream `requestBody` requires `nonce`; dropped from this schema since the core's `authed_request` (`core/transport/http.py`) injects a strictly-increasing nonce into every private call automatically -- it is never a caller-supplied parameter, matching the existing hand-written `deposit_methods(self, asset)` signature, which takes none."
+  ]
+}

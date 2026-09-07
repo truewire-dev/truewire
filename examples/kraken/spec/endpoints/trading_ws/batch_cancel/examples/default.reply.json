@@ -1,0 +1,8 @@
+{
+  "method": "batch_cancel",
+  "orders_cancelled": 2,
+  "req_id": 0,
+  "success": true,
+  "time_in": "2026-08-13T12:10:48.188383Z",
+  "time_out": "2026-08-13T12:10:48.190501Z"
+}

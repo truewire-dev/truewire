@@ -1,0 +1,53 @@
+{
+  "docs": "https://docs.kraken.com/exchange/api-reference/spot-websocket-v2/cancel_after",
+  "meta": {},
+  "redacted": [
+    "req_id"
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "ws"
+    ],
+    "path": "cancel_all_orders_after",
+    "description": "\"Dead Man's Switch\": protects against network malfunction, extreme latency, or unexpected matching-engine downtime by starting a countdown timer in the trading engine that cancels all account orders on expiry. The client must keep sending requests to push back the trigger time, or send `timeout: 0` to disable the mechanism. Once the timer expires, all orders are cancelled and the feature stays disabled until the next request. Recommended use: a call every 15-30 seconds with `timeout: 60`. It is also recommended to disable the timer ahead of scheduled trading-engine maintenance, since a still-armed timer cancels all orders when the engine returns from downtime.",
+    "request": {
+      "title": "CancelAllOrdersAfterParams",
+      "type": "object",
+      "description": "Parameters for the dead man's switch: resets/extends the countdown timer that cancels all account orders on expiry.",
+      "required": [
+        "timeout"
+      ],
+      "properties": {
+        "timeout": {
+          "type": "integer",
+          "description": "Duration in seconds to set/extend the timer; should be less than 86400 seconds. A timeout of `0` disables the mechanism."
+        }
+      }
+    },
+    "response": {
+      "title": "CancelAllOrdersAfterResult",
+      "type": "object",
+      "description": "Result of a successful `cancel_all_orders_after` call.",
+      "properties": {
+        "currentTime": {
+          "type": "string",
+          "format": "date-time",
+          "description": "RFC3339 engine time at which the request was received."
+        },
+        "triggerTime": {
+          "type": "string",
+          "format": "date-time",
+          "description": "RFC3339 time after which all orders will be cancelled, unless the timer is extended or disabled first."
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result",
+    "correlate": "req_id"
+  },
+  "notes": [
+    "`token` (the auth bearer token) is documented by Kraken as a required params field but is deliberately absent from this schema: `core/transport/ws.py`'s `SocketConnection.rpc_send` merges the cached token into every outgoing `params` on the private connection -- trading calls and subscribe/unsubscribe alike -- so it is transport-injected, never a caller-supplied argument, the same way `req_id` (the declared `correlate` field) never appears in a requestBody schema. The doc page's URL slug is `cancel_after` (`/spot-websocket-v2/cancel_after`) and its title is \"Cancel on Disconnect\", but the wire `method` value shown in the request/response tabs and every JSON example on that page is `cancel_all_orders_after` -- confirmed from the fetched page, matching discovery.md's surface list and core.md's trading-method list. `channel` (and the directory/function name) uses the wire name, not the URL slug; `docs` still points at the `cancel_after` page since that is the URL that actually resolves."
+  ]
+}

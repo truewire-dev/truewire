@@ -1,0 +1,120 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/market-data/get-grouped-order-book",
+  "meta": {},
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/public/GroupedBook",
+    "method": "GET",
+    "description": "Aggregates the volume in the order book over a specified tick range, for a summary of liquidity deep into the book (useful for UI display). Bids and asks between grouped price levels are accumulated to the nearest passive level (asks rounded up, bids down).",
+    "request": {
+      "title": "GroupedBookRequest",
+      "type": "object",
+      "properties": {
+        "pair": {
+          "type": "string",
+          "description": "Asset pair to get order book for."
+        },
+        "depth": {
+          "type": "integer",
+          "enum": [
+            10,
+            25,
+            100,
+            250,
+            1000
+          ],
+          "default": 10,
+          "description": "The number of price levels to return per side (bids/asks)."
+        },
+        "grouping": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "enum": [
+                1,
+                5,
+                10,
+                25,
+                50,
+                100,
+                250,
+                500,
+                1000
+              ],
+              "default": 1
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "How many tick levels should be within each price level. Bids and asks between grouped price levels are accumulated to the nearest passive level (asks rounded up, bids down)."
+        }
+      },
+      "required": [
+        "pair"
+      ]
+    },
+    "response": {
+      "title": "GroupedOrderBook",
+      "description": "One pair's grouped order book.",
+      "type": "object",
+      "properties": {
+        "pair": {
+          "type": "string",
+          "description": "Asset pair."
+        },
+        "grouping": {
+          "type": "integer",
+          "description": "The grouping value used."
+        },
+        "bids": {
+          "type": "array",
+          "description": "Aggregated bid levels.",
+          "items": {
+            "title": "GroupedPriceLevel",
+            "description": "One grouped price level.",
+            "type": "object",
+            "properties": {
+              "price": {
+                "type": "string",
+                "description": "Grouped price level."
+              },
+              "qty": {
+                "type": "string",
+                "description": "Aggregated quantity at this price level."
+              }
+            }
+          }
+        },
+        "asks": {
+          "type": "array",
+          "description": "Aggregated ask levels.",
+          "items": {
+            "title": "GroupedPriceLevel",
+            "description": "One grouped price level.",
+            "type": "object",
+            "properties": {
+              "price": {
+                "type": "string",
+                "description": "Grouped price level."
+              },
+              "qty": {
+                "type": "string",
+                "description": "Aggregated quantity at this price level."
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "grouping's upstream schema is `nullable: true` (OpenAPI 3.0 primitive-nullable style); rendered as `anyOf` with an explicit null branch per rule 4 rather than a multi-type schema."
+  ]
+}

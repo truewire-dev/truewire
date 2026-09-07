@@ -1,0 +1,291 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/account-data/get-trades-history",
+  "meta": {
+    "signed": true
+  },
+  "redacted": [
+    "nonce"
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/private/TradesHistory",
+    "method": "POST",
+    "description": "Retrieve information about trades/fills. By default, the most recent trades are returned. Unless otherwise stated, costs, fees, prices, and volumes are specified with the precision for the asset pair (`pair_decimals` and `lot_decimals`), not the individual assets' precision (`decimals`).\n\n**API Key Permissions Required:** `Orders and trades - Query closed orders & trades`",
+    "request": {
+      "title": "TradesHistoryRequest",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "default": "all",
+          "enum": [
+            "all",
+            "any position",
+            "closed position",
+            "closing position",
+            "no position"
+          ],
+          "description": "Type of trade."
+        },
+        "trades": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether or not to include trades related to position in output."
+        },
+        "start": {
+          "type": "integer",
+          "description": "Starting unix timestamp or trade tx ID of results (exclusive)."
+        },
+        "end": {
+          "type": "integer",
+          "description": "Ending unix timestamp or trade tx ID of results (inclusive)."
+        },
+        "ofs": {
+          "type": "integer",
+          "description": "Result offset for pagination."
+        },
+        "without_count": {
+          "type": "boolean",
+          "default": false,
+          "description": "If true, does not retrieve the count of matching trades. Request can be noticeably faster for users with many trades, as this avoids an extra database query."
+        },
+        "consolidate_taker": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether or not to consolidate trades by individual taker trades."
+        },
+        "ledgers": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether or not to include related ledger ids for a given trade. Setting this to true will slow request performance."
+        },
+        "rebase_multiplier": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "rebased",
+                "base"
+              ],
+              "default": "rebased"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional parameter for viewing xstocks data. `rebased` displays in terms of underlying equity, `base` displays in terms of SPV tokens."
+        },
+        "aclass": {
+          "type": "string",
+          "default": "forex",
+          "enum": [
+            "forex",
+            "equity_pair",
+            "futures_contract",
+            "synthetic_pair",
+            "external_pair"
+          ],
+          "description": "Asset class of the `pair` filter."
+        },
+        "pair": {
+          "type": "string",
+          "description": "Filter results to a single trading pair. An unrecognized pair returns `EQuery:Unknown asset pair`."
+        },
+        "limit": {
+          "type": "integer",
+          "default": 50,
+          "minimum": 1,
+          "maximum": 100,
+          "description": "Number of trades returned per page. Values above 100 get clamped to 100."
+        }
+      }
+    },
+    "response": {
+      "title": "TradeHistory",
+      "description": "Trade/fill history.",
+      "type": "object",
+      "properties": {
+        "count": {
+          "description": "Amount of available trades matching criteria. Omitted from the response when `without_count` is `true`.",
+          "type": "integer"
+        },
+        "trades": {
+          "description": "Trades, keyed by transaction ID.",
+          "type": "object",
+          "additionalProperties": {
+            "title": "HistoricalTrade",
+            "description": "One historical trade.",
+            "type": "object",
+            "required": [
+              "time"
+            ],
+            "properties": {
+              "ordertxid": {
+                "description": "Order responsible for execution of the trade.",
+                "type": "string"
+              },
+              "postxid": {
+                "description": "Position responsible for execution of the trade.",
+                "type": "string"
+              },
+              "pair": {
+                "description": "Asset pair.",
+                "type": "string"
+              },
+              "time": {
+                "description": "Unix timestamp of the trade.",
+                "type": "number",
+                "format": "epoch-seconds"
+              },
+              "type": {
+                "description": "Type of order.",
+                "type": "string",
+                "enum": [
+                  "buy",
+                  "sell"
+                ]
+              },
+              "ordertype": {
+                "description": "Order type.",
+                "type": "string",
+                "enum": [
+                  "market",
+                  "limit",
+                  "iceberg",
+                  "stop-loss",
+                  "take-profit",
+                  "stop-loss-limit",
+                  "take-profit-limit",
+                  "trailing-stop",
+                  "trailing-stop-limit",
+                  "settle-position"
+                ]
+              },
+              "price": {
+                "description": "Average price the order was executed at (quote currency).",
+                "type": "string",
+                "format": "decimal-string"
+              },
+              "cost": {
+                "description": "Total cost of the order (quote currency).",
+                "type": "string",
+                "format": "decimal-string"
+              },
+              "fee": {
+                "description": "Total fee (quote currency).",
+                "type": "string",
+                "format": "decimal-string"
+              },
+              "vol": {
+                "description": "Volume (base currency).",
+                "type": "string",
+                "format": "decimal-string"
+              },
+              "margin": {
+                "description": "Initial margin (quote currency).",
+                "type": "string",
+                "format": "decimal-string"
+              },
+              "leverage": {
+                "description": "Amount of leverage used in the trade.",
+                "type": "string"
+              },
+              "misc": {
+                "description": "Comma-delimited list of miscellaneous info: `closing` -- trade closes all or part of a position.",
+                "type": "string"
+              },
+              "ledgers": {
+                "description": "List of ledger ids for entries associated with the trade (if requested).",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "trade_id": {
+                "description": "Unique identifier of the trade executed.",
+                "type": "integer"
+              },
+              "maker": {
+                "description": "`true` if the trade was executed with the user as the maker, `false` if taker.",
+                "type": "boolean"
+              },
+              "aclass": {
+                "description": "Asset class of the traded pair.",
+                "type": "string"
+              },
+              "tradeordertype": {
+                "description": "Order type of the trade (e.g. `market`, `limit`). May differ from `ordertype` when the order type was converted on execution.",
+                "type": "string"
+              },
+              "posstatus": {
+                "description": "Position status. Only present if the trade opened a position.",
+                "type": "string",
+                "enum": [
+                  "open",
+                  "closed"
+                ]
+              },
+              "cprice": {
+                "description": "Average price of the closed portion of the position (quote currency). Only present if the trade opened a position.",
+                "type": "number"
+              },
+              "ccost": {
+                "description": "Total cost of the closed portion of the position (quote currency). Only present if the trade opened a position.",
+                "type": "number"
+              },
+              "cfee": {
+                "description": "Total fee of the closed portion of the position (quote currency). Only present if the trade opened a position.",
+                "type": "number"
+              },
+              "cvol": {
+                "description": "Total volume of the closed portion of the position (quote currency). Only present if the trade opened a position.",
+                "type": "number"
+              },
+              "cmargin": {
+                "description": "Total margin freed in the closed portion of the position (quote currency). Only present if the trade opened a position.",
+                "type": "number"
+              },
+              "net": {
+                "description": "Net profit/loss of the closed portion of the position (quote currency). Only present if the trade opened a position.",
+                "type": "number"
+              },
+              "trades": {
+                "description": "List of closing trades for the position (if available). Only present if the trade opened a position.",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "pagination": {
+    "strategy": "offset",
+    "offset": {
+      "parameter": "ofs"
+    },
+    "size": {
+      "parameter": "limit"
+    },
+    "done": {
+      "kind": "total",
+      "path": "count",
+      "counts": "items"
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "`HistoricalTrade.type` gets `enum: [buy, sell]` even though upstream's OpenAPI leaves it a bare string -- its own `description` documents the closed set (\"Type of order (buy/sell)\"), and rule 2 treats that as documented. `ordertype`/`tradeordertype` stay bare: their descriptions give examples (`market`, `limit`) rather than an exhaustive list. `posstatus` similarly gets `enum: [open, closed]` from its documented \"Position status (open/closed)\" description.",
+    "Request parameters are declared as `parameters`/`in: 'query'` here rather than as flat `requestBody` properties, unlike every sibling private endpoint in this client (S18 fix, production_standards.md): `typed_dev.codegen.python.Generator.paged_size_default` (shared, common/lib) only scans `operation.parameters` for a page-size parameter's declared `default`, and this endpoint's `limit` (default 50) needs that default found for `trades_history_paged` to generate at all -- `in: 'query'` states the parameter's role, not its literal wire placement (docs/spec/authoring.md rule 0), so this is spec-correct even though the wire request is still a form-urlencoded POST body via `authed_request`, unchanged. Deliberately narrow: many other private kraken endpoints declare a documented `default` on a `requestBody` parameter too (a stylistic pattern observed but not addressed here, since only this one endpoint's spec change was in scope for the S18 fix) -- if `trades_history`'s fix generalizes well, revisit whether the others should move too, as a separate, explicitly-scoped pass.",
+    "`paged_page1`/`paged_page2` examples are synthetic, not real captures -- built purely to exercise `trades_history_paged`'s multi-page walk against the mock server (production_standards.md S18), since the real account behind `default` has only a single real trade (below), not enough for a genuine multi-page series. Schema-valid, plausible-shaped `HistoricalTrade` rows, but the txids/prices/timestamps are invented, not venue-observed.",
+    "`time` is required: `default` now records one genuine trade (a real tiny XBTUSDC market buy, placed specifically to settle this field -- the account previously had zero real trade history, `count: 0, trades: {}`), and `time` is present on it, matching every other trade-record type in this client treating time as fundamental and the endpoint's own semantics ('the most recent trades are returned'). Also notable: this real trade's `leverage` is `\"0\"`, not the `\"none\"` seen on `closed_orders`' real capture -- confirms `leverage` genuinely mixes literal words and numbers across real responses and stays a bare `string`, not `decimal-string`."
+  ]
+}

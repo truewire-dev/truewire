@@ -1,0 +1,77 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/funding/request-wallet-transfer",
+  "meta": {
+    "signed": true
+  },
+  "redacted": [
+    "nonce"
+  ],
+  "unverified": {
+    "reason": "unsafe",
+    "detail": "Moves Spot balance to the Futures wallet. This client's [secrets] only provisions Spot credentials (client.toml/core.md scope this pass to Spot only) -- there is no Futures API access to move the tiny real balance back if this succeeds. Not attempted."
+  },
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/private/WalletTransfer",
+    "method": "POST",
+    "description": "Transfer from a Kraken Spot wallet to a Kraken Futures wallet. A transfer in the other direction must be requested via the Kraken Futures API withdrawal-to-Spot-wallet endpoint instead. Requires the `Funds permissions - Query` API key permission.",
+    "request": {
+      "title": "WalletTransferRequest",
+      "type": "object",
+      "required": [
+        "asset",
+        "from",
+        "to",
+        "amount"
+      ],
+      "properties": {
+        "asset": {
+          "type": "string",
+          "description": "Asset to transfer (asset ID or `altname`)."
+        },
+        "from": {
+          "type": "string",
+          "description": "Source wallet.",
+          "enum": [
+            "Spot Wallet"
+          ]
+        },
+        "to": {
+          "type": "string",
+          "description": "Destination wallet.",
+          "enum": [
+            "Futures Wallet"
+          ]
+        },
+        "amount": {
+          "type": "string",
+          "description": "Amount to transfer."
+        }
+      }
+    },
+    "response": {
+      "title": "WalletTransferReceipt",
+      "type": "object",
+      "description": "Reference to the created wallet transfer.",
+      "required": [
+        "refid"
+      ],
+      "properties": {
+        "refid": {
+          "type": "string",
+          "description": "Reference ID."
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "Upstream `requestBody` requires `nonce`; dropped from this schema since the core's `authed_request` (`core/transport/http.py`) injects a strictly-increasing nonce into every private call automatically -- it is never a caller-supplied parameter, matching the existing hand-written `deposit_methods(self, asset)` signature, which takes none.",
+    "Only one direction (Spot -> Futures) is reachable via Spot REST, hence `from`/`to` each being a documented single-value `enum` rather than a real choice; kept as `enum` per spec-authoring rule 2 rather than a bare string, since the closed set (of one) is exactly what upstream documents."
+  ]
+}

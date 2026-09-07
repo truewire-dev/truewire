@@ -1,0 +1,205 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/account-data/query-trades-info",
+  "meta": {
+    "signed": true
+  },
+  "redacted": [
+    "nonce"
+  ],
+  "unverified": {
+    "reason": "requires_state",
+    "detail": "No trade history on this account to query by real id."
+  },
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/private/QueryTrades",
+    "method": "POST",
+    "description": "Retrieve information about specific trades/fills, by transaction ID.\n\n**API Key Permissions Required:** `Orders and trades - Query closed orders & trades`",
+    "request": {
+      "title": "QueryTradesRequest",
+      "type": "object",
+      "required": [
+        "txid"
+      ],
+      "properties": {
+        "txid": {
+          "description": "Comma-delimited list of transaction IDs to query info about (20 maximum).",
+          "type": "string"
+        },
+        "trades": {
+          "description": "Whether or not to include trades related to position in output.",
+          "type": "boolean",
+          "default": false
+        },
+        "rebase_multiplier": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "rebased",
+                "base"
+              ],
+              "default": "rebased"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional parameter for viewing xstocks data. `rebased` displays in terms of underlying equity, `base` displays in terms of SPV tokens."
+        }
+      }
+    },
+    "response": {
+      "title": "QueriedTrades",
+      "description": "The queried trades, keyed by transaction ID.",
+      "type": "object",
+      "additionalProperties": {
+        "title": "HistoricalTrade",
+        "description": "One historical trade.",
+        "type": "object",
+        "properties": {
+          "ordertxid": {
+            "description": "Order responsible for execution of the trade.",
+            "type": "string"
+          },
+          "postxid": {
+            "description": "Position responsible for execution of the trade.",
+            "type": "string"
+          },
+          "pair": {
+            "description": "Asset pair.",
+            "type": "string"
+          },
+          "time": {
+            "description": "Unix timestamp of the trade.",
+            "type": "number",
+            "format": "epoch-seconds"
+          },
+          "type": {
+            "description": "Type of order.",
+            "type": "string",
+            "enum": [
+              "buy",
+              "sell"
+            ]
+          },
+          "ordertype": {
+            "description": "Order type.",
+            "type": "string",
+            "enum": [
+              "market",
+              "limit",
+              "iceberg",
+              "stop-loss",
+              "take-profit",
+              "stop-loss-limit",
+              "take-profit-limit",
+              "trailing-stop",
+              "trailing-stop-limit",
+              "settle-position"
+            ]
+          },
+          "price": {
+            "description": "Average price the order was executed at (quote currency).",
+            "type": "string"
+          },
+          "cost": {
+            "description": "Total cost of the order (quote currency).",
+            "type": "string"
+          },
+          "fee": {
+            "description": "Total fee (quote currency).",
+            "type": "string"
+          },
+          "vol": {
+            "description": "Volume (base currency).",
+            "type": "string"
+          },
+          "margin": {
+            "description": "Initial margin (quote currency).",
+            "type": "string"
+          },
+          "leverage": {
+            "description": "Amount of leverage used in the trade.",
+            "type": "string"
+          },
+          "misc": {
+            "description": "Comma-delimited list of miscellaneous info: `closing` -- trade closes all or part of a position.",
+            "type": "string"
+          },
+          "trade_id": {
+            "description": "Unique identifier of the trade executed.",
+            "type": "integer"
+          },
+          "maker": {
+            "description": "`true` if the trade was executed with the user as the maker, `false` if taker.",
+            "type": "boolean"
+          },
+          "posstatus": {
+            "description": "Position status. Only present if the trade opened a position.",
+            "type": "string",
+            "enum": [
+              "open",
+              "closed"
+            ]
+          },
+          "cprice": {
+            "description": "Average price of the closed portion of the position (quote currency). Only present if the trade opened a position.",
+            "type": "number"
+          },
+          "ccost": {
+            "description": "Total cost of the closed portion of the position (quote currency). Only present if the trade opened a position.",
+            "type": "number"
+          },
+          "cfee": {
+            "description": "Total fee of the closed portion of the position (quote currency). Only present if the trade opened a position.",
+            "type": "number"
+          },
+          "cvol": {
+            "description": "Total fee of the closed portion of the position (quote currency). Only present if the trade opened a position.",
+            "type": "number"
+          },
+          "cmargin": {
+            "description": "Total margin freed in the closed portion of the position (quote currency). Only present if the trade opened a position.",
+            "type": "number"
+          },
+          "net": {
+            "description": "Net profit/loss of the closed portion of the position (quote currency). Only present if the trade opened a position.",
+            "type": "number"
+          },
+          "trades": {
+            "description": "List of closing trades for the position (if available). Only present if the trade opened a position.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "ledgers": {
+            "description": "List of ledger ids for entries associated with the trade. Only present if the trade opened a position.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "aclass": {
+            "description": "Asset class. Only present if the trade opened a position.",
+            "type": "string"
+          },
+          "tradeordertype": {
+            "description": "Order type of the trade (e.g. `market`, `limit`). May differ from `ordertype` when the order type was converted on execution. Only present if the trade opened a position.",
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "`HistoricalTrade.ordertype` is left bare (no `enum`), matching TradesHistory's identical field: upstream describes it only as \"Order type\", with no enumerated set, unlike `type` (documented `buy`/`sell`) or `posstatus` (documented `open`/`closed`) on the same object, which do get `enum`."
+  ]
+}

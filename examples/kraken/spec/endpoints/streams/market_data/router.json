@@ -1,0 +1,5 @@
+{
+  "description": "Public Spot WebSocket v2 channels: ticker, order book, trade, OHLC, instrument\nreference data, and connection status/heartbeat -- no authentication required.",
+  "upstream": "https://docs.kraken.com/exchange/api-reference/spot-websocket",
+  "core": "socket"
+}

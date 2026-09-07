@@ -1,0 +1,32 @@
+{
+  "status": 200,
+  "payload": {
+    "error": [],
+    "result": {
+      "XXBTZUSD": {
+        "leverage_buy": [
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ],
+        "leverage_sell": [
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ]
+      }
+    }
+  }
+}

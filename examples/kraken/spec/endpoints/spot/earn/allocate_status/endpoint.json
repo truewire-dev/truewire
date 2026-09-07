@@ -1,0 +1,60 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/earn/get-allocation-status",
+  "meta": {
+    "signed": true
+  },
+  "redacted": [
+    "nonce"
+  ],
+  "unverified": {
+    "reason": "requires_state",
+    "detail": "Needs a real allocation-request reference id that only exists after a real Allocate call for a strategy -- this read-only capture track makes no write calls. A real Allocate (and this endpoint) would need to be sequenced separately by the coordinating session."
+  },
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/private/Earn/AllocateStatus",
+    "method": "POST",
+    "description": "Get the status of the last allocation request.\n\nRequires either the `Earn Funds` or `Query Funds` API key permission.\n\n(De)allocation operations are asynchronous, and this endpoint lets the client retrieve the status of the last dispatched operation. There can be only one (de)allocation request in progress for a given user and strategy.\n\nThe `pending` attribute in the response indicates whether the previously dispatched operation is still in progress (`true`) or has completed (`false`). If the dispatched request failed with an error, the HTTP error is returned to the client as if it belonged to this request.\n\nSpecific errors within the `Earnings` error class this method can return:\n- Insufficient funds: `EEarnings:Insufficient funds:Insufficient funds to complete the (de)allocation request`\n- User cap exceeded: `EEarnings:Above max:The allocation exceeds user limit for the strategy`\n- Total cap exceeded: `EEarnings:Above max:The allocation exceeds the total strategy limit`\n- Minimum allocation: `EEarnings:Below min:(De)allocation operation amount less than minimum`",
+    "request": {
+      "title": "EarnAllocateStatusRequest",
+      "description": "The strategy to check.",
+      "type": "object",
+      "properties": {
+        "strategy_id": {
+          "description": "ID of the Earn strategy, from `spot.earn.strategies`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "strategy_id"
+      ]
+    },
+    "response": {
+      "description": "Status of the last allocation operation for the strategy. `null` when an error occurred.",
+      "anyOf": [
+        {
+          "title": "EarnAllocateStatusResult",
+          "type": "object",
+          "properties": {
+            "pending": {
+              "description": "`true` if a allocation operation is still in progress on this strategy.",
+              "type": "boolean"
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "`nonce` is dropped from the requestBody schema -- see `strategies/endpoint.json` notes."
+  ]
+}

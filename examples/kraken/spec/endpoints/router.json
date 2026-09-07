@@ -1,0 +1,5 @@
+{
+  "description": "Kraken Spot client -- REST and WebSocket v2. `streams` is subscriptions only; `trading_ws`'s WS trading methods (`add_order`, `cancel_order`, ...) are plain request/reply calls, awaited directly rather than iterated -- kept off `streams` so its shape stays uniform. Both `streams.private` and `trading_ws` reach Kraken over the same authenticated connection.",
+  "upstream": "https://docs.kraken.com/api-reference/",
+  "core": "root"
+}

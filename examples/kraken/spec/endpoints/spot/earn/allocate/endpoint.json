@@ -1,0 +1,59 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/earn/allocate-earn-funds",
+  "meta": {
+    "signed": true
+  },
+  "redacted": [
+    "nonce"
+  ],
+  "unverified": {
+    "reason": "requires_state",
+    "detail": "No live strategy exists for USDC (this account's only spendable balance) -- spot/earn/strategies' asset=USDC filter returns an empty items list. The account's one existing allocation (dust ETH, id ESSR5EH-CKYSY-NUQNZI, flex lock_type) has both can_allocate=false and can_deallocate=false on its strategies entry, confirmed via a real Strategies call -- so even that asset cannot be exercised right now. Not a credentials/permission gap; a real account-state restriction."
+  },
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/private/Earn/Allocate",
+    "method": "POST",
+    "description": "Allocate funds to a strategy.\n\nRequires the `Earn Funds` API key permission. The amount must always be defined.\n\nThis method is asynchronous. A couple of preflight checks are performed synchronously before the request is dispatched further; the client is required to poll the result using `spot.earn.allocate_status` (`/0/private/Earn/AllocateStatus`).\n\nThere can be only one (de)allocation request in progress for a given user and strategy at a time. While the operation is in progress: the `pending` attribute in the `spot.earn.allocations` response for the strategy indicates funds are being allocated, and the `pending` attribute in `spot.earn.allocate_status`'s response is `true`.\n\nSpecific errors within the `Earnings` error class this method can return:\n- Minimum allocation: `EEarnings:Below min:(De)allocation operation amount less than minimum`\n- Allocation in progress: `EEarnings:Busy:Another (de)allocation for the same strategy is in progress`\n- Service temporarily unavailable: `EEarnings:Busy` -- retry in a few minutes\n- User tier verification: `EEarnings:Permission denied:The user's tier is not high enough`\n- Strategy not found: `EGeneral:Invalid arguments:Invalid strategy ID`",
+    "request": {
+      "title": "EarnAllocateRequest",
+      "description": "The strategy to allocate to, and how much.",
+      "type": "object",
+      "properties": {
+        "amount": {
+          "description": "The amount to allocate.",
+          "type": "string"
+        },
+        "strategy_id": {
+          "description": "A unique identifier of the chosen Earn strategy, as returned from `spot.earn.strategies`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "amount",
+        "strategy_id"
+      ]
+    },
+    "response": {
+      "description": "`true` when the allocation request was accepted, `null` when an error occurred.",
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "`nonce` is dropped from the requestBody schema -- see `strategies/endpoint.json` notes.",
+    "Asynchronous: a successful `result: true` only means the (de)allocation request was accepted, not that it completed. The caller must poll `spot.earn.allocate_status` until `pending` is `false`. `spot.earn.allocations`'s `pending` field on the matching strategy reflects the same in-flight state."
+  ]
+}

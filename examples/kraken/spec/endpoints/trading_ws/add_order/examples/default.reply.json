@@ -1,0 +1,10 @@
+{
+  "method": "add_order",
+  "req_id": 1,
+  "result": {
+    "order_id": "O4T3A2-GIXBY-2BLT6M"
+  },
+  "success": true,
+  "time_in": "2026-08-13T12:06:24.895737Z",
+  "time_out": "2026-08-13T12:06:24.899171Z"
+}

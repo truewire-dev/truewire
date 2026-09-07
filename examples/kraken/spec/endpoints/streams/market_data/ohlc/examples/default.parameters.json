@@ -1,0 +1,18 @@
+{
+  "parameters": {
+    "symbol": [
+      "BTC/USD"
+    ],
+    "interval": 1
+  },
+  "payload": {
+    "method": "subscribe",
+    "params": {
+      "channel": "ohlc",
+      "symbol": [
+        "BTC/USD"
+      ],
+      "interval": 1
+    }
+  }
+}

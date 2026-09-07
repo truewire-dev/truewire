@@ -1,0 +1,58 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/account-data/delete-export-report",
+  "meta": {
+    "signed": true
+  },
+  "redacted": [
+    "nonce"
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/private/RemoveExport",
+    "method": "POST",
+    "description": "Delete an exported trades/ledgers report. `delete` can only be used for reports that have already been processed; use `cancel` for reports that are still queued or processing.\n\n**API Key Permissions Required:** `Data - Export data`",
+    "request": {
+      "title": "RemoveExportRequest",
+      "type": "object",
+      "required": [
+        "id",
+        "type"
+      ],
+      "properties": {
+        "id": {
+          "description": "ID of the report to delete or cancel.",
+          "type": "string"
+        },
+        "type": {
+          "description": "`delete` can only be used for reports that have already been processed. Use `cancel` for queued or processing reports.",
+          "type": "string",
+          "enum": [
+            "cancel",
+            "delete"
+          ]
+        }
+      }
+    },
+    "response": {
+      "title": "RemoveExportResult",
+      "description": "Outcome of the delete/cancel operation. Exactly one of `delete`/`cancel` is present, matching the requested `type`.",
+      "type": "object",
+      "properties": {
+        "delete": {
+          "description": "Whether deletion succeeded. Present when `type: \"delete\"` was requested.",
+          "type": "boolean"
+        },
+        "cancel": {
+          "description": "Whether cancellation succeeded. Present when `type: \"cancel\"` was requested.",
+          "type": "boolean"
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  }
+}

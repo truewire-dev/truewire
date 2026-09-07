@@ -1,0 +1,173 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/funding/get-withdrawal-methods",
+  "meta": {
+    "signed": true
+  },
+  "redacted": [
+    "nonce"
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/private/WithdrawMethods",
+    "method": "POST",
+    "description": "Retrieve a list of withdrawal methods available for the user. Requires the `Funds permissions - Query` and `Funds permissions - Withdraw` API key permissions.",
+    "request": {
+      "title": "WithdrawMethodsRequest",
+      "type": "object",
+      "properties": {
+        "asset": {
+          "type": "string",
+          "description": "Filter methods for a specific asset."
+        },
+        "aclass": {
+          "type": "string",
+          "description": "Filter methods for a specific asset class.",
+          "enum": [
+            "currency",
+            "tokenized_asset"
+          ],
+          "default": "currency"
+        },
+        "network": {
+          "type": "string",
+          "description": "Filter methods for a specific network."
+        },
+        "rebase_multiplier": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "rebased",
+                "base"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "rebased",
+          "description": "Optional parameter for viewing xstocks data. `rebased` displays in terms of underlying equity; `base` displays in terms of SPV tokens."
+        }
+      }
+    },
+    "response": {
+      "type": "array",
+      "description": "Withdrawal methods available for the user.",
+      "items": {
+        "title": "WithdrawalMethod",
+        "type": "object",
+        "description": "One withdrawal method available for the user.",
+        "required": [
+          "fee"
+        ],
+        "properties": {
+          "asset": {
+            "type": "string",
+            "description": "Name of asset being withdrawn."
+          },
+          "method": {
+            "type": "string",
+            "description": "Name of the withdrawal method."
+          },
+          "method_id": {
+            "type": "string",
+            "description": "Unique identifier for the withdrawal method."
+          },
+          "network": {
+            "type": "string",
+            "description": "Name of the blockchain or network being withdrawn on."
+          },
+          "network_id": {
+            "type": "string",
+            "description": "Unique identifier for the network."
+          },
+          "minimum": {
+            "type": "string",
+            "description": "Minimum net amount that can be withdrawn right now.",
+            "format": "decimal-string"
+          },
+          "fee": {
+            "title": "WithdrawalMethodFee",
+            "type": "object",
+            "description": "Fee details for a withdrawal method.",
+            "required": [
+              "fee"
+            ],
+            "properties": {
+              "aclass": {
+                "type": "string",
+                "description": "Asset class of the fee."
+              },
+              "asset": {
+                "type": "string",
+                "description": "Asset used for the fee."
+              },
+              "fee": {
+                "type": "string",
+                "description": "Flat fee amount.",
+                "format": "decimal-string"
+              },
+              "fee_percentage": {
+                "type": "string",
+                "description": "Percentage fee (present instead of a flat fee for some methods).",
+                "format": "decimal-string"
+              }
+            }
+          },
+          "limits": {
+            "type": "array",
+            "description": "Rate limit details for this withdrawal method.",
+            "items": {
+              "title": "WithdrawalRateLimit",
+              "type": "object",
+              "description": "One rate limit rule for a withdrawal method.",
+              "properties": {
+                "description": {
+                  "type": "string",
+                  "description": "Description of this rate limit."
+                },
+                "limit_type": {
+                  "type": "string",
+                  "description": "Type of rate limit."
+                },
+                "limits": {
+                  "type": "object",
+                  "description": "Limits keyed by the time window they apply to, in seconds.",
+                  "additionalProperties": {
+                    "title": "WithdrawalRateLimitWindow",
+                    "type": "object",
+                    "description": "Rate limit usage for one time window.",
+                    "properties": {
+                      "maximum": {
+                        "type": "string",
+                        "description": "Maximum amount allowed in this window."
+                      },
+                      "remaining": {
+                        "type": "string",
+                        "description": "Amount remaining in this window."
+                      },
+                      "used": {
+                        "type": "string",
+                        "description": "Amount already used in this window."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "Upstream `requestBody` requires `nonce`; dropped from this schema since the core's `authed_request` (`core/transport/http.py`) injects a strictly-increasing nonce into every private call automatically -- it is never a caller-supplied parameter, matching the existing hand-written `deposit_methods(self, asset)` signature, which takes none.",
+    "`WithdrawalRateLimitWindow.maximum`/`.remaining`/`.used` are left as bare `string`, not `decimal-string`: the enclosing `limits` field is absent on all 776/776 real methods observed in `examples/default`, so there is no captured value to confirm the numbers are actually decimal-shaped -- never invent a format, per docs/spec/authoring.md rule 2/15."
+  ]
+}

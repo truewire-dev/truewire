@@ -1,0 +1,123 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/funding/get-deposit-methods",
+  "meta": {
+    "signed": true
+  },
+  "redacted": [
+    "nonce"
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/private/DepositMethods",
+    "method": "POST",
+    "description": "Retrieve methods available for depositing a particular asset. Requires the `Funds permissions - Query` and `Funds permissions - Deposit` API key permissions.",
+    "request": {
+      "title": "DepositMethodsRequest",
+      "type": "object",
+      "required": [
+        "asset"
+      ],
+      "properties": {
+        "asset": {
+          "type": "string",
+          "description": "Asset being deposited, e.g. `XBT`."
+        },
+        "aclass": {
+          "type": "string",
+          "description": "Asset class (optional). Only `currency` is broadly used today; `tokenized_asset` covers xstocks-style tokenized equities.",
+          "enum": [
+            "currency",
+            "tokenized_asset"
+          ],
+          "default": "currency"
+        },
+        "rebase_multiplier": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "rebased",
+                "base"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "rebased",
+          "description": "Optional parameter for viewing xstocks data. `rebased` displays in terms of underlying equity; `base` displays in terms of SPV tokens."
+        }
+      }
+    },
+    "response": {
+      "type": "array",
+      "description": "Deposit methods available for the requested asset.",
+      "items": {
+        "title": "DepositMethod",
+        "type": "object",
+        "description": "One method available for depositing a particular asset.",
+        "required": [
+          "method",
+          "limit",
+          "fee"
+        ],
+        "properties": {
+          "method": {
+            "type": "string",
+            "description": "Name of the deposit method, e.g. `Bitcoin`."
+          },
+          "limit": {
+            "description": "Maximum net amount that can be deposited right now, or `false` if there is no limit.",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "boolean",
+                "enum": [
+                  false
+                ]
+              }
+            ]
+          },
+          "fee": {
+            "type": "string",
+            "description": "Amount of fees that will be paid (flat fee).",
+            "format": "decimal-string"
+          },
+          "fee-percentage": {
+            "type": "string",
+            "description": "Percentage fee that will be paid (used instead of `fee` for some methods, e.g. Lightning).",
+            "format": "decimal-string"
+          },
+          "address-setup-fee": {
+            "type": "string",
+            "description": "Whether or not the method has an address setup fee."
+          },
+          "gen-address": {
+            "type": "boolean",
+            "description": "Whether new addresses can be generated for this method."
+          },
+          "minimum": {
+            "type": "string",
+            "description": "Minimum net amount that can be deposited right now.",
+            "format": "decimal-string"
+          }
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "Upstream `requestBody` requires `nonce`; dropped from this schema since the core's `authed_request` (`core/transport/http.py`) injects a strictly-increasing nonce into every private call automatically -- it is never a caller-supplied parameter, matching the existing hand-written `deposit_methods(self, asset)` signature, which takes none.",
+    "Upstream declares `gen-address`, `fee-percentage`, and `address-setup-fee` on the `DepositMethod` schema, none of which are valid Python identifiers -- the hand-written PoC `TypedDict` in `pkg/src/kraken/spot/funding.py` drops all three for that reason (see `spec/core.md` Gotchas). Kept here since a JSON Schema property name has no such constraint; real codegen should alias them to valid identifiers (e.g. `gen_address`).",
+    "`limit` has no `type` declared upstream (\"... or false if no limit\"); typed as `anyOf[string, boolean-literal-false]` to match the hand-written core's `str | Literal[False]`.",
+    "`fee` is required despite upstream's own prose implying it's replaced by `fee-percentage` for some methods (e.g. Lightning): live capture of `asset=XBT` (`examples/xbt`) shows `Bitcoin Lightning` returning both `fee: \"0\"` and `fee-percentage: \"0.3\"` simultaneously, and `fee` is present on 29/29 real methods observed across `asset=USDC` and `asset=XBT` -- trusting the live data over the docs' either/or phrasing, per docs/spec/authoring.md rule 8's own precedent.",
+    "`address-setup-fee` and `limit`'s string branch (vs. its `false` variant) are left as bare `string`, not `decimal-string`: no captured example across `asset=USDC`/`XBT` ever shows either as anything but absent (`address-setup-fee`) or `false` (`limit`), so there is no real value to confirm they're actually decimal-shaped -- rule 2/15's 'never invent' discipline applies the same way to a format as to an enum."
+  ]
+}

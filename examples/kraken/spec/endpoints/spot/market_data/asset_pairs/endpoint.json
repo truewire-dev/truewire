@@ -1,0 +1,243 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/market-data/get-tradable-asset-pairs",
+  "meta": {},
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/public/AssetPairs",
+    "method": "GET",
+    "description": "Get tradable asset pairs.",
+    "request": {
+      "title": "AssetPairsRequest",
+      "type": "object",
+      "properties": {
+        "assetVersion": {
+          "type": "integer",
+          "enum": [
+            1
+          ],
+          "description": "Controls whether response keys and asset identifier fields use Kraken's internal names or display names. Omitted (default): internal names are used, pair keys use the internal format (`XXBTZUSD`), and `base`/`quote`/`fee_volume_currency` use internal names. `assetVersion=1`: display names are used, pair keys become the slash-separated display format (`BTC/USD`), and `base`/`quote`/`fee_volume_currency` also switch to display names. Only `assetVersion=1` is currently supported. The `altname`/`wsname` fields are not affected by this parameter."
+        },
+        "pair": {
+          "type": "string",
+          "description": "Asset pairs to get data for (optional, default all tradeable pairs)."
+        },
+        "aclass_base": {
+          "type": "string",
+          "enum": [
+            "currency",
+            "tokenized_asset"
+          ],
+          "default": "currency",
+          "description": "Filters the asset class to retrieve: `currency` (spot currency pairs) or `tokenized_asset` (tokenized asset pairs, i.e. xstocks)."
+        },
+        "info": {
+          "type": "string",
+          "enum": [
+            "info",
+            "leverage",
+            "fees",
+            "margin"
+          ],
+          "default": "info",
+          "description": "Info to retrieve: `info` (all info), `leverage` (leverage info), `fees` (fee schedule), or `margin` (margin info)."
+        },
+        "country_code": {
+          "type": "string",
+          "description": "Filter for response to only include pairs available in the provided country/region (ISO 3166-1 alpha-2 code)."
+        },
+        "execution_venue": {
+          "type": "string",
+          "enum": [
+            "international",
+            "bitnomial_exchange"
+          ],
+          "default": "international",
+          "description": "Filter by execution venue: `international` (International exchange) or `bitnomial_exchange` (Bitnomial exchange)."
+        }
+      }
+    },
+    "response": {
+      "description": "Pair name (or display name, per `assetVersion`) mapped to its info.",
+      "type": "object",
+      "additionalProperties": {
+        "title": "AssetPair",
+        "description": "One tradable asset pair's info.",
+        "type": "object",
+        "properties": {
+          "altname": {
+            "type": "string",
+            "description": "Alternate pair name."
+          },
+          "wsname": {
+            "type": "string",
+            "description": "WebSocket pair name (if available)."
+          },
+          "aclass_base": {
+            "type": "string",
+            "description": "Asset class of the base component."
+          },
+          "base": {
+            "type": "string",
+            "description": "Asset id of the base component."
+          },
+          "aclass_quote": {
+            "type": "string",
+            "description": "Asset class of the quote component."
+          },
+          "quote": {
+            "type": "string",
+            "description": "Asset id of the quote component."
+          },
+          "execution_venue": {
+            "type": "string",
+            "description": "Execution venue where the order book for this pair is listed.",
+            "enum": [
+              "international",
+              "bitnomial_exchange"
+            ]
+          },
+          "lot": {
+            "type": "string",
+            "description": "Volume lot size.",
+            "deprecated": true
+          },
+          "pair_decimals": {
+            "type": "integer",
+            "description": "Number of decimal places for prices in this pair."
+          },
+          "cost_decimals": {
+            "type": "integer",
+            "description": "Number of decimal places for cost of trades in the pair (quote asset terms)."
+          },
+          "lot_decimals": {
+            "type": "integer",
+            "description": "Number of decimal places for volume (base asset terms)."
+          },
+          "lot_multiplier": {
+            "type": "integer",
+            "description": "Amount to multiply lot volume by to get currency volume."
+          },
+          "leverage_buy": {
+            "type": "array",
+            "description": "Leverage amounts available when buying.",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "leverage_sell": {
+            "type": "array",
+            "description": "Leverage amounts available when selling.",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "fees": {
+            "type": "array",
+            "description": "Taker fee schedule.",
+            "items": {
+              "title": "FeeTier",
+              "type": "array",
+              "prefixItems": [
+                {
+                  "title": "volume",
+                  "type": "number",
+                  "description": "Volume threshold for this fee tier."
+                },
+                {
+                  "title": "percentFee",
+                  "type": "number",
+                  "description": "Percent fee at this tier."
+                }
+              ],
+              "minItems": 2,
+              "maxItems": 2
+            }
+          },
+          "fees_maker": {
+            "type": "array",
+            "description": "Maker fee schedule, if the pair is on maker/taker fees.",
+            "items": {
+              "title": "FeeTier",
+              "type": "array",
+              "prefixItems": [
+                {
+                  "title": "volume",
+                  "type": "number",
+                  "description": "Volume threshold for this fee tier."
+                },
+                {
+                  "title": "percentFee",
+                  "type": "number",
+                  "description": "Percent fee at this tier."
+                }
+              ],
+              "minItems": 2,
+              "maxItems": 2
+            }
+          },
+          "fee_volume_currency": {
+            "type": "string",
+            "description": "Volume discount currency."
+          },
+          "margin_call": {
+            "type": "integer",
+            "description": "Margin call level."
+          },
+          "margin_stop": {
+            "type": "integer",
+            "description": "Stop-out/liquidation margin level."
+          },
+          "margin_level": {
+            "type": "integer",
+            "description": "Same value as `margin_stop`, returned under this name instead when `info=margin` is requested. Not in upstream's published field list; confirmed live -- see notes."
+          },
+          "ordermin": {
+            "type": "string",
+            "description": "Minimum order size (in terms of base currency).",
+            "format": "decimal-string"
+          },
+          "costmin": {
+            "type": "string",
+            "description": "Minimum order cost (in terms of quote currency).",
+            "format": "decimal-string"
+          },
+          "tick_size": {
+            "type": "string",
+            "description": "Minimum increment between valid price levels.",
+            "format": "decimal-string"
+          },
+          "status": {
+            "type": "string",
+            "description": "Status of the pair.",
+            "enum": [
+              "online",
+              "cancel_only",
+              "post_only",
+              "limit_only",
+              "reduce_only"
+            ]
+          },
+          "long_position_limit": {
+            "type": "integer",
+            "description": "Maximum long margin position size (in terms of base currency)."
+          },
+          "short_position_limit": {
+            "type": "integer",
+            "description": "Maximum short margin position size (in terms of base currency)."
+          }
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "execution_venue's description says 'comma-separated list of execution venues' but the OpenAPI schema itself is a single-value enum (not an array); specced the schema as documented (single enum), not the prose. fees/fees_maker rows are titled 'FeeTier' and reused verbatim for both fields since they're identical [volume, percentFee] shape.",
+    "`base`/`quote` (and every other field outside the selected subset) are genuinely NotRequired, confirmed by live capture: `info=leverage`/`fees`/`margin` (examples/info_leverage, info_fees, info_margin) each return only that subset's own fields -- e.g. `info=leverage` returns just `leverage_buy`/`leverage_sell`, omitting `base`/`quote` entirely -- matching the `info` parameter's own description ('selects which subset of fields to return'). Only the default `info=info` mode returns the full `AssetPair` shape, per `examples/default`.",
+    "`margin_level` is not in upstream's own published field list, found live while capturing `info=margin` (`examples/info_margin`): for `XXBTZUSD` it returned `{margin_call: 80, margin_level: 40}`, and `examples/default`'s full `info=info` response for the same pair has `margin_call: 80, margin_stop: 40` -- identical value, different key. Specced as a distinct NotRequired field carrying the same fact as `margin_stop`, rather than merged with it, since the two are never observed on the same response and nothing confirms they're guaranteed identical beyond this one sample."
+  ]
+}

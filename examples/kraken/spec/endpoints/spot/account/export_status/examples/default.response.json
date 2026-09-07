@@ -1,0 +1,33 @@
+{
+  "status": 200,
+  "payload": {
+    "error": [],
+    "result": [
+      {
+        "id": "UYAJ",
+        "descr": "typed-dev capture test export",
+        "format": "CSV",
+        "report": "ledgers",
+        "status": "Processed",
+        "aclass": "currency",
+        "asset_classes": [
+          "currency",
+          "equity",
+          "tokenized_asset"
+        ],
+        "fields": "all",
+        "asset": "all",
+        "assets": "all",
+        "subtype": "all",
+        "starttm": "1785542400",
+        "endtm": "1786622388",
+        "createdtm": "1786622388",
+        "expiretm": "1787831988",
+        "completedtm": "1786622389",
+        "datastarttm": "1785542400",
+        "dataendtm": "1786622388",
+        "flags": "0"
+      }
+    ]
+  }
+}

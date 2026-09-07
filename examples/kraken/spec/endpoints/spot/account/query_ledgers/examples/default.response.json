@@ -1,0 +1,19 @@
+{
+  "status": 200,
+  "payload": {
+    "error": [],
+    "result": {
+      "LECRYU-2KORF-Q4DV5Y": {
+        "aclass": "currency",
+        "amount": "10.00000000",
+        "asset": "USDC",
+        "balance": "10.00000000",
+        "fee": "0.00000000",
+        "refid": "FTCmumN-faghQBkeUHreU4KCzDhgnK",
+        "time": 1786617186.301008,
+        "type": "deposit",
+        "subtype": ""
+      }
+    }
+  }
+}

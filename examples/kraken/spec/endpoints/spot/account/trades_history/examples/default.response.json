@@ -1,0 +1,30 @@
+{
+  "status": 200,
+  "payload": {
+    "error": [],
+    "result": {
+      "count": 1,
+      "trades": {
+        "TSOH55-6XU77-SD3WPY": {
+          "ordertxid": "ODLOMH-T4FBZ-A7DZ4O",
+          "postxid": "TKH2SE-M7IF5-CFI7LT",
+          "pair": "XBTUSDC",
+          "aclass": "forex",
+          "time": 1787839575.177869,
+          "type": "buy",
+          "ordertype": "market",
+          "tradeordertype": "market",
+          "price": "79746.95000",
+          "cost": "4.78482",
+          "fee": "0.03828",
+          "vol": "0.00006000",
+          "margin": "0.00000",
+          "leverage": "0",
+          "misc": "",
+          "trade_id": 7311667,
+          "maker": false
+        }
+      }
+    }
+  }
+}

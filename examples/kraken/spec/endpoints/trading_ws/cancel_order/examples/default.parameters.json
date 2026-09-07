@@ -1,0 +1,16 @@
+{
+  "parameters": {
+    "order_id": [
+      "O4T3A2-GIXBY-2BLT6M"
+    ]
+  },
+  "payload": {
+    "method": "cancel_order",
+    "params": {
+      "order_id": [
+        "O4T3A2-GIXBY-2BLT6M"
+      ]
+    },
+    "req_id": 3
+  }
+}

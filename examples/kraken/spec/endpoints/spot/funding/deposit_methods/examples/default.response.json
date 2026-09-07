@@ -1,0 +1,169 @@
+{
+  "status": 200,
+  "payload": {
+    "error": [],
+    "result": [
+      {
+        "method": "USDC - Stellar XLM",
+        "limit": false,
+        "fee": "0.00",
+        "gen-address": true,
+        "minimum": "5"
+      },
+      {
+        "method": "USDC - Avalanche C-Chain (Unified)",
+        "limit": false,
+        "fee": "0.00",
+        "gen-address": true,
+        "minimum": "2.5"
+      },
+      {
+        "method": "USDC - Ethereum (Unified)",
+        "limit": false,
+        "fee": "0",
+        "gen-address": true,
+        "minimum": "2.5"
+      },
+      {
+        "method": "USDC.e - Optimism (Unified)",
+        "limit": false,
+        "fee": "0",
+        "gen-address": true,
+        "minimum": "2.5"
+      },
+      {
+        "method": "USDC - Optimism (Unified)",
+        "limit": false,
+        "fee": "0",
+        "gen-address": true,
+        "minimum": "2.5"
+      },
+      {
+        "method": "USDC - Base (Unified)",
+        "limit": false,
+        "fee": "0",
+        "gen-address": true,
+        "minimum": "2.50"
+      },
+      {
+        "method": "USDC - Sonic",
+        "limit": false,
+        "fee": "0.00",
+        "gen-address": true,
+        "minimum": "2.5"
+      },
+      {
+        "method": "USDC - Ink (Unified)",
+        "limit": false,
+        "fee": "0",
+        "gen-address": true,
+        "minimum": "0.2"
+      },
+      {
+        "method": "USDC - Sei (EVM)",
+        "limit": false,
+        "fee": "0",
+        "gen-address": true,
+        "minimum": "2.5"
+      },
+      {
+        "method": "USDC - XDC Network",
+        "limit": false,
+        "fee": "0",
+        "gen-address": true,
+        "minimum": "2.5"
+      },
+      {
+        "method": "USDC - Tempo (USDC.e)",
+        "limit": false,
+        "fee": "0",
+        "gen-address": true,
+        "minimum": "5"
+      },
+      {
+        "method": "USDC - Injective Chain",
+        "limit": false,
+        "fee": "0",
+        "gen-address": true,
+        "minimum": "1.0"
+      },
+      {
+        "method": "USDC (SPL)",
+        "limit": false,
+        "fee": "0.00",
+        "gen-address": true,
+        "minimum": "0.40"
+      },
+      {
+        "method": "USDC - Sui",
+        "limit": false,
+        "fee": "0",
+        "gen-address": true,
+        "minimum": "5"
+      },
+      {
+        "method": "USDC - Algorand",
+        "limit": false,
+        "fee": "0.00",
+        "gen-address": true,
+        "minimum": "1.00"
+      },
+      {
+        "method": "USDC - Hedera (EVM)",
+        "limit": false,
+        "fee": "0",
+        "gen-address": true,
+        "minimum": "5"
+      },
+      {
+        "method": "USDC - Hedera",
+        "limit": false,
+        "fee": "0",
+        "gen-address": true,
+        "minimum": "5"
+      },
+      {
+        "method": "USDCx - Canton Network",
+        "limit": false,
+        "fee": "0",
+        "gen-address": true,
+        "minimum": "5"
+      },
+      {
+        "method": "USDC - Stellar (muxed)",
+        "limit": false,
+        "fee": "0",
+        "gen-address": true,
+        "minimum": "5"
+      },
+      {
+        "method": "USDC.e - Polygon (Unified)",
+        "limit": false,
+        "fee": "0",
+        "gen-address": true,
+        "minimum": "2.00"
+      },
+      {
+        "method": "USDC - Polygon (Unified)",
+        "limit": false,
+        "fee": "0",
+        "gen-address": true,
+        "minimum": "2.00"
+      },
+      {
+        "method": "USDC.e - Arbitrum One (Unified)",
+        "limit": false,
+        "fee": "0",
+        "gen-address": true,
+        "minimum": "2.50"
+      },
+      {
+        "method": "USDC - Arbitrum One (Unified)",
+        "limit": false,
+        "fee": "0",
+        "gen-address": true,
+        "minimum": "2.50"
+      }
+    ]
+  }
+}

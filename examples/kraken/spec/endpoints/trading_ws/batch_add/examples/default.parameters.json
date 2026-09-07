@@ -1,0 +1,40 @@
+{
+  "parameters": {
+    "symbol": "XBT/USDC",
+    "orders": [
+      {
+        "order_type": "limit",
+        "side": "buy",
+        "order_qty": 0.0001,
+        "limit_price": 10000.0
+      },
+      {
+        "order_type": "limit",
+        "side": "buy",
+        "order_qty": 0.0001,
+        "limit_price": 10003.0
+      }
+    ]
+  },
+  "payload": {
+    "method": "batch_add",
+    "params": {
+      "symbol": "XBT/USDC",
+      "orders": [
+        {
+          "order_type": "limit",
+          "side": "buy",
+          "order_qty": 0.0001,
+          "limit_price": 10000.0
+        },
+        {
+          "order_type": "limit",
+          "side": "buy",
+          "order_qty": 0.0001,
+          "limit_price": 10003.0
+        }
+      ]
+    },
+    "req_id": 3
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/funding/request-withdrawal-cancellation",
+  "meta": {
+    "signed": true
+  },
+  "redacted": [
+    "nonce"
+  ],
+  "unverified": {
+    "reason": "requires_state",
+    "detail": "This account's only registered withdrawal key (WithdrawAddresses) is labeled \"Deribit\" with a different address than the one client.toml's [policy.permissions].withdraw_addresses pre-approves (0xE089aB95D28aCA5804a2F99c2cc259A88d3Be799). Kraken requires a destination to already be a registered withdrawal key before Withdraw will accept it -- registering a new key is a manual, typically 2FA/email-confirmed action outside API scope. No in-policy address is callable right now."
+  },
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/private/WithdrawCancel",
+    "method": "POST",
+    "description": "Cancel a recently requested withdrawal, if it has not already been successfully processed. Requires the `Funds permissions - Withdraw` API key permission, unless the withdrawal is a `WalletTransfer`, in which case no permissions are required.",
+    "request": {
+      "title": "WithdrawCancelRequest",
+      "type": "object",
+      "required": [
+        "asset",
+        "refid"
+      ],
+      "properties": {
+        "asset": {
+          "type": "string",
+          "description": "Asset being withdrawn."
+        },
+        "refid": {
+          "type": "string",
+          "description": "Withdrawal reference ID."
+        }
+      }
+    },
+    "response": {
+      "type": "boolean",
+      "description": "Whether the cancellation was successful."
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "Upstream `requestBody` requires `nonce`; dropped from this schema since the core's `authed_request` (`core/transport/http.py`) injects a strictly-increasing nonce into every private call automatically -- it is never a caller-supplied parameter, matching the existing hand-written `deposit_methods(self, asset)` signature, which takes none."
+  ]
+}

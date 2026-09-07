@@ -1,0 +1,127 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/market-data/get-recent-trades",
+  "meta": {},
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/public/Trades",
+    "method": "GET",
+    "description": "Returns the last 1000 trades by default.",
+    "request": {
+      "title": "TradesRequest",
+      "type": "object",
+      "properties": {
+        "pair": {
+          "type": "string",
+          "description": "Asset pair to get data for."
+        },
+        "assetVersion": {
+          "type": "integer",
+          "enum": [
+            1
+          ],
+          "description": "Controls whether response keys use Kraken's internal names or display names. Omitted (default): internal names are used. `assetVersion=1`: display names are used. Only `assetVersion=1` is currently supported."
+        },
+        "since": {
+          "type": "string",
+          "format": "epoch-nanos",
+          "description": "Return trade data since given timestamp."
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000,
+          "default": 1000,
+          "description": "Return specific number of trades, up to 1000."
+        },
+        "asset_class": {
+          "type": "string",
+          "enum": [
+            "tokenized_asset"
+          ],
+          "description": "This parameter is required on requests for non-crypto pairs, i.e. use `tokenized_asset` for xstocks."
+        }
+      },
+      "required": [
+        "pair"
+      ]
+    },
+    "response": {
+      "title": "TradesResult",
+      "description": "Trades keyed by pair, plus the polling cursor.",
+      "type": "object",
+      "properties": {
+        "last": {
+          "type": "string",
+          "description": "ID to be used as `since` when polling for new trade data.",
+          "format": "epoch-nanos"
+        }
+      },
+      "additionalProperties": {
+        "description": "This pair's recent trades, oldest first.",
+        "type": "array",
+        "items": {
+          "title": "TradeEntry",
+          "description": "One trade `[price, volume, time, buy/sell, market/limit, miscellaneous, trade_id]`.",
+          "type": "array",
+          "prefixItems": [
+            {
+              "title": "price",
+              "type": "string",
+              "description": "Trade price."
+            },
+            {
+              "title": "volume",
+              "type": "string",
+              "description": "Trade volume."
+            },
+            {
+              "title": "time",
+              "type": "number",
+              "description": "Trade time, Unix timestamp with sub-second precision."
+            },
+            {
+              "title": "side",
+              "type": "string",
+              "description": "Which side initiated the trade.",
+              "enum": [
+                "b",
+                "s"
+              ]
+            },
+            {
+              "title": "orderType",
+              "type": "string",
+              "description": "Order type that took liquidity.",
+              "enum": [
+                "m",
+                "l"
+              ]
+            },
+            {
+              "title": "miscellaneous",
+              "type": "string",
+              "description": "Miscellaneous trade flags, usually empty."
+            },
+            {
+              "title": "tradeId",
+              "type": "integer",
+              "description": "Unique trade identifier."
+            }
+          ],
+          "minItems": 7,
+          "maxItems": 7
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "No pagination block: `since`/`last` is an incremental-update cursor over a live, unbounded trade feed (there is no terminal page -- `last` is always present, even when caught up to real time), not a bounded collection this format's `token` strategy's `absent_cursor` terminator can describe.",
+    "`since` (and its paired response field `last`, the same value) declares `format: \"epoch-nanos\"` (rule 3): confirmed live against `/0/public/Trades` on 2026-08-21 (a returned `last` of `1786622308334567536`, 19 digits, matching wall-clock nanosecond-epoch magnitude) and reconfirmed against the recorded `examples/default.response.json` (`\"last\": \"1786622308334567536\"`) -- renders to the client core's `TimestampNanos` (`typed_core.times.EpochConverter.nanoseconds()`)."
+  ]
+}

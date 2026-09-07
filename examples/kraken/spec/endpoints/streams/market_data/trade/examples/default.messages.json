@@ -1,0 +1,473 @@
+[
+  {
+    "channel": "trade",
+    "type": "snapshot",
+    "data": [
+      {
+        "symbol": "BTC/USD",
+        "side": "buy",
+        "price": 63397.1,
+        "qty": 0.00806784,
+        "ord_type": "limit",
+        "trade_id": 105076934,
+        "timestamp": "2026-08-13T12:05:25.557102Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "buy",
+        "price": 63397.1,
+        "qty": 0.00150376,
+        "ord_type": "limit",
+        "trade_id": 105076935,
+        "timestamp": "2026-08-13T12:05:25.564934Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "buy",
+        "price": 63397.1,
+        "qty": 0.00039434,
+        "ord_type": "limit",
+        "trade_id": 105076936,
+        "timestamp": "2026-08-13T12:05:25.564934Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "buy",
+        "price": 63398.6,
+        "qty": 5.1e-05,
+        "ord_type": "limit",
+        "trade_id": 105076937,
+        "timestamp": "2026-08-13T12:05:25.564934Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "sell",
+        "price": 63400.5,
+        "qty": 7.661e-05,
+        "ord_type": "limit",
+        "trade_id": 105076938,
+        "timestamp": "2026-08-13T12:05:26.919442Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "sell",
+        "price": 63400.5,
+        "qty": 7.181e-05,
+        "ord_type": "limit",
+        "trade_id": 105076939,
+        "timestamp": "2026-08-13T12:05:29.120438Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "buy",
+        "price": 63400.6,
+        "qty": 0.0159,
+        "ord_type": "limit",
+        "trade_id": 105076940,
+        "timestamp": "2026-08-13T12:05:37.933763Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "buy",
+        "price": 63400.6,
+        "qty": 0.000394,
+        "ord_type": "limit",
+        "trade_id": 105076941,
+        "timestamp": "2026-08-13T12:05:37.933763Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "buy",
+        "price": 63400.6,
+        "qty": 3.2e-07,
+        "ord_type": "limit",
+        "trade_id": 105076942,
+        "timestamp": "2026-08-13T12:05:37.938417Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "buy",
+        "price": 63401.8,
+        "qty": 5.1e-05,
+        "ord_type": "limit",
+        "trade_id": 105076943,
+        "timestamp": "2026-08-13T12:05:37.938417Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "buy",
+        "price": 63405.5,
+        "qty": 0.00015389,
+        "ord_type": "limit",
+        "trade_id": 105076944,
+        "timestamp": "2026-08-13T12:05:40.685284Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "buy",
+        "price": 63405.5,
+        "qty": 0.00294859,
+        "ord_type": "market",
+        "trade_id": 105076945,
+        "timestamp": "2026-08-13T12:05:49.602926Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "buy",
+        "price": 63405.5,
+        "qty": 0.00312307,
+        "ord_type": "limit",
+        "trade_id": 105076946,
+        "timestamp": "2026-08-13T12:05:52.121436Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "buy",
+        "price": 63405.5,
+        "qty": 0.00477445,
+        "ord_type": "limit",
+        "trade_id": 105076947,
+        "timestamp": "2026-08-13T12:05:52.128699Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "buy",
+        "price": 63405.5,
+        "qty": 0.00039429,
+        "ord_type": "limit",
+        "trade_id": 105076948,
+        "timestamp": "2026-08-13T12:05:52.128699Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "sell",
+        "price": 63407.4,
+        "qty": 0.00036384,
+        "ord_type": "limit",
+        "trade_id": 105076949,
+        "timestamp": "2026-08-13T12:05:57.258882Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "sell",
+        "price": 63407.4,
+        "qty": 0.00011759,
+        "ord_type": "limit",
+        "trade_id": 105076950,
+        "timestamp": "2026-08-13T12:06:01.010610Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "buy",
+        "price": 63407.5,
+        "qty": 0.016,
+        "ord_type": "limit",
+        "trade_id": 105076951,
+        "timestamp": "2026-08-13T12:06:02.393682Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "buy",
+        "price": 63407.5,
+        "qty": 0.019,
+        "ord_type": "limit",
+        "trade_id": 105076952,
+        "timestamp": "2026-08-13T12:06:02.393682Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "buy",
+        "price": 63407.5,
+        "qty": 0.00039428,
+        "ord_type": "limit",
+        "trade_id": 105076953,
+        "timestamp": "2026-08-13T12:06:02.393682Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "buy",
+        "price": 63408.1,
+        "qty": 5.1e-05,
+        "ord_type": "limit",
+        "trade_id": 105076954,
+        "timestamp": "2026-08-13T12:06:02.393682Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "buy",
+        "price": 63422.0,
+        "qty": 0.001576,
+        "ord_type": "limit",
+        "trade_id": 105076955,
+        "timestamp": "2026-08-13T12:06:02.467178Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "buy",
+        "price": 63424.3,
+        "qty": 0.000252,
+        "ord_type": "limit",
+        "trade_id": 105076956,
+        "timestamp": "2026-08-13T12:06:02.534116Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "buy",
+        "price": 63425.1,
+        "qty": 0.00315455,
+        "ord_type": "limit",
+        "trade_id": 105076957,
+        "timestamp": "2026-08-13T12:06:02.534116Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "buy",
+        "price": 63437.2,
+        "qty": 0.001576,
+        "ord_type": "limit",
+        "trade_id": 105076958,
+        "timestamp": "2026-08-13T12:06:03.572884Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "buy",
+        "price": 63437.2,
+        "qty": 0.00039409,
+        "ord_type": "limit",
+        "trade_id": 105076959,
+        "timestamp": "2026-08-13T12:06:03.572885Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "buy",
+        "price": 63449.2,
+        "qty": 0.00015462,
+        "ord_type": "limit",
+        "trade_id": 105076960,
+        "timestamp": "2026-08-13T12:06:04.143026Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "buy",
+        "price": 63449.2,
+        "qty": 0.00184538,
+        "ord_type": "limit",
+        "trade_id": 105076961,
+        "timestamp": "2026-08-13T12:06:04.144352Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "buy",
+        "price": 63449.2,
+        "qty": 0.00039402,
+        "ord_type": "limit",
+        "trade_id": 105076962,
+        "timestamp": "2026-08-13T12:06:04.144352Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "buy",
+        "price": 63449.2,
+        "qty": 0.01417827,
+        "ord_type": "limit",
+        "trade_id": 105076963,
+        "timestamp": "2026-08-13T12:06:04.144352Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "buy",
+        "price": 63452.2,
+        "qty": 0.000394,
+        "ord_type": "limit",
+        "trade_id": 105076964,
+        "timestamp": "2026-08-13T12:06:04.242172Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "sell",
+        "price": 63449.3,
+        "qty": 0.00017534,
+        "ord_type": "limit",
+        "trade_id": 105076965,
+        "timestamp": "2026-08-13T12:06:18.417884Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "buy",
+        "price": 63449.4,
+        "qty": 7.88e-05,
+        "ord_type": "market",
+        "trade_id": 105076966,
+        "timestamp": "2026-08-13T12:06:21.541562Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "sell",
+        "price": 63449.3,
+        "qty": 0.00021868,
+        "ord_type": "limit",
+        "trade_id": 105076967,
+        "timestamp": "2026-08-13T12:06:29.854314Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "sell",
+        "price": 63449.3,
+        "qty": 0.001,
+        "ord_type": "limit",
+        "trade_id": 105076968,
+        "timestamp": "2026-08-13T12:06:29.854314Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "sell",
+        "price": 63449.3,
+        "qty": 0.0001,
+        "ord_type": "limit",
+        "trade_id": 105076969,
+        "timestamp": "2026-08-13T12:06:29.854314Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "sell",
+        "price": 63449.3,
+        "qty": 0.00499067,
+        "ord_type": "limit",
+        "trade_id": 105076970,
+        "timestamp": "2026-08-13T12:06:29.854314Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "buy",
+        "price": 63449.4,
+        "qty": 0.00015605,
+        "ord_type": "limit",
+        "trade_id": 105076971,
+        "timestamp": "2026-08-13T12:06:36.160620Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "sell",
+        "price": 63449.3,
+        "qty": 0.00193769,
+        "ord_type": "limit",
+        "trade_id": 105076972,
+        "timestamp": "2026-08-13T12:06:57.718349Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "buy",
+        "price": 63449.4,
+        "qty": 0.00015917,
+        "ord_type": "limit",
+        "trade_id": 105076973,
+        "timestamp": "2026-08-13T12:07:00.634360Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "buy",
+        "price": 63449.4,
+        "qty": 0.00023094,
+        "ord_type": "limit",
+        "trade_id": 105076974,
+        "timestamp": "2026-08-13T12:07:00.634360Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "buy",
+        "price": 63449.4,
+        "qty": 0.0002887,
+        "ord_type": "limit",
+        "trade_id": 105076975,
+        "timestamp": "2026-08-13T12:07:05.623286Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "sell",
+        "price": 63449.3,
+        "qty": 0.00907164,
+        "ord_type": "market",
+        "trade_id": 105076976,
+        "timestamp": "2026-08-13T12:07:05.733340Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "sell",
+        "price": 63449.3,
+        "qty": 0.019,
+        "ord_type": "market",
+        "trade_id": 105076977,
+        "timestamp": "2026-08-13T12:07:05.733340Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "sell",
+        "price": 63449.3,
+        "qty": 0.011,
+        "ord_type": "market",
+        "trade_id": 105076978,
+        "timestamp": "2026-08-13T12:07:05.733340Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "sell",
+        "price": 63449.3,
+        "qty": 0.00039402,
+        "ord_type": "market",
+        "trade_id": 105076979,
+        "timestamp": "2026-08-13T12:07:05.733340Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "sell",
+        "price": 63449.3,
+        "qty": 0.0001,
+        "ord_type": "market",
+        "trade_id": 105076980,
+        "timestamp": "2026-08-13T12:07:05.733340Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "sell",
+        "price": 63446.3,
+        "qty": 5.1e-05,
+        "ord_type": "market",
+        "trade_id": 105076981,
+        "timestamp": "2026-08-13T12:07:05.733340Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "sell",
+        "price": 63444.8,
+        "qty": 0.00015763,
+        "ord_type": "market",
+        "trade_id": 105076982,
+        "timestamp": "2026-08-13T12:07:05.733340Z"
+      },
+      {
+        "symbol": "BTC/USD",
+        "side": "sell",
+        "price": 63444.2,
+        "qty": 0.0876099,
+        "ord_type": "market",
+        "trade_id": 105076983,
+        "timestamp": "2026-08-13T12:07:05.733340Z"
+      }
+    ]
+  },
+  {
+    "channel": "trade",
+    "type": "update",
+    "data": [
+      {
+        "symbol": "BTC/USD",
+        "side": "buy",
+        "price": 63449.0,
+        "qty": 0.0003844,
+        "ord_type": "limit",
+        "trade_id": 105076984,
+        "timestamp": "2026-08-13T12:07:14.099406Z"
+      }
+    ]
+  }
+]

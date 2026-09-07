@@ -1,0 +1,32 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/market-data/get-server-time",
+  "meta": {},
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/public/Time",
+    "method": "GET",
+    "description": "Get the server's time.",
+    "request": null,
+    "response": {
+      "title": "ServerTime",
+      "description": "The server's current time.",
+      "type": "object",
+      "properties": {
+        "unixtime": {
+          "type": "integer",
+          "description": "Unix timestamp."
+        },
+        "rfc1123": {
+          "type": "string",
+          "description": "RFC 1123 time format."
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  }
+}

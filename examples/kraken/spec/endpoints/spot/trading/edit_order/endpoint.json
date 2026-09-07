@@ -1,0 +1,159 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/trading/edit-order",
+  "meta": {
+    "signed": true
+  },
+  "redacted": [
+    "nonce"
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/private/EditOrder",
+    "method": "POST",
+    "description": "Legacy cancel-replace: edits the parameters of a live order by cancelling it and creating a new order with the adjusted parameters, returning a new `txid`. Superseded by `AmendOrder`, which edits in place and resolves this endpoint's caveats with better performance. Caveats: triggered stop-loss/take-profit orders are not supported; orders with a conditional close attached are not supported; an edit reducing volume below the already-executed volume is rejected; `cl_ord_id` is not supported; executions stay associated with the original order rather than the replacement; queue position is not maintained.\n\n**API Key Permissions Required:** `Orders and trades - Create & modify orders` and `Orders and trades - Cancel & close orders`",
+    "request": {
+      "title": "EditOrderRequest",
+      "description": "Parameters for cancel-replacing a live order.",
+      "type": "object",
+      "required": [
+        "pair",
+        "txid"
+      ],
+      "properties": {
+        "userref": {
+          "type": "integer",
+          "format": "int32",
+          "description": "An optional user-specified integer id associated with this edit request. Note: the parent order's `userref` is not retained on the new order after the edit."
+        },
+        "txid": {
+          "description": "The original order's transaction ID (txid), or its user reference (userref) if unique to a single order -- if the userref matches multiple orders, the edit is denied with an error.",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            }
+          ]
+        },
+        "volume": {
+          "type": "string",
+          "description": "Order quantity in terms of the base asset."
+        },
+        "displayvol": {
+          "type": "string",
+          "description": "For `iceberg` orders only, the quantity to show in the book while the rest of the order quantity remains hidden. Minimum value is 1/15 of `volume`."
+        },
+        "pair": {
+          "type": "string",
+          "description": "Asset pair `id` or `altname`."
+        },
+        "asset_class": {
+          "type": "string",
+          "description": "Required on requests for non-crypto pairs, e.g. `tokenized_asset` for xstocks.",
+          "enum": [
+            "tokenized_asset"
+          ]
+        },
+        "price": {
+          "type": "string",
+          "description": "Limit price for `limit`/`iceberg` orders, or trigger price for `stop-loss`, `stop-loss-limit`, `take-profit`, `take-profit-limit`, `trailing-stop` and `trailing-stop-limit` orders. Either `price` or `price2` may be prefixed with `+`/`-` (offset from last traded price) or `#` (add or subtract depending on order direction/type), and suffixed with `%` for a relative percentage instead of an absolute difference. Trailing stops must use the `+` prefix, and also accept the `%` suffix."
+        },
+        "price2": {
+          "type": "string",
+          "description": "Secondary price for `stop-loss-limit`, `take-profit-limit` and `trailing-stop-limit` orders. For trailing stops this is a relative offset (`+`/`-` prefix, optionally `%` suffix) from the trigger price to the limit price -- `+0` sets the limit price equal to the trigger price."
+        },
+        "oflags": {
+          "type": "string",
+          "description": "Comma-delimited list of order flags. Only `post` (post-only, available when `ordertype = limit`) can be changed on edit -- every other flag from the parent order is retained, and `post` itself must be explicitly re-supplied on the edit request or it is dropped."
+        },
+        "deadline": {
+          "type": "string",
+          "description": "RFC3339 timestamp (e.g. `2021-04-01T00:18:45Z`) after which the matching engine should reject this edit if it is still queued due to latency, minimum now()+2s, maximum now()+60s.",
+          "format": "date-time"
+        },
+        "cancel_response": {
+          "type": "boolean",
+          "description": "If true, the client receives a pending-replace acknowledgement before the order is fully replaced."
+        },
+        "validate": {
+          "type": "boolean",
+          "description": "If true, the edit is validated only and never reaches the matching engine.",
+          "default": false
+        }
+      }
+    },
+    "response": {
+      "title": "OrderEdited",
+      "type": "object",
+      "description": "Result of a cancel-replace edit.",
+      "properties": {
+        "status": {
+          "type": "string",
+          "description": "Outcome of the edit request."
+        },
+        "txid": {
+          "type": "string",
+          "description": "New transaction ID, present if the order was successfully replaced."
+        },
+        "originaltxid": {
+          "type": "string",
+          "description": "The original order's transaction ID."
+        },
+        "descr": {
+          "title": "OrderDescription",
+          "type": "object",
+          "description": "Human-readable description of the replacement order.",
+          "properties": {
+            "order": {
+              "type": "string",
+              "description": "Human-readable order description."
+            }
+          }
+        },
+        "volume": {
+          "type": "string",
+          "description": "Updated order volume."
+        },
+        "price": {
+          "type": "string",
+          "description": "Updated order price."
+        },
+        "price2": {
+          "type": "string",
+          "description": "Updated order secondary price."
+        },
+        "orders_cancelled": {
+          "type": "integer",
+          "description": "Number of orders cancelled by this edit -- either 0 or 1."
+        },
+        "newuserref": {
+          "type": "string",
+          "description": "The `userref` passed with this edit request, if any."
+        },
+        "olduserref": {
+          "type": "string",
+          "description": "The original order's `userref`, if any."
+        },
+        "error_message": {
+          "type": "string",
+          "description": "Error message, present if the edit was unsuccessful."
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "`nonce` is dropped from the request body -- transport-injected by the client core (authed_request), never a caller-supplied parameter.",
+    "`txid` converted from upstream's `oneOf: [string, integer]` to `anyOf` per spec-authoring rule 4.",
+    "`oflags` has no declared `type` upstream (a schema gap) -- filled in as `string` since its description and every sibling `oflags` field elsewhere in this subsection are comma-delimited strings.",
+    "`status` is described as 'Status of the order: Ok or Err' but upstream's own example shows lowercase `\"ok\"`, disagreeing on casing -- left as a bare string rather than guessing an enum casing, per spec-authoring rule 2.",
+    "This endpoint is legacy (superseded by AmendOrder per upstream's own description) but still live; left `unverified` unset per the brief.",
+    "Deliberately left as a flat request body (production_standards.md S12), not a `requestBody`/`anyOf` discriminated union like `add_order`/`add_order_batch`: unlike those, an edit-by-id request carries no `ordertype`/`order_type` field at all to discriminate on -- the edit targets an existing order by `txid`, and Kraken's wire contract for this endpoint provides no local field whose value would select which variant's required-field profile applies. Building an `anyOf` here would mean inventing a discriminant the venue doesn't provide, which authoring rule 2's \"never invent\" bar rules out just as much for a discriminant as for an enum value."
+  ]
+}

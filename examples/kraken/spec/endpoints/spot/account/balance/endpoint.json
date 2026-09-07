@@ -1,0 +1,58 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/account-data/get-account-balance",
+  "meta": {
+    "signed": true
+  },
+  "redacted": [
+    "nonce"
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/private/Balance",
+    "method": "POST",
+    "description": "Retrieve all cash balances, net of pending withdrawals.\n\n**Note on Staking/Earn assets:** assets migrated from the legacy Staking system to the new Earn system may appear in balances and ledgers with symbol extensions -- `.B` (new yield-bearing products), `.F` (auto-earning Kraken Rewards), `.S`/`.M` (legacy staked/opt-in-reward balances), `.T` (tokenized assets). These are read-only for transacting; use the base asset (e.g. `USDT`) instead.\n\n**API Key Permissions Required:** `Funds permissions - Query`",
+    "request": {
+      "title": "BalanceRequest",
+      "type": "object",
+      "properties": {
+        "rebase_multiplier": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "rebased",
+                "base"
+              ],
+              "default": "rebased"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional parameter for viewing xstocks data. `rebased` displays in terms of underlying equity, `base` displays in terms of SPV tokens."
+        }
+      }
+    },
+    "response": {
+      "title": "AccountBalance",
+      "description": "All cash balances, keyed by asset code.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "description": "Balance of this asset, as a decimal string.",
+        "format": "decimal-string"
+      },
+      "example": {
+        "ZUSD": "171288.6158",
+        "ZEUR": "504861.8946",
+        "XXBT": "1011.1908877900"
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  }
+}

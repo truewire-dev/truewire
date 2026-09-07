@@ -1,0 +1,288 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/funding/get-status-of-recent-deposits",
+  "meta": {
+    "signed": true
+  },
+  "redacted": [
+    "nonce"
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/private/DepositStatus",
+    "method": "POST",
+    "description": "Retrieve information about recent deposits. Results are sorted by recency; use the `cursor` parameter to iterate through the list of deposits (page size equal to the value of `limit`) from newest to oldest. Requires the `Funds permissions - Query` API key permission.",
+    "request": {
+      "title": "DepositStatusRequest",
+      "type": "object",
+      "properties": {
+        "asset": {
+          "type": "string",
+          "description": "Filter for a specific asset being deposited."
+        },
+        "aclass": {
+          "type": "string",
+          "description": "Filter for a specific asset class being deposited.",
+          "enum": [
+            "currency",
+            "tokenized_asset"
+          ],
+          "default": "currency"
+        },
+        "method": {
+          "type": "string",
+          "description": "Filter for a specific name of deposit method."
+        },
+        "start": {
+          "type": "string",
+          "description": "Start timestamp; deposits created strictly before this will not be included in the response."
+        },
+        "end": {
+          "type": "string",
+          "description": "End timestamp; deposits created strictly after this will not be included in the response."
+        },
+        "cursor": {
+          "description": "`true`/`false` to enable/disable the paginated response shape, or a cursor string (from a previous response's `next_cursor`) to fetch the next page.",
+          "default": false,
+          "anyOf": [
+            {
+              "type": "boolean",
+              "description": "Enable/disable paginated response."
+            },
+            {
+              "type": "string",
+              "description": "Cursor for the next page of results."
+            }
+          ]
+        },
+        "limit": {
+          "type": "integer",
+          "default": 25,
+          "description": "Number of results to include per page."
+        },
+        "rebase_multiplier": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "rebased",
+                "base"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "rebased",
+          "description": "Optional parameter for viewing xstocks data. `rebased` displays in terms of underlying equity; `base` displays in terms of SPV tokens."
+        }
+      }
+    },
+    "response": {
+      "anyOf": [
+        {
+          "type": "array",
+          "description": "Deposit records, returned when `cursor` is unset or `false`.",
+          "items": {
+            "title": "Deposit",
+            "type": "object",
+            "description": "One deposit record.",
+            "required": [
+              "method",
+              "aclass",
+              "asset",
+              "refid",
+              "txid",
+              "info",
+              "amount",
+              "time",
+              "status"
+            ],
+            "properties": {
+              "method": {
+                "type": "string",
+                "description": "Name of deposit method."
+              },
+              "aclass": {
+                "type": "string",
+                "description": "Asset class."
+              },
+              "asset": {
+                "type": "string",
+                "description": "Asset."
+              },
+              "refid": {
+                "type": "string",
+                "description": "Reference ID."
+              },
+              "txid": {
+                "type": "string",
+                "description": "Method transaction ID."
+              },
+              "info": {
+                "type": "string",
+                "description": "Method transaction information."
+              },
+              "amount": {
+                "type": "string",
+                "description": "Amount deposited."
+              },
+              "fee": {
+                "type": "string",
+                "description": "Fees paid. Not always present (e.g. omitted for some Ether deposits in Kraken's own documented example); type inferred as `string` by analogy with every other `fee` field in this operation family, since upstream declares no `type` for this property."
+              },
+              "time": {
+                "type": "integer",
+                "format": "epoch-seconds",
+                "description": "Unix timestamp when the request was made."
+              },
+              "status": {
+                "type": "string",
+                "description": "Status of the deposit. See the IFEX financial transaction states reference linked from upstream docs for background.",
+                "enum": [
+                  "Initial",
+                  "Pending",
+                  "EarlyConfirmed",
+                  "Settled",
+                  "Success",
+                  "Failure"
+                ]
+              },
+              "status-prop": {
+                "type": "string",
+                "description": "Additional status property, if available: `return` for a return transaction initiated by Kraken, `onhold` when the deposit is on hold pending review.",
+                "enum": [
+                  "return",
+                  "onhold"
+                ]
+              },
+              "originators": {
+                "type": "array",
+                "description": "Sending transaction id(s), for deposits credited via a sweeping transaction.",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        {
+          "title": "DepositStatusPage",
+          "type": "object",
+          "description": "Paginated deposit results, returned when the `cursor` request parameter is set.",
+          "required": [
+            "deposits"
+          ],
+          "properties": {
+            "deposits": {
+              "type": "array",
+              "description": "Page of deposit records. Confirmed live as `deposits` (plural) -- the endpoint's OpenAPI schema had documented this key as `deposit` (singular).",
+              "items": {
+                "title": "Deposit",
+                "type": "object",
+                "description": "One deposit record.",
+                "required": [
+                  "method",
+                  "aclass",
+                  "asset",
+                  "refid",
+                  "txid",
+                  "info",
+                  "amount",
+                  "time",
+                  "status"
+                ],
+                "properties": {
+                  "method": {
+                    "type": "string",
+                    "description": "Name of deposit method."
+                  },
+                  "aclass": {
+                    "type": "string",
+                    "description": "Asset class."
+                  },
+                  "asset": {
+                    "type": "string",
+                    "description": "Asset."
+                  },
+                  "refid": {
+                    "type": "string",
+                    "description": "Reference ID."
+                  },
+                  "txid": {
+                    "type": "string",
+                    "description": "Method transaction ID."
+                  },
+                  "info": {
+                    "type": "string",
+                    "description": "Method transaction information."
+                  },
+                  "amount": {
+                    "type": "string",
+                    "description": "Amount deposited."
+                  },
+                  "fee": {
+                    "type": "string",
+                    "description": "Fees paid. Not always present (e.g. omitted for some Ether deposits in Kraken's own documented example); type inferred as `string` by analogy with every other `fee` field in this operation family, since upstream declares no `type` for this property."
+                  },
+                  "time": {
+                    "type": "integer",
+                    "format": "epoch-seconds",
+                    "description": "Unix timestamp when the request was made."
+                  },
+                  "status": {
+                    "type": "string",
+                    "description": "Status of the deposit. See the IFEX financial transaction states reference linked from upstream docs for background.",
+                    "enum": [
+                      "Initial",
+                      "Pending",
+                      "EarlyConfirmed",
+                      "Settled",
+                      "Success",
+                      "Failure"
+                    ]
+                  },
+                  "status-prop": {
+                    "type": "string",
+                    "description": "Additional status property, if available: `return` for a return transaction initiated by Kraken, `onhold` when the deposit is on hold pending review.",
+                    "enum": [
+                      "return",
+                      "onhold"
+                    ]
+                  },
+                  "originators": {
+                    "type": "array",
+                    "description": "Sending transaction id(s), for deposits credited via a sweeping transaction.",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "next_cursor": {
+              "description": "Cursor to pass back as `cursor` to fetch the next page of results. `null` once there is no further page -- confirmed live.",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "Upstream `requestBody` requires `nonce`; dropped from this schema since the core's `authed_request` (`core/transport/http.py`) injects a strictly-increasing nonce into every private call automatically -- it is never a caller-supplied parameter, matching the existing hand-written `deposit_methods(self, asset)` signature, which takes none.",
+    "No `pagination` block declared, though `cursor`/`limit`/`next_cursor` look pagination-shaped and the operation description explicitly says \"use the cursor parameter to iterate through list of deposits\". Two things block a clean `strategy: token` declaration: (1) the response `result` shape is itself discriminated by whether `cursor` was set on the request -- a bare array when it is omitted/false, `{deposit, next_cursor}` only once pagination is switched on -- which is exactly the \"response variants discriminated by a request parameter\" gap the Toolchain gaps section of docs/spec/authoring.md lists as unexpressible; (2) even granting that, `token`'s implicit \"absent cursor = first page of the walk\" does not hold here, since an absent cursor instead opts *out* of pagination entirely. Modeled the documented `anyOf` response shape (bare array vs `{deposit, next_cursor}`) so the schema stays accurate, but left pagination undeclared rather than force a fit; verify live (call with `cursor: true`) before a future pass tries to complete this."
+  ]
+}

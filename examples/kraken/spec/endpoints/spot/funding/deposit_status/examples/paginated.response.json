@@ -1,0 +1,47 @@
+{
+  "status": 200,
+  "payload": {
+    "error": [],
+    "result": {
+      "deposits": [
+        {
+          "method": "USDC - Arbitrum One (Unified)",
+          "aclass": "currency",
+          "asset": "USDC",
+          "refid": "FTCmumN-faghQBkeUHreU4KCzDhgnK",
+          "txid": "0x60a97fc3fc1c014414e7287f2f9380373ce3ca492ae6b57386eed36aa934c5c3",
+          "info": "0x6ac66ed6f4da42d031c474373a876b2b1612b4b2",
+          "amount": "10.00000000",
+          "fee": "0.00000000",
+          "time": 1786617065,
+          "status": "Success"
+        },
+        {
+          "method": "ETH - Optimism (Unified)",
+          "aclass": "currency",
+          "asset": "XETH",
+          "refid": "FTdrEWB-Su4vPYtlqprRRNubWQTXor",
+          "txid": "0xcee2af12468f0e77d76fdc5de9be852ddf00a38ace2ba323c17698efd46ea8eb",
+          "info": "0x6ac66ed6f4da42d031c474373a876b2b1612b4b2",
+          "amount": "0.3900000000",
+          "fee": "0.0000000000",
+          "time": 1754759693,
+          "status": "Success"
+        },
+        {
+          "method": "ETH - Optimism (Unified)",
+          "aclass": "currency",
+          "asset": "XETH",
+          "refid": "FTkdl8w-iEr9zixRU7sBDnlSbcd7V2",
+          "txid": "0xe52ac31655635f487448238b7ee4736f2d8ff14367ad29aeceb4be5bddf62879",
+          "info": "0x6ac66ed6f4da42d031c474373a876b2b1612b4b2",
+          "amount": "0.1000000000",
+          "fee": "0.0000000000",
+          "time": 1754758113,
+          "status": "Success"
+        }
+      ],
+      "next_cursor": null
+    }
+  }
+}

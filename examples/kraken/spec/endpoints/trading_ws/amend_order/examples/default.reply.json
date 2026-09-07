@@ -1,0 +1,11 @@
+{
+  "method": "amend_order",
+  "req_id": 2,
+  "result": {
+    "amend_id": "TMDHU2-NXBX2-EX2WBF",
+    "order_id": "O4T3A2-GIXBY-2BLT6M"
+  },
+  "success": true,
+  "time_in": "2026-08-13T12:06:24.918752Z",
+  "time_out": "2026-08-13T12:06:24.922163Z"
+}

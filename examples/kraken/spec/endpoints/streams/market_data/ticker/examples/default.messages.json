@@ -1,0 +1,68 @@
+[
+  {
+    "channel": "ticker",
+    "type": "snapshot",
+    "data": [
+      {
+        "symbol": "BTC/USD",
+        "bid": 63449.3,
+        "bid_qty": 0.03956566,
+        "ask": 63449.4,
+        "ask_qty": 0.14988267,
+        "last": 63449.4,
+        "volume": 979.04415182,
+        "vwap": 63607.2,
+        "low": 63247.4,
+        "high": 64409.2,
+        "change": -746.1,
+        "change_pct": -1.16,
+        "trades": 45056,
+        "timestamp": "2026-08-13T12:07:04.018164Z"
+      }
+    ]
+  },
+  {
+    "channel": "ticker",
+    "type": "update",
+    "data": [
+      {
+        "symbol": "BTC/USD",
+        "bid": 63449.3,
+        "bid_qty": 0.03956566,
+        "ask": 63449.4,
+        "ask_qty": 0.99700454,
+        "last": 63449.4,
+        "volume": 979.04444052,
+        "vwap": 63607.2,
+        "low": 63247.4,
+        "high": 64409.2,
+        "change": -746.1,
+        "change_pct": -1.16,
+        "trades": 45057,
+        "timestamp": "2026-08-13T12:07:05.623286Z"
+      }
+    ]
+  },
+  {
+    "channel": "ticker",
+    "type": "update",
+    "data": [
+      {
+        "symbol": "BTC/USD",
+        "bid": 63444.2,
+        "bid_qty": 0.70048332,
+        "ask": 63449.4,
+        "ask_qty": 1.01100454,
+        "last": 63444.2,
+        "volume": 979.17182471,
+        "vwap": 63607.2,
+        "low": 63247.4,
+        "high": 64409.2,
+        "change": -751.3,
+        "change_pct": -1.17,
+        "trades": 45065,
+        "timestamp": "2026-08-13T12:07:05.733340Z"
+      }
+    ]
+  }
+]

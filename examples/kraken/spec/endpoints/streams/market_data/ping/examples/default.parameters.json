@@ -1,0 +1,7 @@
+{
+  "description": "Application-level ping; the server answers with a `pong`.",
+  "payload": {
+    "method": "ping",
+    "params": {}
+  }
+}

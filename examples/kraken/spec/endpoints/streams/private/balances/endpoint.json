@@ -1,0 +1,330 @@
+{
+  "docs": "https://docs.kraken.com/exchange/api-reference/spot-websocket-v2/balances",
+  "meta": {},
+  "redacted": [
+    "req_id"
+  ],
+  "spec": {
+    "kind": "stream",
+    "channel": "balances",
+    "description": "Subscribe to client asset balances and account ledger transactions for this account.",
+    "parameters": {
+      "title": "BalancesSubscribeParams",
+      "type": "object",
+      "description": "Balances subscription parameters.",
+      "properties": {
+        "snapshot": {
+          "type": "boolean",
+          "description": "Request a snapshot after subscribing.",
+          "default": true
+        },
+        "users": {
+          "type": "string",
+          "description": "Available on master accounts only. If `all`, events for master and subaccounts are streamed and no snapshot is provided; otherwise only master account events are published.",
+          "enum": [
+            "all"
+          ]
+        },
+        "rebased": {
+          "type": "boolean",
+          "description": "Effective for viewing xstocks only. If true, display in terms of underlying equity, otherwise in terms of SPV tokens.",
+          "default": true
+        }
+      }
+    },
+    "payload": {
+      "anyOf": [
+        {
+          "title": "BalancesSnapshotMessage",
+          "type": "object",
+          "description": "Full snapshot of every asset held in the account, sent once right after subscribing.",
+          "properties": {
+            "channel": {
+              "type": "string",
+              "description": "Channel name.",
+              "enum": [
+                "balances"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "description": "Message kind.",
+              "enum": [
+                "snapshot"
+              ]
+            },
+            "data": {
+              "type": "array",
+              "description": "One entry per asset held in the account.",
+              "items": {
+                "title": "BalanceSnapshotEntry",
+                "type": "object",
+                "description": "An asset's total balance and its per-wallet breakdown, as of the subscription snapshot.",
+                "properties": {
+                  "asset": {
+                    "type": "string",
+                    "description": "The asset symbol code."
+                  },
+                  "asset_class": {
+                    "type": "string",
+                    "description": "The asset class -- a placeholder for future expansion.",
+                    "enum": [
+                      "currency"
+                    ]
+                  },
+                  "balance": {
+                    "type": "number",
+                    "description": "The total amount of asset held across all wallet types."
+                  },
+                  "wallets": {
+                    "type": "array",
+                    "description": "The per-wallet breakdown of this asset's balance.",
+                    "items": {
+                      "title": "BalanceWallet",
+                      "type": "object",
+                      "description": "One wallet holding part of an asset's total balance.",
+                      "properties": {
+                        "balance": {
+                          "type": "number",
+                          "description": "Balance of the asset in this wallet."
+                        },
+                        "type": {
+                          "type": "string",
+                          "description": "Wallet type.",
+                          "enum": [
+                            "spot",
+                            "earn"
+                          ]
+                        },
+                        "id": {
+                          "type": "string",
+                          "description": "Wallet identifier.",
+                          "enum": [
+                            "main",
+                            "flex",
+                            "bonded",
+                            "flexible",
+                            "liquid",
+                            "locked",
+                            "closed"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "balance",
+                        "type",
+                        "id"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "asset",
+                  "asset_class",
+                  "balance",
+                  "wallets"
+                ]
+              }
+            },
+            "sequence": {
+              "type": "integer",
+              "description": "The subscription message sequence number."
+            }
+          },
+          "required": [
+            "channel",
+            "type",
+            "data"
+          ]
+        },
+        {
+          "title": "BalancesUpdateMessage",
+          "type": "object",
+          "description": "One or more account ledger transactions, pushed as each completes.",
+          "properties": {
+            "channel": {
+              "type": "string",
+              "description": "Channel name.",
+              "enum": [
+                "balances"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "description": "Message kind.",
+              "enum": [
+                "update"
+              ]
+            },
+            "data": {
+              "type": "array",
+              "description": "One entry per ledger transaction affecting an asset.",
+              "items": {
+                "title": "BalanceLedgerEntry",
+                "type": "object",
+                "description": "One account ledger transaction affecting a single asset.",
+                "properties": {
+                  "asset": {
+                    "type": "string",
+                    "description": "The asset symbol code."
+                  },
+                  "asset_class": {
+                    "type": "string",
+                    "description": "The asset class -- a placeholder for future expansion.",
+                    "enum": [
+                      "currency"
+                    ]
+                  },
+                  "amount": {
+                    "type": "number",
+                    "description": "The amount of asset change in this event."
+                  },
+                  "balance": {
+                    "type": "number",
+                    "description": "The total amount of this asset held in the account after this event."
+                  },
+                  "fee": {
+                    "type": "number",
+                    "description": "The fee paid on the transaction."
+                  },
+                  "ledger_id": {
+                    "type": "string",
+                    "description": "The identifier for this account ledger entry."
+                  },
+                  "ref_id": {
+                    "type": "string",
+                    "description": "A reference identifier in the context of this balance event, e.g. the trade_id for a trade event."
+                  },
+                  "timestamp": {
+                    "type": "string",
+                    "description": "The time of the balance change. RFC3339, e.g. `2022-12-25T09:30:59.123456Z`.",
+                    "format": "date-time"
+                  },
+                  "type": {
+                    "type": "string",
+                    "description": "The broad type of the balance event.",
+                    "enum": [
+                      "deposit",
+                      "withdrawal",
+                      "trade",
+                      "margin",
+                      "adjustment",
+                      "rollover",
+                      "credit",
+                      "transfer",
+                      "settled",
+                      "staking",
+                      "sale",
+                      "reserve",
+                      "conversion",
+                      "dividend",
+                      "reward",
+                      "creator_fee"
+                    ]
+                  },
+                  "subtype": {
+                    "type": "string",
+                    "description": "The specific subtype of the balance event, when applicable.",
+                    "enum": [
+                      "spotfromfutures",
+                      "spottofutures",
+                      "stakingfromspot",
+                      "spotfromstaking",
+                      "stakingtospot",
+                      "spottostaking"
+                    ]
+                  },
+                  "category": {
+                    "type": "string",
+                    "description": "The categorization of the balance event.",
+                    "enum": [
+                      "deposit",
+                      "withdrawal",
+                      "trade",
+                      "margin-trade",
+                      "margin-settle",
+                      "margin-conversion",
+                      "conversion",
+                      "credit",
+                      "marginrollover",
+                      "staking-rewards",
+                      "instant",
+                      "equity-trade",
+                      "airdrop",
+                      "equity-dividend",
+                      "reward-bonus",
+                      "nft",
+                      "block-trade"
+                    ]
+                  },
+                  "wallet_type": {
+                    "type": "string",
+                    "description": "Wallet type.",
+                    "enum": [
+                      "spot",
+                      "earn"
+                    ]
+                  },
+                  "wallet_id": {
+                    "type": "string",
+                    "description": "Wallet identifier.",
+                    "enum": [
+                      "main",
+                      "bonded",
+                      "flexible",
+                      "liquid",
+                      "locked"
+                    ]
+                  },
+                  "user": {
+                    "type": "string",
+                    "description": "The Kraken-generated identifier for a user / sub-account. Only published when the subscription requested `users: \"all\"`."
+                  }
+                },
+                "required": [
+                  "asset",
+                  "asset_class",
+                  "amount",
+                  "balance",
+                  "fee",
+                  "ledger_id",
+                  "ref_id",
+                  "timestamp",
+                  "type",
+                  "category",
+                  "wallet_type",
+                  "wallet_id"
+                ]
+              }
+            },
+            "sequence": {
+              "type": "integer",
+              "description": "The subscription message sequence number."
+            }
+          },
+          "required": [
+            "channel",
+            "type",
+            "data"
+          ]
+        }
+      ]
+    }
+  },
+  "envelope": {
+    "payload": "",
+    "verb": {
+      "path": "method",
+      "subscribe": "subscribe",
+      "unsubscribe": "unsubscribe"
+    }
+  },
+  "notes": [
+    "Private channel over wss://ws-auth.kraken.com/v2 -- requires a token obtained via REST GetWebSocketsToken. `channel` and `token` are omitted from the subscribe requestBody schema: `channel` is fixed (carried as `spec.channel`) and `token` is injected by the transport (core.md: merged into every outgoing `params` on the private connection), not a caller-supplied parameter -- mirroring how REST private endpoints don't declare `nonce`/`API-Key` in their requestBody either.",
+    "`data` genuinely differs in shape between `type: \"snapshot\"` (BalanceSnapshotEntry, asset totals + per-wallet breakdown) and `type: \"update\"` (BalanceLedgerEntry, one ledger transaction) -- modeled as a message-level anyOf per authoring rule 4, not one object with every field optional.",
+    "`wallets` on BalanceSnapshotEntry is declared required (deviating from the hand-written PoC's `NotRequired[list[Wallet]]` in pkg/src/kraken/streams/private.py): every asset in the documented snapshot example carries it and the docs don't mark it conditional. Worth confirming against a captured example with a zero-wallet asset, if one exists.",
+    "`wallet_id`'s enum differs between the snapshot wallet object (adds `flex`, `closed`) and the update ledger entry (`main`, `bonded`, `flexible`, `liquid`, `locked` only) -- kept as two separate enums, each matching exactly what its own doc section lists, rather than merged into one superset.",
+    "`fee`, `ledger_id`, `ref_id` on BalanceLedgerEntry are marked required from their presence in both documented update examples (deposit and trade); the docs don't mark any data-item field required or optional explicitly, so this is inferred from examples, not a documented guarantee.",
+    "The subscribe reply is split anyOf[BalancesSubscribeAck, BalancesSubscribeError] on `success`, since a failed subscribe carries `error` and no `result` -- same shape as the success/failure reply split rule documented for WS commands."
+  ]
+}

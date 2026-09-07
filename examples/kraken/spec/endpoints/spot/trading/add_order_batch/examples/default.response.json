@@ -1,0 +1,22 @@
+{
+  "status": 200,
+  "payload": {
+    "error": [],
+    "result": {
+      "orders": [
+        {
+          "txid": "O6L4SF-DR5BS-RJBUSJ",
+          "descr": {
+            "order": "buy 0.00010 XBTUSDC @ limit 10000.00"
+          }
+        },
+        {
+          "txid": "O3DU53-CRUT2-2PKXHD",
+          "descr": {
+            "order": "buy 0.00010 XBTUSDC @ limit 10001.00"
+          }
+        }
+      ]
+    }
+  }
+}

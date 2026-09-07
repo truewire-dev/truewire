@@ -1,0 +1,298 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/funding/get-status-of-recent-withdrawals",
+  "meta": {
+    "signed": true
+  },
+  "redacted": [
+    "nonce"
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/private/WithdrawStatus",
+    "method": "POST",
+    "description": "Retrieve information about recent withdrawals. Results are sorted by recency; use the `cursor` parameter to iterate through the list of withdrawals (page size equal to the value of `limit`) from newest to oldest. Requires the `Funds permissions - Withdraw` or `Data - Query ledger entries` API key permission.",
+    "request": {
+      "title": "WithdrawStatusRequest",
+      "type": "object",
+      "properties": {
+        "asset": {
+          "type": "string",
+          "description": "Filter for a specific asset being withdrawn."
+        },
+        "aclass": {
+          "type": "string",
+          "description": "Filter for a specific asset class being withdrawn.",
+          "enum": [
+            "currency",
+            "tokenized_asset"
+          ],
+          "default": "currency"
+        },
+        "method": {
+          "type": "string",
+          "description": "Filter for a specific name of withdrawal method."
+        },
+        "start": {
+          "type": "string",
+          "description": "Start timestamp; withdrawals created strictly before this will not be included in the response."
+        },
+        "end": {
+          "type": "string",
+          "description": "End timestamp; withdrawals created strictly after this will not be included in the response."
+        },
+        "cursor": {
+          "description": "`true`/`false` to enable/disable the paginated response shape, or a cursor string (returned by a previous call) to fetch the next page. Default `false`.",
+          "default": false,
+          "anyOf": [
+            {
+              "type": "boolean",
+              "description": "Enable/disable paginated response."
+            },
+            {
+              "type": "string",
+              "description": "Cursor for the next page of results."
+            }
+          ]
+        },
+        "limit": {
+          "type": "integer",
+          "default": 500,
+          "description": "Number of results to include per page."
+        },
+        "rebase_multiplier": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "rebased",
+                "base"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "rebased",
+          "description": "Optional parameter for viewing xstocks data. `rebased` displays in terms of underlying equity; `base` displays in terms of SPV tokens."
+        }
+      }
+    },
+    "response": {
+      "anyOf": [
+        {
+          "type": "array",
+          "description": "Withdrawal records, returned when `cursor` is unset or `false`.",
+          "items": {
+            "title": "Withdrawal",
+            "type": "object",
+            "description": "One withdrawal record.",
+            "required": [
+              "method",
+              "aclass",
+              "asset",
+              "refid",
+              "txid",
+              "info",
+              "amount",
+              "fee",
+              "time",
+              "status",
+              "key"
+            ],
+            "properties": {
+              "method": {
+                "type": "string",
+                "description": "Name of withdrawal method."
+              },
+              "network": {
+                "type": "string",
+                "description": "Network name based on the funding method used."
+              },
+              "aclass": {
+                "type": "string",
+                "description": "Asset class."
+              },
+              "asset": {
+                "type": "string",
+                "description": "Asset."
+              },
+              "refid": {
+                "type": "string",
+                "description": "Reference ID."
+              },
+              "txid": {
+                "type": "string",
+                "description": "Method transaction ID."
+              },
+              "info": {
+                "type": "string",
+                "description": "Method transaction information."
+              },
+              "amount": {
+                "type": "string",
+                "description": "Amount withdrawn."
+              },
+              "fee": {
+                "type": "string",
+                "description": "Fees paid. Type inferred as `string` by analogy with every other `fee` field in this operation family, since upstream declares no `type` for this property."
+              },
+              "time": {
+                "type": "integer",
+                "format": "epoch-seconds",
+                "description": "Unix timestamp when the request was made."
+              },
+              "status": {
+                "type": "string",
+                "description": "Status of the withdrawal. See the IFEX financial transaction states reference linked from upstream docs for background.",
+                "enum": [
+                  "Initial",
+                  "Pending",
+                  "Settled",
+                  "Success",
+                  "Failure"
+                ]
+              },
+              "status-prop": {
+                "type": "string",
+                "description": "Additional status property, if available: `cancel-pending` (cancellation requested), `canceled`, `cancel-denied` (cancellation requested but denied), `return` (a return transaction initiated by Kraken; cannot be canceled), or `onhold` (pending review).",
+                "enum": [
+                  "cancel-pending",
+                  "canceled",
+                  "cancel-denied",
+                  "return",
+                  "onhold"
+                ]
+              },
+              "key": {
+                "type": "string",
+                "description": "Withdrawal key name, as set up on the account."
+              }
+            }
+          }
+        },
+        {
+          "title": "WithdrawStatusPage",
+          "type": "object",
+          "description": "Paginated withdrawal results, returned when the `cursor` request parameter is set -- confirmed live; upstream's own OpenAPI schema only documents the bare-array shape for this endpoint (unlike deposit_status, which documents both).",
+          "required": [
+            "withdrawals"
+          ],
+          "properties": {
+            "withdrawals": {
+              "type": "array",
+              "description": "Page of withdrawal records.",
+              "items": {
+                "title": "Withdrawal",
+                "type": "object",
+                "description": "One withdrawal record.",
+                "required": [
+                  "method",
+                  "aclass",
+                  "asset",
+                  "refid",
+                  "txid",
+                  "info",
+                  "amount",
+                  "fee",
+                  "time",
+                  "status",
+                  "key"
+                ],
+                "properties": {
+                  "method": {
+                    "type": "string",
+                    "description": "Name of withdrawal method."
+                  },
+                  "network": {
+                    "type": "string",
+                    "description": "Network name based on the funding method used."
+                  },
+                  "aclass": {
+                    "type": "string",
+                    "description": "Asset class."
+                  },
+                  "asset": {
+                    "type": "string",
+                    "description": "Asset."
+                  },
+                  "refid": {
+                    "type": "string",
+                    "description": "Reference ID."
+                  },
+                  "txid": {
+                    "type": "string",
+                    "description": "Method transaction ID."
+                  },
+                  "info": {
+                    "type": "string",
+                    "description": "Method transaction information."
+                  },
+                  "amount": {
+                    "type": "string",
+                    "description": "Amount withdrawn."
+                  },
+                  "fee": {
+                    "type": "string",
+                    "description": "Fees paid. Type inferred as `string` by analogy with every other `fee` field in this operation family, since upstream declares no `type` for this property."
+                  },
+                  "time": {
+                    "type": "integer",
+                    "format": "epoch-seconds",
+                    "description": "Unix timestamp when the request was made."
+                  },
+                  "status": {
+                    "type": "string",
+                    "description": "Status of the withdrawal. See the IFEX financial transaction states reference linked from upstream docs for background.",
+                    "enum": [
+                      "Initial",
+                      "Pending",
+                      "Settled",
+                      "Success",
+                      "Failure"
+                    ]
+                  },
+                  "status-prop": {
+                    "type": "string",
+                    "description": "Additional status property, if available: `cancel-pending` (cancellation requested), `canceled`, `cancel-denied` (cancellation requested but denied), `return` (a return transaction initiated by Kraken; cannot be canceled), or `onhold` (pending review).",
+                    "enum": [
+                      "cancel-pending",
+                      "canceled",
+                      "cancel-denied",
+                      "return",
+                      "onhold"
+                    ]
+                  },
+                  "key": {
+                    "type": "string",
+                    "description": "Withdrawal key name, as set up on the account."
+                  }
+                }
+              }
+            },
+            "next_cursor": {
+              "description": "Cursor to pass back as `cursor` to fetch the next page of results. `null` once there is no further page -- confirmed live.",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "Upstream `requestBody` requires `nonce`; dropped from this schema since the core's `authed_request` (`core/transport/http.py`) injects a strictly-increasing nonce into every private call automatically -- it is never a caller-supplied parameter, matching the existing hand-written `deposit_methods(self, asset)` signature, which takes none.",
+    "Same `cursor`/`limit` pagination prose as DepositStatus (\"use the cursor parameter to iterate through list of withdrawals... from newest to oldest\"), but unlike DepositStatus this operation's own response schema (`result`) never documents a `next_cursor` field at all -- only a bare array of withdrawal records, confirmed against the live doc page (\"the result field is always a bare array... The documentation does not mention a next_cursor field\"). That asymmetry with DepositStatus is upstream's, not introduced here. Left the response as the documented bare array and declared no `pagination` block, since where the next cursor value would come from is not stated anywhere machine-readable for this endpoint; needs a live call to settle before it can be specced."
+  ]
+}

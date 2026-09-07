@@ -1,0 +1,427 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/earn/list-earn-strategies",
+  "meta": {
+    "signed": true
+  },
+  "redacted": [
+    "nonce"
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/private/Earn/Strategies",
+    "method": "POST",
+    "description": "List earn strategies along with their parameters.\n\nRequires a valid API key but no specific permission is required.\n\nReturns only strategies that are available to the user based on geographic region.\n\nWhen the user does not meet the tier restriction, `can_allocate` will be false and `allocation_restriction_info` indicates `Tier` as the restriction reason. Earn products generally require Intermediate tier.\n\nA note about `lock_type`:\n- `instant`: can be deallocated without an unbonding period. Called flexible in the UI.\n- `bonded`: has an unbonding period. Deallocation will not happen until this period has passed.\n- `flex`: \"Kraken rewards\" -- earning on spot balances where eligible. It's turned on account-wide from the UI and cannot be manually allocated to.\n\nPaging isn't yet implemented, so the endpoint always returns all data in the first page.",
+    "request": {
+      "title": "EarnStrategiesRequest",
+      "description": "Filters for the strategy listing.",
+      "type": "object",
+      "properties": {
+        "ascending": {
+          "description": "`true` to sort ascending, `false` (the default) for descending.",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "asset": {
+          "description": "Filter strategies by asset name.",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cursor": {
+          "description": "`null` to start at the beginning, otherwise the next page ID from a previous response's `next_cursor`.",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit": {
+          "description": "How many items to return per page. May be capped to a lower value server-side.",
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lock_type": {
+          "description": "Filter strategies by lock type.",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "description": "Type of a strategy.",
+                "type": "string",
+                "enum": [
+                  "flex",
+                  "bonded",
+                  "timed",
+                  "instant"
+                ]
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "response": {
+      "title": "EarnStrategiesResult",
+      "description": "One page of Earn strategies available to the account.",
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "items": {
+          "description": "Strategies on this page.",
+          "type": "array",
+          "items": {
+            "title": "EarnStrategy",
+            "description": "Parameters for a single Earn strategy.",
+            "type": "object",
+            "required": [
+              "lock_type"
+            ],
+            "properties": {
+              "asset_class": {
+                "description": "Asset class of `asset`, e.g. `currency`. Confirmed present live, not in upstream's own published field list.",
+                "type": "string"
+              },
+              "id": {
+                "description": "The unique identifier for this strategy.",
+                "type": "string"
+              },
+              "asset": {
+                "description": "The asset this strategy allocates.",
+                "type": "string"
+              },
+              "lock_type": {
+                "description": "How this strategy locks allocated funds.",
+                "anyOf": [
+                  {
+                    "title": "EarnStrategyLockTypeFlex",
+                    "description": "Either the whole asset balance or part of it is allocated to the earn strategy and users are free to deallocate it anytime -- deallocation can even be implicit, triggered by a trade, a withdrawal, etc.",
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "description": "Discriminator identifying this lock-type variant.",
+                        "type": "string",
+                        "enum": [
+                          "flex"
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "title": "EarnStrategyLockTypeBonded",
+                    "description": "Explicit allocate and deallocate actions are required and bonding/unbonding parameters apply.",
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "description": "Discriminator identifying this lock-type variant.",
+                        "type": "string",
+                        "enum": [
+                          "bonded"
+                        ]
+                      },
+                      "bonding_period": {
+                        "description": "Duration of the bonding period, in seconds.",
+                        "type": "integer"
+                      },
+                      "bonding_period_variable": {
+                        "description": "Whether the bonding period length is variable (`true`) or static (`false`).",
+                        "type": "boolean"
+                      },
+                      "bonding_rewards": {
+                        "description": "Whether rewards are earned during the bonding period (payouts occur after bonding completes).",
+                        "type": "boolean"
+                      },
+                      "exit_queue_period": {
+                        "description": "Seconds funds must wait in an exit queue before the `unbonding_period` starts, once deallocation is requested. `0` skips the exit queue entirely. Rewards are always paid out for the exit queue.",
+                        "type": "integer"
+                      },
+                      "payout_frequency": {
+                        "description": "Interval, in seconds, at which rewards are distributed and credited to the user's ledger.",
+                        "type": "integer"
+                      },
+                      "unbonding_period": {
+                        "description": "Duration of the unbonding period, in seconds, after requesting removal before funds return to the spot wallet.",
+                        "type": "integer"
+                      },
+                      "unbonding_period_variable": {
+                        "description": "Whether the unbonding period length is variable (`true`) or static (`false`).",
+                        "type": "boolean"
+                      },
+                      "unbonding_rewards": {
+                        "description": "Whether rewards are earned and paid out during the unbonding period.",
+                        "type": "boolean"
+                      }
+                    }
+                  },
+                  {
+                    "title": "EarnStrategyLockTypeInstant",
+                    "description": "A special case of `bonded` with no bonding/unbonding period -- equivalent to what the legacy staking system called \"flex\" (not to be confused with the `flex` lock type above). Explicit allocate/deallocate actions are required.",
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "description": "Discriminator identifying this lock-type variant.",
+                        "type": "string",
+                        "enum": [
+                          "instant"
+                        ]
+                      },
+                      "payout_frequency": {
+                        "description": "Interval, in seconds, at which rewards are distributed and credited to the user's ledger.",
+                        "type": "integer"
+                      }
+                    }
+                  }
+                ]
+              },
+              "apr_estimate": {
+                "description": "Estimated annual yield range, based on the strategy's previous revenues. An optional hint, not always present.",
+                "anyOf": [
+                  {
+                    "title": "EarnStrategyAprEstimate",
+                    "type": "object",
+                    "properties": {
+                      "low": {
+                        "description": "Minimal yield percentage for one year.",
+                        "type": "string",
+                        "format": "decimal-string"
+                      },
+                      "high": {
+                        "description": "Maximal yield percentage for one year.",
+                        "type": "string",
+                        "format": "decimal-string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "auto_compound": {
+                "description": "Auto-compound choices for the strategy.",
+                "anyOf": [
+                  {
+                    "title": "EarnStrategyAutoCompoundDisabled",
+                    "description": "Auto-compound is not possible for any allocation.",
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "description": "Discriminator identifying this auto-compound variant.",
+                        "type": "string",
+                        "enum": [
+                          "disabled"
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "title": "EarnStrategyAutoCompoundEnabled",
+                    "description": "Auto-compound is forced for all allocations.",
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "description": "Discriminator identifying this auto-compound variant.",
+                        "type": "string",
+                        "enum": [
+                          "enabled"
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "title": "EarnStrategyAutoCompoundOptional",
+                    "description": "Auto-compound depends on the user's preference, and comes with a default value.",
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "description": "Discriminator identifying this auto-compound variant.",
+                        "type": "string",
+                        "enum": [
+                          "optional"
+                        ]
+                      },
+                      "default": {
+                        "description": "Default auto-compound preference for this strategy.",
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                ]
+              },
+              "can_allocate": {
+                "description": "Whether allocation is currently available for this strategy.",
+                "type": "boolean"
+              },
+              "can_deallocate": {
+                "description": "Whether deallocation is currently available for this strategy.",
+                "type": "boolean"
+              },
+              "allocation_fee": {
+                "description": "Fee applied when allocating to this strategy.",
+                "anyOf": [
+                  {
+                    "title": "string",
+                    "type": "string"
+                  },
+                  {
+                    "title": "integer",
+                    "type": "integer"
+                  },
+                  {
+                    "title": "number",
+                    "type": "number"
+                  }
+                ]
+              },
+              "deallocation_fee": {
+                "description": "Fee applied when deallocating from this strategy.",
+                "anyOf": [
+                  {
+                    "title": "string",
+                    "type": "string"
+                  },
+                  {
+                    "title": "integer",
+                    "type": "integer"
+                  },
+                  {
+                    "title": "number",
+                    "type": "number"
+                  }
+                ]
+              },
+              "allocation_restriction_info": {
+                "description": "Reasons the user is not eligible to allocate to this strategy, if any.",
+                "type": "array",
+                "items": {
+                  "description": "A recoverable strategy restriction reason.",
+                  "type": "string",
+                  "enum": [
+                    "tier"
+                  ]
+                }
+              },
+              "user_cap": {
+                "description": "Maximum amount of funds any given user may allocate to this strategy. Absent means no limit; `0` means all new allocations will error (auto-compound is unaffected).",
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "decimal-string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "user_min_allocation": {
+                "description": "Minimum amount (in USD) for an allocation or deallocation. Absent means no minimum.",
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "decimal-string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "yield_source": {
+                "description": "Yield generation mechanism of this strategy.",
+                "anyOf": [
+                  {
+                    "title": "EarnStrategyYieldSourceStaking",
+                    "description": "Funds are staked on-chain; proof-of-stake is the source of yield.",
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "description": "Discriminator identifying this yield-source variant.",
+                        "type": "string",
+                        "enum": [
+                          "staking"
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "title": "EarnStrategyYieldSourceOffChain",
+                    "description": "Funds are put to work in another, off-chain yield-generation mechanism.",
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "description": "Discriminator identifying this yield-source variant.",
+                        "type": "string",
+                        "enum": [
+                          "off_chain"
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "title": "EarnStrategyYieldSourceOptInRewards",
+                    "description": "Yield comes from an opt-in rewards program rather than staking or an off-chain mechanism. Found live (not in upstream's published docs) -- confirmed by real capture.",
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "description": "Discriminator identifying this yield-source variant.",
+                        "type": "string",
+                        "enum": [
+                          "opt_in_rewards"
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "next_cursor": {
+          "description": "ID of the next page, for the `cursor` request field. Absent once the end is reached. See `notes` -- paging is not yet functional.",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "`nonce` is documented by upstream as a required requestBody field, but it is generated and injected transport-side by the core's NonceGenerator (see core.md Authentication), never supplied by the caller, so it is omitted from this requestBody schema. Applies to every private Earn endpoint in this subsection.",
+    "Upstream's own operation description states paging is not yet implemented for this endpoint ('Paging isn't yet implemented, so the endpoint always returns all data in the first page'), even though `cursor`/`limit` request fields and a `next_cursor` response field are documented. No `pagination` block is declared per authoring rule 6 (it genuinely does not page yet); `cursor`/`limit`/`next_cursor` are kept in the schema since they are documented fields a caller can pass, they just have no effect today.",
+    "The request's `lock_type` filter enumerates `flex`, `bonded`, `timed`, `instant`, but the response's `lock_type` tagged union (see `EarnStrategy.lock_type`) only documents `flex`/`bonded`/`instant` variant shapes -- no `timed` response shape is published anywhere in the OpenAPI spec or docs page. The request enum is kept as documented (rule 2); the response `anyOf` covers only the three variants upstream actually shapes."
+  ]
+}

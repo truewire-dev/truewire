@@ -1,0 +1,7 @@
+{
+  "request": {
+    "pair": "BTC/USD",
+    "depth": 10,
+    "grouping": 1
+  }
+}

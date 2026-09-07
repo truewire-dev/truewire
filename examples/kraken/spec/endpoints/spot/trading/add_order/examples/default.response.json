@@ -1,0 +1,14 @@
+{
+  "status": 200,
+  "payload": {
+    "error": [],
+    "result": {
+      "txid": [
+        "OFECRN-KRUVM-H6NSCI"
+      ],
+      "descr": {
+        "order": "buy 0.00010 XBTUSDC @ limit 10000.00"
+      }
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "method": "subscribe",
+  "req_id": 8,
+  "result": {
+    "channel": "instrument",
+    "snapshot": true,
+    "warnings": [
+      "tick_size is deprecated, use price_increment"
+    ]
+  },
+  "success": true,
+  "time_in": "2026-08-13T12:07:37.612511Z",
+  "time_out": "2026-08-13T12:07:37.612540Z"
+}

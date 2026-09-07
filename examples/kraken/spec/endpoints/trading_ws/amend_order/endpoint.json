@@ -1,0 +1,112 @@
+{
+  "docs": "https://docs.kraken.com/exchange/api-reference/spot-websocket-v2/amend_order",
+  "meta": {},
+  "redacted": [
+    "req_id"
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "ws"
+    ],
+    "path": "amend_order",
+    "description": "Modifies the parameters of a live order in-place, without cancelling and re-creating it: order identifiers stay the same, queue priority in the order book is maintained where possible, and if the amendment reduces the order quantity below the already-filled quantity, the remaining quantity is cancelled. Supersedes the legacy `edit_order` (cancel-replace), which loses queue priority and has several unsupported-order-shape caveats.",
+    "request": {
+      "title": "AmendOrderParams",
+      "type": "object",
+      "description": "Parameters for amending a live order in-place. Order identifiers, queue priority (where possible), and existing executions are preserved; if the amendment reduces the order quantity below the already-filled quantity, the remaining quantity is cancelled.",
+      "properties": {
+        "order_id": {
+          "type": "string",
+          "description": "Kraken identifier for the order to amend, e.g. `OFGKYQ-FHPCQ-HUQFEK`. Either `order_id` or `cl_ord_id` is required."
+        },
+        "cl_ord_id": {
+          "type": "string",
+          "description": "Client identifier for the order to amend, e.g. `6d1b345e-2821-40e2-ad83-4ecb18a06876`. Either `order_id` or `cl_ord_id` is required."
+        },
+        "order_qty": {
+          "type": "number",
+          "description": "New order quantity in terms of the base asset."
+        },
+        "display_qty": {
+          "type": "number",
+          "description": "For iceberg orders only: new quantity to show in the book while the rest of the remaining order quantity stays hidden. Minimum value is 1/15 of the remaining order quantity."
+        },
+        "limit_price": {
+          "type": "number",
+          "description": "New limit price restriction, used with `limit_price_type`. For order types that support a limit price only."
+        },
+        "limit_price_type": {
+          "type": "string",
+          "enum": [
+            "static",
+            "pct",
+            "quote"
+          ],
+          "description": "Units for `limit_price`: `static` (a static market price), `pct` (a percentage offset from the reference price), or `quote` (a notional offset in the quote currency). `static` is the default for all order types except `trailing-stop-limit`, which defaults to `quote`. Currently only available on trailing-stop-limit orders."
+        },
+        "post_only": {
+          "type": "boolean",
+          "default": false,
+          "description": "Optional for limit-price amends. If `true`, rejects the limit-price change if the order cannot be posted passively in the book."
+        },
+        "trigger_price": {
+          "type": "number",
+          "description": "New trigger price to activate the order, used with `trigger_price_type`. For triggered order types only."
+        },
+        "trigger_price_type": {
+          "type": "string",
+          "enum": [
+            "static",
+            "pct",
+            "quote"
+          ],
+          "default": "static",
+          "description": "Units for `trigger_price`. For triggered order types only."
+        },
+        "deadline": {
+          "type": "string",
+          "description": "RFC3339 timestamp, millisecond precision. Valid offsets from the current time range from 500ms to 60s (default 5s). The engine will not match this order after this time.",
+          "format": "date-time"
+        },
+        "symbol": {
+          "type": "string",
+          "description": "Required on amends for non-crypto pairs, i.e. provide the pair symbol for xstocks, e.g. `TSLAx/USD`."
+        }
+      }
+    },
+    "response": {
+      "title": "AmendOrderResult",
+      "type": "object",
+      "description": "Result of a successful `amend_order` call.",
+      "properties": {
+        "amend_id": {
+          "type": "string",
+          "description": "Unique Kraken identifier generated for this amend transaction."
+        },
+        "order_id": {
+          "type": "string",
+          "description": "Kraken order identifier, if populated in the request."
+        },
+        "cl_ord_id": {
+          "type": "string",
+          "description": "Client identifier, if populated in the request."
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Non-fatal warnings about the amend, if any."
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result",
+    "correlate": "req_id"
+  },
+  "notes": [
+    "`token` (the auth bearer token) is documented by Kraken as a required params field but is deliberately absent from this schema: `core/transport/ws.py`'s `SocketConnection.rpc_send` merges the cached token into every outgoing `params` on the private connection -- trading calls and subscribe/unsubscribe alike -- so it is transport-injected, never a caller-supplied argument, the same way `req_id` (the declared `correlate` field) never appears in a requestBody schema. Either `order_id` or `cl_ord_id` identifies the order to amend; both are declared as independently-optional string fields (not JSON Schema `required`) since this is an either-or business rule over the same shape, not a discriminated union `anyOf` would fit -- documented in each field's description instead, per the same reasoning as `cancel_order`."
+  ]
+}

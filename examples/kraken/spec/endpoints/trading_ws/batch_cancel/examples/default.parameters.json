@@ -1,0 +1,18 @@
+{
+  "parameters": {
+    "orders": [
+      "OOWVMC-7HDFH-B7UPWM",
+      "O7L6T4-QEGI4-7M4PUY"
+    ]
+  },
+  "payload": {
+    "method": "batch_cancel",
+    "params": {
+      "orders": [
+        "OOWVMC-7HDFH-B7UPWM",
+        "O7L6T4-QEGI4-7M4PUY"
+      ]
+    },
+    "req_id": 4
+  }
+}

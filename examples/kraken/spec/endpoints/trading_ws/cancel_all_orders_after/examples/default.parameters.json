@@ -1,0 +1,12 @@
+{
+  "parameters": {
+    "timeout": 60
+  },
+  "payload": {
+    "method": "cancel_all_orders_after",
+    "params": {
+      "timeout": 60
+    },
+    "req_id": 7
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "status": 200,
+  "payload": {
+    "error": [],
+    "result": {
+      "XXBTZUSD": {
+        "margin_call": 80,
+        "margin_level": 40
+      }
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "parameters": {
+    "symbol": [
+      "BTC/USD"
+    ]
+  },
+  "payload": {
+    "method": "subscribe",
+    "params": {
+      "channel": "book",
+      "symbol": [
+        "BTC/USD"
+      ]
+    }
+  }
+}

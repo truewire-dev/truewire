@@ -1,0 +1,18 @@
+{
+  "parameters": {
+    "order_id": "OAA6L6-2ZD2X-23ZM4K",
+    "symbol": "XBT/USDC",
+    "limit_price": 10002.0,
+    "order_qty": 0.0001
+  },
+  "payload": {
+    "method": "edit_order",
+    "params": {
+      "order_id": "OAA6L6-2ZD2X-23ZM4K",
+      "symbol": "XBT/USDC",
+      "limit_price": 10002.0,
+      "order_qty": 0.0001
+    },
+    "req_id": 1
+  }
+}

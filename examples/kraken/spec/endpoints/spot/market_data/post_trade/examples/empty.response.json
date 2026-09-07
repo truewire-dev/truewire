@@ -1,0 +1,11 @@
+{
+  "status": 200,
+  "payload": {
+    "error": [],
+    "result": {
+      "last_ts": "",
+      "count": 0,
+      "trades": []
+    }
+  }
+}

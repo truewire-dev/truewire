@@ -1,0 +1,159 @@
+{
+  "docs": "https://docs.kraken.com/exchange/api-reference/spot-websocket-v2/edit_order",
+  "meta": {},
+  "redacted": [
+    "req_id"
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "ws"
+    ],
+    "path": "edit_order",
+    "description": "Legacy cancel-replace edit of a live order's parameters: the original order is cancelled and a new order is created with the adjusted parameters, returning a new `order_id`. Superseded by `amend_order`, which resolves this endpoint's caveats and performs better: triggered stop-loss/take-profit orders are not supported; orders with attached conditional close terms are not supported; an edit whose executed volume exceeds the newly supplied volume is rejected; `cl_ord_id` is not supported; existing executions stay associated with the original order rather than copying to the edited one; and queue position is not maintained.",
+    "request": {
+      "title": "EditOrderParams",
+      "type": "object",
+      "description": "Parameters for the legacy cancel-replace edit: the original order is cancelled and a new order created with the adjusted parameters, returning a new `order_id`. Superseded by `amend_order`, which resolves this endpoint's caveats (see notes) and performs better.",
+      "required": [
+        "order_id",
+        "symbol"
+      ],
+      "properties": {
+        "order_id": {
+          "type": "string",
+          "description": "Kraken identifier for the order to edit, e.g. `OFGKYQ-FHPCQ-HUQFEK`."
+        },
+        "symbol": {
+          "type": "string",
+          "description": "Original symbol identifier for the pair, e.g. `BTC/USD`. The symbol cannot be amended."
+        },
+        "order_qty": {
+          "type": "number",
+          "description": "Order quantity in terms of the base asset."
+        },
+        "display_qty": {
+          "type": "number",
+          "description": "For iceberg orders only: quantity to show in the book while the rest of `order_qty` remains hidden. Minimum value is 1/15 of `order_qty`."
+        },
+        "limit_price": {
+          "type": "number",
+          "description": "Limit price, for order types that support a limit price restriction."
+        },
+        "fee_preference": {
+          "type": "string",
+          "enum": [
+            "base",
+            "quote"
+          ],
+          "description": "Fee preference, base or quote currency. `quote` is the default for buy orders, `base` is the default for sell orders."
+        },
+        "no_mpp": {
+          "type": "boolean",
+          "default": false,
+          "deprecated": true,
+          "description": "Deprecated -- if supplied, accepted but ignored. Was: disable Market Price Protection for market orders."
+        },
+        "order_userref": {
+          "type": "integer",
+          "description": "User-defined reference to place on the edited order. Does not identify the order to be edited -- use `order_id` for that."
+        },
+        "post_only": {
+          "type": "boolean",
+          "default": false,
+          "description": "Cancels the order if it would take liquidity on arrival. For orders with a limit price only."
+        },
+        "reduce_only": {
+          "type": "boolean",
+          "default": false,
+          "description": "Reduces an existing margin position without opening an opposite position worth more than the current value of the leveraged assets."
+        },
+        "triggers": {
+          "title": "EditOrderTriggers",
+          "type": "object",
+          "description": "Trigger price conditions for triggered order types.",
+          "properties": {
+            "reference": {
+              "type": "string",
+              "enum": [
+                "index",
+                "last"
+              ],
+              "default": "last",
+              "description": "Reference price to track for triggering orders: `index` (the broader-market index price for this pair -- falls back to `last` during index-feed connectivity issues) or `last` (the last traded price in the Kraken order book for this pair)."
+            },
+            "price": {
+              "type": "number",
+              "description": "Amount for the trigger price -- static or relative, per `price_type`. E.g. 29000.5 with `price_type=static` triggers at that price; 5 with `pct` triggers when price rises 5%; -150 with `quote` triggers when price drops 150 quote-currency units. For `trailing-stop`/`trailing-stop-limit`, represents the reversion from the peak price and is always positive."
+            },
+            "price_type": {
+              "type": "string",
+              "enum": [
+                "static",
+                "pct",
+                "quote"
+              ],
+              "default": "static",
+              "description": "Units for `price`: `static` (a static market price), `pct` (a percentage offset from the reference price), or `quote` (a notional offset in the quote currency)."
+            }
+          }
+        },
+        "validate": {
+          "type": "boolean",
+          "default": false,
+          "description": "If `true`, the edit is validated only -- it never reaches the matching engine."
+        },
+        "deadline": {
+          "type": "string",
+          "description": "RFC3339 timestamp, millisecond precision. Valid offsets from the current time range from 500ms to 60s (default 5s). The engine will not match this order after this time.",
+          "format": "date-time"
+        },
+        "price": {
+          "type": "number",
+          "deprecated": true,
+          "description": "Deprecated -- use `limit_price`."
+        },
+        "trigger": {
+          "type": "string",
+          "deprecated": true,
+          "description": "Deprecated -- use `triggers.reference`."
+        },
+        "stop_price": {
+          "type": "number",
+          "deprecated": true,
+          "description": "Deprecated -- use `triggers.price`."
+        }
+      }
+    },
+    "response": {
+      "title": "EditOrderResult",
+      "type": "object",
+      "description": "Result of a successful `edit_order` call.",
+      "properties": {
+        "order_id": {
+          "type": "string",
+          "description": "Unique ID of the new (edited) order."
+        },
+        "original_order_id": {
+          "type": "string",
+          "description": "ID of the original order that was edited."
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Non-fatal warnings about the edit, if any."
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result",
+    "correlate": "req_id"
+  },
+  "notes": [
+    "`token` (the auth bearer token) is documented by Kraken as a required params field but is deliberately absent from this schema: `core/transport/ws.py`'s `SocketConnection.rpc_send` merges the cached token into every outgoing `params` on the private connection -- trading calls and subscribe/unsubscribe alike -- so it is transport-injected, never a caller-supplied argument, the same way `req_id` (the declared `correlate` field) never appears in a requestBody schema. Kept in scope despite being legacy/superseded by `amend_order`, since discovery.md and core.md both list it as a live v2 trading method. `triggers.price` is not `required` here (unlike `add_order`'s/`batch_add`'s `OrderTriggers`, where it is), per the doc page's own field markup -- hence the separate `EditOrderTriggers` title rather than reusing `OrderTriggers`.",
+    "Deliberately left as a flat request body (production_standards.md S12), not a `requestBody`/`anyOf` discriminated union like `add_order`/`batch_add`: unlike those, an edit-by-id request carries no `order_type` field at all to discriminate on -- the edit targets an existing order by `order_id`, and Kraken's wire contract for this endpoint provides no local field whose value would select which variant's required-field profile applies. Building an `anyOf` here would mean inventing a discriminant the venue doesn't provide, which authoring rule 2's \"never invent\" bar rules out just as much for a discriminant as for an enum value."
+  ]
+}

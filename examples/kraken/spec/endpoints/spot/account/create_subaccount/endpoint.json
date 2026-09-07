@@ -1,0 +1,50 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/subaccounts/create-subaccount",
+  "meta": {
+    "signed": true
+  },
+  "redacted": [
+    "nonce"
+  ],
+  "unverified": {
+    "reason": "missing_credentials",
+    "detail": "Real call attempted with this personal (non-institutional-master) API key; Kraken rejected it: AuthError(['EGeneral:Permission denied'])"
+  },
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/private/CreateSubaccount",
+    "method": "POST",
+    "description": "Create a trading subaccount. Must be called using an API key from the master account. Subaccounts are currently only available to institutional clients; contact your Account Manager for details.\n\n**API Key Permissions Required:** `Funds permissions - Withdraw`",
+    "request": {
+      "title": "CreateSubaccountRequest",
+      "type": "object",
+      "required": [
+        "username",
+        "email"
+      ],
+      "properties": {
+        "username": {
+          "description": "Username for the subaccount.",
+          "type": "string"
+        },
+        "email": {
+          "description": "Email address for the subaccount.",
+          "type": "string"
+        }
+      }
+    },
+    "response": {
+      "type": "boolean",
+      "description": "Whether subaccount creation succeeded."
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "Institutional master-key only -- Kraken's own Subaccounts feature is gated to institutional clients and this call must originate from the master account's API key. Folded into the `account` subsection (per the brief) rather than a new `subaccounts` bucket, since Spot's own venue map treats these two operations as a two-endpoint appendix to Account Data, not a standalone surface. Whether this account's key can actually reach it (institutional enrollment) is left to example-capture, not decided here."
+  ]
+}

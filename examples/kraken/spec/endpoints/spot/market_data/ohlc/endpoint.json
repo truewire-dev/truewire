@@ -1,0 +1,131 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/market-data/get-ohlc-data",
+  "meta": {},
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/public/OHLC",
+    "method": "GET",
+    "description": "Retrieve OHLC market data. The last entry in the OHLC array is for the current, not-yet-committed timeframe, and will always be present, regardless of the value of `since`. Returns up to 720 of the most recent entries (older data cannot be retrieved, regardless of the value of `since`).",
+    "request": {
+      "title": "OhlcRequest",
+      "type": "object",
+      "properties": {
+        "pair": {
+          "type": "string",
+          "description": "Asset pair to get data for."
+        },
+        "assetVersion": {
+          "type": "integer",
+          "enum": [
+            1
+          ],
+          "description": "Controls whether response keys use Kraken's internal names or display names. Omitted (default): internal names are used. `assetVersion=1`: display names are used. Only `assetVersion=1` is currently supported."
+        },
+        "interval": {
+          "type": "integer",
+          "enum": [
+            1,
+            5,
+            15,
+            30,
+            60,
+            240,
+            1440,
+            10080,
+            21600
+          ],
+          "default": 1,
+          "description": "Time frame interval in minutes."
+        },
+        "since": {
+          "type": "integer",
+          "format": "epoch-seconds",
+          "description": "Return OHLC entries since the given timestamp (intended for incremental updates)."
+        },
+        "asset_class": {
+          "type": "string",
+          "enum": [
+            "tokenized_asset"
+          ],
+          "description": "This parameter is required on requests for non-crypto pairs, i.e. use `tokenized_asset` for xstocks."
+        }
+      },
+      "required": [
+        "pair"
+      ]
+    },
+    "response": {
+      "title": "OhlcResult",
+      "description": "OHLC candles, keyed by pair, plus the polling cursor.",
+      "type": "object",
+      "properties": {
+        "last": {
+          "type": "integer",
+          "description": "ID to be used as `since` when polling for new, committed OHLC data."
+        }
+      },
+      "additionalProperties": {
+        "description": "This pair's candles, oldest first. The last entry is the current, not-yet-committed timeframe.",
+        "type": "array",
+        "items": {
+          "title": "OhlcCandle",
+          "description": "One OHLC candle.",
+          "type": "array",
+          "prefixItems": [
+            {
+              "title": "time",
+              "type": "integer",
+              "description": "Candle open time (Unix timestamp)."
+            },
+            {
+              "title": "open",
+              "type": "string",
+              "description": "Open price."
+            },
+            {
+              "title": "high",
+              "type": "string",
+              "description": "High price."
+            },
+            {
+              "title": "low",
+              "type": "string",
+              "description": "Low price."
+            },
+            {
+              "title": "close",
+              "type": "string",
+              "description": "Close price."
+            },
+            {
+              "title": "vwap",
+              "type": "string",
+              "description": "Volume weighted average price."
+            },
+            {
+              "title": "volume",
+              "type": "string",
+              "description": "Volume traded."
+            },
+            {
+              "title": "count",
+              "type": "integer",
+              "description": "Number of trades."
+            }
+          ],
+          "minItems": 8,
+          "maxItems": 8
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "No pagination block: `since` is an incremental-update cursor, not a page walk -- the docs state older data cannot be retrieved regardless of `since`'s value, and the response is always capped at the 720 most recent candles, so there is no way to walk further back than that fixed window."
+  ]
+}

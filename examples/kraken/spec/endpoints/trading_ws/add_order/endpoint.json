@@ -1,0 +1,1481 @@
+{
+  "docs": "https://docs.kraken.com/exchange/api-reference/spot-websocket-v2/add_order",
+  "meta": {},
+  "redacted": [
+    "req_id"
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "ws"
+    ],
+    "path": "add_order",
+    "description": "Sends a single, new order into the exchange. A range of order types, Time-In-Force (TIF) settings and order flags can be specified. For triggered order types (`stop-loss`, `take-profit`, `trailing-stop`), `triggers` carries the price-tracking and trigger-threshold parameters. For One-Triggers-Other (OTO) orders, `conditional` carries the parameters for a secondary close order attached to the primary order.",
+    "request": {
+      "title": "OrderRequest",
+      "anyOf": [
+        {
+          "title": "WsAddOrderMarket",
+          "type": "object",
+          "description": "A market order: executes immediately at the best available price.",
+          "required": [
+            "order_type",
+            "side",
+            "order_qty",
+            "symbol"
+          ],
+          "properties": {
+            "order_type": {
+              "type": "string",
+              "enum": [
+                "market"
+              ],
+              "description": "The execution model of the order."
+            },
+            "side": {
+              "type": "string",
+              "enum": [
+                "buy",
+                "sell"
+              ],
+              "description": "Side of the order."
+            },
+            "order_qty": {
+              "type": "number",
+              "description": "Order quantity in terms of the base asset."
+            },
+            "symbol": {
+              "type": "string",
+              "description": "The symbol of the currency pair, e.g. `BTC/USD`."
+            },
+            "time_in_force": {
+              "type": "string",
+              "enum": [
+                "gtc",
+                "gtd",
+                "ioc",
+                "fok"
+              ],
+              "default": "gtc",
+              "description": "How long the order remains in effect before expiring: `gtc` (Good Till Canceled), `gtd` (Good Till Date -- until `expire_time`), `ioc` (Immediate Or Cancel -- cancels any unfilled remainder on arrival), or `fok` (Fill Or Kill -- fills the full quantity or cancels entirely; `limit` orders only)."
+            },
+            "margin": {
+              "type": "boolean",
+              "default": false,
+              "description": "Funds the order on margin using the maximum leverage for the pair (max leverage of 5)."
+            },
+            "post_only": {
+              "type": "boolean",
+              "default": false,
+              "description": "Cancels the order if it would take liquidity on arrival; post-only orders are always posted passively in the book. Only for orders with a limit price."
+            },
+            "reduce_only": {
+              "type": "boolean",
+              "default": false,
+              "description": "Reduces an existing margin position without opening an opposite position worth more than the current value of the leveraged assets."
+            },
+            "effective_time": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Scheduled start time, RFC3339, precision to seconds."
+            },
+            "expire_time": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Expiration time of the order, RFC3339, precision to seconds. GTD orders can expire up to one month in the future."
+            },
+            "deadline": {
+              "type": "string",
+              "format": "date-time",
+              "description": "RFC3339 timestamp, millisecond precision. Valid offsets from the current time range from 500ms to 60s (default 5s). The engine will not match this order after this time -- protection against latency on time-sensitive orders."
+            },
+            "cl_ord_id": {
+              "type": "string",
+              "description": "Alphanumeric client order identifier uniquely identifying an open order for this client. Mutually exclusive with `order_userref`. One of: a long UUID (32 hex chars, dashed), a short UUID (32 hex chars, no dashes), or free text up to 18 ASCII characters."
+            },
+            "order_userref": {
+              "type": "integer",
+              "description": "Optional non-unique numeric identifier associable with any number of orders by the client (e.g. a timestamp). Not enforced unique by Kraken, so it can also group orders by pair/side/strategy for querying or cancelling. Mutually exclusive with `cl_ord_id`."
+            },
+            "conditional": {
+              "$ref": "WsConditionalCloseOrder"
+            },
+            "fee_preference": {
+              "type": "string",
+              "enum": [
+                "base",
+                "quote"
+              ],
+              "description": "Fee preference, base or quote currency. `quote` is the default for buy orders, `base` is the default for sell orders."
+            },
+            "no_mpp": {
+              "type": "boolean",
+              "default": false,
+              "deprecated": true,
+              "description": "Deprecated -- if supplied, accepted but ignored. Was: disable Market Price Protection (which protects market orders from filling at a bad price during slippage) for market orders."
+            },
+            "stp_type": {
+              "type": "string",
+              "enum": [
+                "cancel_newest",
+                "cancel_oldest",
+                "cancel_both"
+              ],
+              "default": "cancel_newest",
+              "description": "Self Trade Prevention mode, protecting against inadvertently trading against oneself: `cancel_newest` (cancel the arriving order), `cancel_oldest` (cancel the resting order), or `cancel_both`."
+            },
+            "validate": {
+              "type": "boolean",
+              "default": false,
+              "description": "If `true`, the order is validated only -- it never reaches the matching engine and no `order_id` is returned."
+            },
+            "sender_sub_id": {
+              "type": "string",
+              "description": "Alphanumeric sub-account/trader identifier enabling Self Trade Prevention at a more granular level, for institutional accounts with enhanced STP. Same three accepted formats as `cl_ord_id`."
+            },
+            "stop_price": {
+              "type": "number",
+              "deprecated": true,
+              "description": "Deprecated -- use the `triggers` object. Stop price for trigger order types."
+            },
+            "trigger": {
+              "type": "string",
+              "enum": [
+                "index",
+                "last"
+              ],
+              "default": "last",
+              "deprecated": true,
+              "description": "Deprecated -- use `triggers.reference`. Reference price to trigger the order, for triggered order types only."
+            },
+            "cash_order_qty": {
+              "type": "number",
+              "description": "Order volume expressed in the quote currency. For buy market orders without margin funding."
+            }
+          }
+        },
+        {
+          "title": "WsAddOrderLimit",
+          "type": "object",
+          "description": "A limit order: rests in the book at `limit_price` or better.",
+          "required": [
+            "order_type",
+            "side",
+            "order_qty",
+            "symbol",
+            "limit_price"
+          ],
+          "properties": {
+            "order_type": {
+              "type": "string",
+              "enum": [
+                "limit"
+              ],
+              "description": "The execution model of the order."
+            },
+            "side": {
+              "type": "string",
+              "enum": [
+                "buy",
+                "sell"
+              ],
+              "description": "Side of the order."
+            },
+            "order_qty": {
+              "type": "number",
+              "description": "Order quantity in terms of the base asset."
+            },
+            "symbol": {
+              "type": "string",
+              "description": "The symbol of the currency pair, e.g. `BTC/USD`."
+            },
+            "time_in_force": {
+              "type": "string",
+              "enum": [
+                "gtc",
+                "gtd",
+                "ioc",
+                "fok"
+              ],
+              "default": "gtc",
+              "description": "How long the order remains in effect before expiring: `gtc` (Good Till Canceled), `gtd` (Good Till Date -- until `expire_time`), `ioc` (Immediate Or Cancel -- cancels any unfilled remainder on arrival), or `fok` (Fill Or Kill -- fills the full quantity or cancels entirely; `limit` orders only)."
+            },
+            "margin": {
+              "type": "boolean",
+              "default": false,
+              "description": "Funds the order on margin using the maximum leverage for the pair (max leverage of 5)."
+            },
+            "post_only": {
+              "type": "boolean",
+              "default": false,
+              "description": "Cancels the order if it would take liquidity on arrival; post-only orders are always posted passively in the book. Only for orders with a limit price."
+            },
+            "reduce_only": {
+              "type": "boolean",
+              "default": false,
+              "description": "Reduces an existing margin position without opening an opposite position worth more than the current value of the leveraged assets."
+            },
+            "effective_time": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Scheduled start time, RFC3339, precision to seconds."
+            },
+            "expire_time": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Expiration time of the order, RFC3339, precision to seconds. GTD orders can expire up to one month in the future."
+            },
+            "deadline": {
+              "type": "string",
+              "format": "date-time",
+              "description": "RFC3339 timestamp, millisecond precision. Valid offsets from the current time range from 500ms to 60s (default 5s). The engine will not match this order after this time -- protection against latency on time-sensitive orders."
+            },
+            "cl_ord_id": {
+              "type": "string",
+              "description": "Alphanumeric client order identifier uniquely identifying an open order for this client. Mutually exclusive with `order_userref`. One of: a long UUID (32 hex chars, dashed), a short UUID (32 hex chars, no dashes), or free text up to 18 ASCII characters."
+            },
+            "order_userref": {
+              "type": "integer",
+              "description": "Optional non-unique numeric identifier associable with any number of orders by the client (e.g. a timestamp). Not enforced unique by Kraken, so it can also group orders by pair/side/strategy for querying or cancelling. Mutually exclusive with `cl_ord_id`."
+            },
+            "conditional": {
+              "$ref": "WsConditionalCloseOrder"
+            },
+            "fee_preference": {
+              "type": "string",
+              "enum": [
+                "base",
+                "quote"
+              ],
+              "description": "Fee preference, base or quote currency. `quote` is the default for buy orders, `base` is the default for sell orders."
+            },
+            "no_mpp": {
+              "type": "boolean",
+              "default": false,
+              "deprecated": true,
+              "description": "Deprecated -- if supplied, accepted but ignored. Was: disable Market Price Protection (which protects market orders from filling at a bad price during slippage) for market orders."
+            },
+            "stp_type": {
+              "type": "string",
+              "enum": [
+                "cancel_newest",
+                "cancel_oldest",
+                "cancel_both"
+              ],
+              "default": "cancel_newest",
+              "description": "Self Trade Prevention mode, protecting against inadvertently trading against oneself: `cancel_newest` (cancel the arriving order), `cancel_oldest` (cancel the resting order), or `cancel_both`."
+            },
+            "validate": {
+              "type": "boolean",
+              "default": false,
+              "description": "If `true`, the order is validated only -- it never reaches the matching engine and no `order_id` is returned."
+            },
+            "sender_sub_id": {
+              "type": "string",
+              "description": "Alphanumeric sub-account/trader identifier enabling Self Trade Prevention at a more granular level, for institutional accounts with enhanced STP. Same three accepted formats as `cl_ord_id`."
+            },
+            "stop_price": {
+              "type": "number",
+              "deprecated": true,
+              "description": "Deprecated -- use the `triggers` object. Stop price for trigger order types."
+            },
+            "trigger": {
+              "type": "string",
+              "enum": [
+                "index",
+                "last"
+              ],
+              "default": "last",
+              "deprecated": true,
+              "description": "Deprecated -- use `triggers.reference`. Reference price to trigger the order, for triggered order types only."
+            },
+            "limit_price": {
+              "type": "number",
+              "description": "Limit price, for order types that support a limit price restriction."
+            }
+          }
+        },
+        {
+          "title": "WsAddOrderIceberg",
+          "type": "object",
+          "description": "An iceberg order: a limit order that shows only `display_qty` of its quantity in the book while the rest remains hidden.",
+          "required": [
+            "order_type",
+            "side",
+            "order_qty",
+            "symbol",
+            "limit_price",
+            "display_qty"
+          ],
+          "properties": {
+            "order_type": {
+              "type": "string",
+              "enum": [
+                "iceberg"
+              ],
+              "description": "The execution model of the order."
+            },
+            "side": {
+              "type": "string",
+              "enum": [
+                "buy",
+                "sell"
+              ],
+              "description": "Side of the order."
+            },
+            "order_qty": {
+              "type": "number",
+              "description": "Order quantity in terms of the base asset."
+            },
+            "symbol": {
+              "type": "string",
+              "description": "The symbol of the currency pair, e.g. `BTC/USD`."
+            },
+            "time_in_force": {
+              "type": "string",
+              "enum": [
+                "gtc",
+                "gtd",
+                "ioc",
+                "fok"
+              ],
+              "default": "gtc",
+              "description": "How long the order remains in effect before expiring: `gtc` (Good Till Canceled), `gtd` (Good Till Date -- until `expire_time`), `ioc` (Immediate Or Cancel -- cancels any unfilled remainder on arrival), or `fok` (Fill Or Kill -- fills the full quantity or cancels entirely; `limit` orders only)."
+            },
+            "margin": {
+              "type": "boolean",
+              "default": false,
+              "description": "Funds the order on margin using the maximum leverage for the pair (max leverage of 5)."
+            },
+            "post_only": {
+              "type": "boolean",
+              "default": false,
+              "description": "Cancels the order if it would take liquidity on arrival; post-only orders are always posted passively in the book. Only for orders with a limit price."
+            },
+            "reduce_only": {
+              "type": "boolean",
+              "default": false,
+              "description": "Reduces an existing margin position without opening an opposite position worth more than the current value of the leveraged assets."
+            },
+            "effective_time": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Scheduled start time, RFC3339, precision to seconds."
+            },
+            "expire_time": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Expiration time of the order, RFC3339, precision to seconds. GTD orders can expire up to one month in the future."
+            },
+            "deadline": {
+              "type": "string",
+              "format": "date-time",
+              "description": "RFC3339 timestamp, millisecond precision. Valid offsets from the current time range from 500ms to 60s (default 5s). The engine will not match this order after this time -- protection against latency on time-sensitive orders."
+            },
+            "cl_ord_id": {
+              "type": "string",
+              "description": "Alphanumeric client order identifier uniquely identifying an open order for this client. Mutually exclusive with `order_userref`. One of: a long UUID (32 hex chars, dashed), a short UUID (32 hex chars, no dashes), or free text up to 18 ASCII characters."
+            },
+            "order_userref": {
+              "type": "integer",
+              "description": "Optional non-unique numeric identifier associable with any number of orders by the client (e.g. a timestamp). Not enforced unique by Kraken, so it can also group orders by pair/side/strategy for querying or cancelling. Mutually exclusive with `cl_ord_id`."
+            },
+            "conditional": {
+              "$ref": "WsConditionalCloseOrder"
+            },
+            "fee_preference": {
+              "type": "string",
+              "enum": [
+                "base",
+                "quote"
+              ],
+              "description": "Fee preference, base or quote currency. `quote` is the default for buy orders, `base` is the default for sell orders."
+            },
+            "no_mpp": {
+              "type": "boolean",
+              "default": false,
+              "deprecated": true,
+              "description": "Deprecated -- if supplied, accepted but ignored. Was: disable Market Price Protection (which protects market orders from filling at a bad price during slippage) for market orders."
+            },
+            "stp_type": {
+              "type": "string",
+              "enum": [
+                "cancel_newest",
+                "cancel_oldest",
+                "cancel_both"
+              ],
+              "default": "cancel_newest",
+              "description": "Self Trade Prevention mode, protecting against inadvertently trading against oneself: `cancel_newest` (cancel the arriving order), `cancel_oldest` (cancel the resting order), or `cancel_both`."
+            },
+            "validate": {
+              "type": "boolean",
+              "default": false,
+              "description": "If `true`, the order is validated only -- it never reaches the matching engine and no `order_id` is returned."
+            },
+            "sender_sub_id": {
+              "type": "string",
+              "description": "Alphanumeric sub-account/trader identifier enabling Self Trade Prevention at a more granular level, for institutional accounts with enhanced STP. Same three accepted formats as `cl_ord_id`."
+            },
+            "stop_price": {
+              "type": "number",
+              "deprecated": true,
+              "description": "Deprecated -- use the `triggers` object. Stop price for trigger order types."
+            },
+            "trigger": {
+              "type": "string",
+              "enum": [
+                "index",
+                "last"
+              ],
+              "default": "last",
+              "deprecated": true,
+              "description": "Deprecated -- use `triggers.reference`. Reference price to trigger the order, for triggered order types only."
+            },
+            "limit_price": {
+              "type": "number",
+              "description": "Limit price, for order types that support a limit price restriction."
+            },
+            "display_qty": {
+              "type": "number",
+              "description": "For `iceberg` orders only: quantity to show in the book while the rest of `order_qty` remains hidden. Minimum value is 1/15 of `order_qty`."
+            }
+          }
+        },
+        {
+          "title": "WsAddOrderStopLoss",
+          "type": "object",
+          "description": "A stop-loss order: becomes a market order once `triggers.price` is reached in an unfavourable direction.",
+          "required": [
+            "order_type",
+            "side",
+            "order_qty",
+            "symbol",
+            "triggers"
+          ],
+          "properties": {
+            "order_type": {
+              "type": "string",
+              "enum": [
+                "stop-loss"
+              ],
+              "description": "The execution model of the order."
+            },
+            "side": {
+              "type": "string",
+              "enum": [
+                "buy",
+                "sell"
+              ],
+              "description": "Side of the order."
+            },
+            "order_qty": {
+              "type": "number",
+              "description": "Order quantity in terms of the base asset."
+            },
+            "symbol": {
+              "type": "string",
+              "description": "The symbol of the currency pair, e.g. `BTC/USD`."
+            },
+            "time_in_force": {
+              "type": "string",
+              "enum": [
+                "gtc",
+                "gtd",
+                "ioc",
+                "fok"
+              ],
+              "default": "gtc",
+              "description": "How long the order remains in effect before expiring: `gtc` (Good Till Canceled), `gtd` (Good Till Date -- until `expire_time`), `ioc` (Immediate Or Cancel -- cancels any unfilled remainder on arrival), or `fok` (Fill Or Kill -- fills the full quantity or cancels entirely; `limit` orders only)."
+            },
+            "margin": {
+              "type": "boolean",
+              "default": false,
+              "description": "Funds the order on margin using the maximum leverage for the pair (max leverage of 5)."
+            },
+            "post_only": {
+              "type": "boolean",
+              "default": false,
+              "description": "Cancels the order if it would take liquidity on arrival; post-only orders are always posted passively in the book. Only for orders with a limit price."
+            },
+            "reduce_only": {
+              "type": "boolean",
+              "default": false,
+              "description": "Reduces an existing margin position without opening an opposite position worth more than the current value of the leveraged assets."
+            },
+            "effective_time": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Scheduled start time, RFC3339, precision to seconds."
+            },
+            "expire_time": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Expiration time of the order, RFC3339, precision to seconds. GTD orders can expire up to one month in the future."
+            },
+            "deadline": {
+              "type": "string",
+              "format": "date-time",
+              "description": "RFC3339 timestamp, millisecond precision. Valid offsets from the current time range from 500ms to 60s (default 5s). The engine will not match this order after this time -- protection against latency on time-sensitive orders."
+            },
+            "cl_ord_id": {
+              "type": "string",
+              "description": "Alphanumeric client order identifier uniquely identifying an open order for this client. Mutually exclusive with `order_userref`. One of: a long UUID (32 hex chars, dashed), a short UUID (32 hex chars, no dashes), or free text up to 18 ASCII characters."
+            },
+            "order_userref": {
+              "type": "integer",
+              "description": "Optional non-unique numeric identifier associable with any number of orders by the client (e.g. a timestamp). Not enforced unique by Kraken, so it can also group orders by pair/side/strategy for querying or cancelling. Mutually exclusive with `cl_ord_id`."
+            },
+            "conditional": {
+              "$ref": "WsConditionalCloseOrder"
+            },
+            "fee_preference": {
+              "type": "string",
+              "enum": [
+                "base",
+                "quote"
+              ],
+              "description": "Fee preference, base or quote currency. `quote` is the default for buy orders, `base` is the default for sell orders."
+            },
+            "no_mpp": {
+              "type": "boolean",
+              "default": false,
+              "deprecated": true,
+              "description": "Deprecated -- if supplied, accepted but ignored. Was: disable Market Price Protection (which protects market orders from filling at a bad price during slippage) for market orders."
+            },
+            "stp_type": {
+              "type": "string",
+              "enum": [
+                "cancel_newest",
+                "cancel_oldest",
+                "cancel_both"
+              ],
+              "default": "cancel_newest",
+              "description": "Self Trade Prevention mode, protecting against inadvertently trading against oneself: `cancel_newest` (cancel the arriving order), `cancel_oldest` (cancel the resting order), or `cancel_both`."
+            },
+            "validate": {
+              "type": "boolean",
+              "default": false,
+              "description": "If `true`, the order is validated only -- it never reaches the matching engine and no `order_id` is returned."
+            },
+            "sender_sub_id": {
+              "type": "string",
+              "description": "Alphanumeric sub-account/trader identifier enabling Self Trade Prevention at a more granular level, for institutional accounts with enhanced STP. Same three accepted formats as `cl_ord_id`."
+            },
+            "stop_price": {
+              "type": "number",
+              "deprecated": true,
+              "description": "Deprecated -- use the `triggers` object. Stop price for trigger order types."
+            },
+            "trigger": {
+              "type": "string",
+              "enum": [
+                "index",
+                "last"
+              ],
+              "default": "last",
+              "deprecated": true,
+              "description": "Deprecated -- use `triggers.reference`. Reference price to trigger the order, for triggered order types only."
+            },
+            "triggers": {
+              "$ref": "OrderTriggers"
+            }
+          }
+        },
+        {
+          "title": "WsAddOrderStopLossLimit",
+          "type": "object",
+          "description": "A stop-loss-limit order: becomes a limit order at `limit_price` once `triggers.price` is reached in an unfavourable direction.",
+          "required": [
+            "order_type",
+            "side",
+            "order_qty",
+            "symbol",
+            "triggers",
+            "limit_price"
+          ],
+          "properties": {
+            "order_type": {
+              "type": "string",
+              "enum": [
+                "stop-loss-limit"
+              ],
+              "description": "The execution model of the order."
+            },
+            "side": {
+              "type": "string",
+              "enum": [
+                "buy",
+                "sell"
+              ],
+              "description": "Side of the order."
+            },
+            "order_qty": {
+              "type": "number",
+              "description": "Order quantity in terms of the base asset."
+            },
+            "symbol": {
+              "type": "string",
+              "description": "The symbol of the currency pair, e.g. `BTC/USD`."
+            },
+            "time_in_force": {
+              "type": "string",
+              "enum": [
+                "gtc",
+                "gtd",
+                "ioc",
+                "fok"
+              ],
+              "default": "gtc",
+              "description": "How long the order remains in effect before expiring: `gtc` (Good Till Canceled), `gtd` (Good Till Date -- until `expire_time`), `ioc` (Immediate Or Cancel -- cancels any unfilled remainder on arrival), or `fok` (Fill Or Kill -- fills the full quantity or cancels entirely; `limit` orders only)."
+            },
+            "margin": {
+              "type": "boolean",
+              "default": false,
+              "description": "Funds the order on margin using the maximum leverage for the pair (max leverage of 5)."
+            },
+            "post_only": {
+              "type": "boolean",
+              "default": false,
+              "description": "Cancels the order if it would take liquidity on arrival; post-only orders are always posted passively in the book. Only for orders with a limit price."
+            },
+            "reduce_only": {
+              "type": "boolean",
+              "default": false,
+              "description": "Reduces an existing margin position without opening an opposite position worth more than the current value of the leveraged assets."
+            },
+            "effective_time": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Scheduled start time, RFC3339, precision to seconds."
+            },
+            "expire_time": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Expiration time of the order, RFC3339, precision to seconds. GTD orders can expire up to one month in the future."
+            },
+            "deadline": {
+              "type": "string",
+              "format": "date-time",
+              "description": "RFC3339 timestamp, millisecond precision. Valid offsets from the current time range from 500ms to 60s (default 5s). The engine will not match this order after this time -- protection against latency on time-sensitive orders."
+            },
+            "cl_ord_id": {
+              "type": "string",
+              "description": "Alphanumeric client order identifier uniquely identifying an open order for this client. Mutually exclusive with `order_userref`. One of: a long UUID (32 hex chars, dashed), a short UUID (32 hex chars, no dashes), or free text up to 18 ASCII characters."
+            },
+            "order_userref": {
+              "type": "integer",
+              "description": "Optional non-unique numeric identifier associable with any number of orders by the client (e.g. a timestamp). Not enforced unique by Kraken, so it can also group orders by pair/side/strategy for querying or cancelling. Mutually exclusive with `cl_ord_id`."
+            },
+            "conditional": {
+              "$ref": "WsConditionalCloseOrder"
+            },
+            "fee_preference": {
+              "type": "string",
+              "enum": [
+                "base",
+                "quote"
+              ],
+              "description": "Fee preference, base or quote currency. `quote` is the default for buy orders, `base` is the default for sell orders."
+            },
+            "no_mpp": {
+              "type": "boolean",
+              "default": false,
+              "deprecated": true,
+              "description": "Deprecated -- if supplied, accepted but ignored. Was: disable Market Price Protection (which protects market orders from filling at a bad price during slippage) for market orders."
+            },
+            "stp_type": {
+              "type": "string",
+              "enum": [
+                "cancel_newest",
+                "cancel_oldest",
+                "cancel_both"
+              ],
+              "default": "cancel_newest",
+              "description": "Self Trade Prevention mode, protecting against inadvertently trading against oneself: `cancel_newest` (cancel the arriving order), `cancel_oldest` (cancel the resting order), or `cancel_both`."
+            },
+            "validate": {
+              "type": "boolean",
+              "default": false,
+              "description": "If `true`, the order is validated only -- it never reaches the matching engine and no `order_id` is returned."
+            },
+            "sender_sub_id": {
+              "type": "string",
+              "description": "Alphanumeric sub-account/trader identifier enabling Self Trade Prevention at a more granular level, for institutional accounts with enhanced STP. Same three accepted formats as `cl_ord_id`."
+            },
+            "stop_price": {
+              "type": "number",
+              "deprecated": true,
+              "description": "Deprecated -- use the `triggers` object. Stop price for trigger order types."
+            },
+            "trigger": {
+              "type": "string",
+              "enum": [
+                "index",
+                "last"
+              ],
+              "default": "last",
+              "deprecated": true,
+              "description": "Deprecated -- use `triggers.reference`. Reference price to trigger the order, for triggered order types only."
+            },
+            "triggers": {
+              "$ref": "OrderTriggers"
+            },
+            "limit_price": {
+              "type": "number",
+              "description": "Limit price, for order types that support a limit price restriction."
+            }
+          }
+        },
+        {
+          "title": "WsAddOrderTakeProfit",
+          "type": "object",
+          "description": "A take-profit order: becomes a market order once `triggers.price` is reached in a favourable direction.",
+          "required": [
+            "order_type",
+            "side",
+            "order_qty",
+            "symbol",
+            "triggers"
+          ],
+          "properties": {
+            "order_type": {
+              "type": "string",
+              "enum": [
+                "take-profit"
+              ],
+              "description": "The execution model of the order."
+            },
+            "side": {
+              "type": "string",
+              "enum": [
+                "buy",
+                "sell"
+              ],
+              "description": "Side of the order."
+            },
+            "order_qty": {
+              "type": "number",
+              "description": "Order quantity in terms of the base asset."
+            },
+            "symbol": {
+              "type": "string",
+              "description": "The symbol of the currency pair, e.g. `BTC/USD`."
+            },
+            "time_in_force": {
+              "type": "string",
+              "enum": [
+                "gtc",
+                "gtd",
+                "ioc",
+                "fok"
+              ],
+              "default": "gtc",
+              "description": "How long the order remains in effect before expiring: `gtc` (Good Till Canceled), `gtd` (Good Till Date -- until `expire_time`), `ioc` (Immediate Or Cancel -- cancels any unfilled remainder on arrival), or `fok` (Fill Or Kill -- fills the full quantity or cancels entirely; `limit` orders only)."
+            },
+            "margin": {
+              "type": "boolean",
+              "default": false,
+              "description": "Funds the order on margin using the maximum leverage for the pair (max leverage of 5)."
+            },
+            "post_only": {
+              "type": "boolean",
+              "default": false,
+              "description": "Cancels the order if it would take liquidity on arrival; post-only orders are always posted passively in the book. Only for orders with a limit price."
+            },
+            "reduce_only": {
+              "type": "boolean",
+              "default": false,
+              "description": "Reduces an existing margin position without opening an opposite position worth more than the current value of the leveraged assets."
+            },
+            "effective_time": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Scheduled start time, RFC3339, precision to seconds."
+            },
+            "expire_time": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Expiration time of the order, RFC3339, precision to seconds. GTD orders can expire up to one month in the future."
+            },
+            "deadline": {
+              "type": "string",
+              "format": "date-time",
+              "description": "RFC3339 timestamp, millisecond precision. Valid offsets from the current time range from 500ms to 60s (default 5s). The engine will not match this order after this time -- protection against latency on time-sensitive orders."
+            },
+            "cl_ord_id": {
+              "type": "string",
+              "description": "Alphanumeric client order identifier uniquely identifying an open order for this client. Mutually exclusive with `order_userref`. One of: a long UUID (32 hex chars, dashed), a short UUID (32 hex chars, no dashes), or free text up to 18 ASCII characters."
+            },
+            "order_userref": {
+              "type": "integer",
+              "description": "Optional non-unique numeric identifier associable with any number of orders by the client (e.g. a timestamp). Not enforced unique by Kraken, so it can also group orders by pair/side/strategy for querying or cancelling. Mutually exclusive with `cl_ord_id`."
+            },
+            "conditional": {
+              "$ref": "WsConditionalCloseOrder"
+            },
+            "fee_preference": {
+              "type": "string",
+              "enum": [
+                "base",
+                "quote"
+              ],
+              "description": "Fee preference, base or quote currency. `quote` is the default for buy orders, `base` is the default for sell orders."
+            },
+            "no_mpp": {
+              "type": "boolean",
+              "default": false,
+              "deprecated": true,
+              "description": "Deprecated -- if supplied, accepted but ignored. Was: disable Market Price Protection (which protects market orders from filling at a bad price during slippage) for market orders."
+            },
+            "stp_type": {
+              "type": "string",
+              "enum": [
+                "cancel_newest",
+                "cancel_oldest",
+                "cancel_both"
+              ],
+              "default": "cancel_newest",
+              "description": "Self Trade Prevention mode, protecting against inadvertently trading against oneself: `cancel_newest` (cancel the arriving order), `cancel_oldest` (cancel the resting order), or `cancel_both`."
+            },
+            "validate": {
+              "type": "boolean",
+              "default": false,
+              "description": "If `true`, the order is validated only -- it never reaches the matching engine and no `order_id` is returned."
+            },
+            "sender_sub_id": {
+              "type": "string",
+              "description": "Alphanumeric sub-account/trader identifier enabling Self Trade Prevention at a more granular level, for institutional accounts with enhanced STP. Same three accepted formats as `cl_ord_id`."
+            },
+            "stop_price": {
+              "type": "number",
+              "deprecated": true,
+              "description": "Deprecated -- use the `triggers` object. Stop price for trigger order types."
+            },
+            "trigger": {
+              "type": "string",
+              "enum": [
+                "index",
+                "last"
+              ],
+              "default": "last",
+              "deprecated": true,
+              "description": "Deprecated -- use `triggers.reference`. Reference price to trigger the order, for triggered order types only."
+            },
+            "triggers": {
+              "$ref": "OrderTriggers"
+            }
+          }
+        },
+        {
+          "title": "WsAddOrderTakeProfitLimit",
+          "type": "object",
+          "description": "A take-profit-limit order: becomes a limit order at `limit_price` once `triggers.price` is reached in a favourable direction.",
+          "required": [
+            "order_type",
+            "side",
+            "order_qty",
+            "symbol",
+            "triggers",
+            "limit_price"
+          ],
+          "properties": {
+            "order_type": {
+              "type": "string",
+              "enum": [
+                "take-profit-limit"
+              ],
+              "description": "The execution model of the order."
+            },
+            "side": {
+              "type": "string",
+              "enum": [
+                "buy",
+                "sell"
+              ],
+              "description": "Side of the order."
+            },
+            "order_qty": {
+              "type": "number",
+              "description": "Order quantity in terms of the base asset."
+            },
+            "symbol": {
+              "type": "string",
+              "description": "The symbol of the currency pair, e.g. `BTC/USD`."
+            },
+            "time_in_force": {
+              "type": "string",
+              "enum": [
+                "gtc",
+                "gtd",
+                "ioc",
+                "fok"
+              ],
+              "default": "gtc",
+              "description": "How long the order remains in effect before expiring: `gtc` (Good Till Canceled), `gtd` (Good Till Date -- until `expire_time`), `ioc` (Immediate Or Cancel -- cancels any unfilled remainder on arrival), or `fok` (Fill Or Kill -- fills the full quantity or cancels entirely; `limit` orders only)."
+            },
+            "margin": {
+              "type": "boolean",
+              "default": false,
+              "description": "Funds the order on margin using the maximum leverage for the pair (max leverage of 5)."
+            },
+            "post_only": {
+              "type": "boolean",
+              "default": false,
+              "description": "Cancels the order if it would take liquidity on arrival; post-only orders are always posted passively in the book. Only for orders with a limit price."
+            },
+            "reduce_only": {
+              "type": "boolean",
+              "default": false,
+              "description": "Reduces an existing margin position without opening an opposite position worth more than the current value of the leveraged assets."
+            },
+            "effective_time": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Scheduled start time, RFC3339, precision to seconds."
+            },
+            "expire_time": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Expiration time of the order, RFC3339, precision to seconds. GTD orders can expire up to one month in the future."
+            },
+            "deadline": {
+              "type": "string",
+              "format": "date-time",
+              "description": "RFC3339 timestamp, millisecond precision. Valid offsets from the current time range from 500ms to 60s (default 5s). The engine will not match this order after this time -- protection against latency on time-sensitive orders."
+            },
+            "cl_ord_id": {
+              "type": "string",
+              "description": "Alphanumeric client order identifier uniquely identifying an open order for this client. Mutually exclusive with `order_userref`. One of: a long UUID (32 hex chars, dashed), a short UUID (32 hex chars, no dashes), or free text up to 18 ASCII characters."
+            },
+            "order_userref": {
+              "type": "integer",
+              "description": "Optional non-unique numeric identifier associable with any number of orders by the client (e.g. a timestamp). Not enforced unique by Kraken, so it can also group orders by pair/side/strategy for querying or cancelling. Mutually exclusive with `cl_ord_id`."
+            },
+            "conditional": {
+              "$ref": "WsConditionalCloseOrder"
+            },
+            "fee_preference": {
+              "type": "string",
+              "enum": [
+                "base",
+                "quote"
+              ],
+              "description": "Fee preference, base or quote currency. `quote` is the default for buy orders, `base` is the default for sell orders."
+            },
+            "no_mpp": {
+              "type": "boolean",
+              "default": false,
+              "deprecated": true,
+              "description": "Deprecated -- if supplied, accepted but ignored. Was: disable Market Price Protection (which protects market orders from filling at a bad price during slippage) for market orders."
+            },
+            "stp_type": {
+              "type": "string",
+              "enum": [
+                "cancel_newest",
+                "cancel_oldest",
+                "cancel_both"
+              ],
+              "default": "cancel_newest",
+              "description": "Self Trade Prevention mode, protecting against inadvertently trading against oneself: `cancel_newest` (cancel the arriving order), `cancel_oldest` (cancel the resting order), or `cancel_both`."
+            },
+            "validate": {
+              "type": "boolean",
+              "default": false,
+              "description": "If `true`, the order is validated only -- it never reaches the matching engine and no `order_id` is returned."
+            },
+            "sender_sub_id": {
+              "type": "string",
+              "description": "Alphanumeric sub-account/trader identifier enabling Self Trade Prevention at a more granular level, for institutional accounts with enhanced STP. Same three accepted formats as `cl_ord_id`."
+            },
+            "stop_price": {
+              "type": "number",
+              "deprecated": true,
+              "description": "Deprecated -- use the `triggers` object. Stop price for trigger order types."
+            },
+            "trigger": {
+              "type": "string",
+              "enum": [
+                "index",
+                "last"
+              ],
+              "default": "last",
+              "deprecated": true,
+              "description": "Deprecated -- use `triggers.reference`. Reference price to trigger the order, for triggered order types only."
+            },
+            "triggers": {
+              "$ref": "OrderTriggers"
+            },
+            "limit_price": {
+              "type": "number",
+              "description": "Limit price, for order types that support a limit price restriction."
+            }
+          }
+        },
+        {
+          "title": "WsAddOrderTrailingStop",
+          "type": "object",
+          "description": "A trailing-stop order: triggers as a market order once the price reverts by `triggers.price` from its peak/trough since order entry.",
+          "required": [
+            "order_type",
+            "side",
+            "order_qty",
+            "symbol",
+            "triggers"
+          ],
+          "properties": {
+            "order_type": {
+              "type": "string",
+              "enum": [
+                "trailing-stop"
+              ],
+              "description": "The execution model of the order."
+            },
+            "side": {
+              "type": "string",
+              "enum": [
+                "buy",
+                "sell"
+              ],
+              "description": "Side of the order."
+            },
+            "order_qty": {
+              "type": "number",
+              "description": "Order quantity in terms of the base asset."
+            },
+            "symbol": {
+              "type": "string",
+              "description": "The symbol of the currency pair, e.g. `BTC/USD`."
+            },
+            "time_in_force": {
+              "type": "string",
+              "enum": [
+                "gtc",
+                "gtd",
+                "ioc",
+                "fok"
+              ],
+              "default": "gtc",
+              "description": "How long the order remains in effect before expiring: `gtc` (Good Till Canceled), `gtd` (Good Till Date -- until `expire_time`), `ioc` (Immediate Or Cancel -- cancels any unfilled remainder on arrival), or `fok` (Fill Or Kill -- fills the full quantity or cancels entirely; `limit` orders only)."
+            },
+            "margin": {
+              "type": "boolean",
+              "default": false,
+              "description": "Funds the order on margin using the maximum leverage for the pair (max leverage of 5)."
+            },
+            "post_only": {
+              "type": "boolean",
+              "default": false,
+              "description": "Cancels the order if it would take liquidity on arrival; post-only orders are always posted passively in the book. Only for orders with a limit price."
+            },
+            "reduce_only": {
+              "type": "boolean",
+              "default": false,
+              "description": "Reduces an existing margin position without opening an opposite position worth more than the current value of the leveraged assets."
+            },
+            "effective_time": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Scheduled start time, RFC3339, precision to seconds."
+            },
+            "expire_time": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Expiration time of the order, RFC3339, precision to seconds. GTD orders can expire up to one month in the future."
+            },
+            "deadline": {
+              "type": "string",
+              "format": "date-time",
+              "description": "RFC3339 timestamp, millisecond precision. Valid offsets from the current time range from 500ms to 60s (default 5s). The engine will not match this order after this time -- protection against latency on time-sensitive orders."
+            },
+            "cl_ord_id": {
+              "type": "string",
+              "description": "Alphanumeric client order identifier uniquely identifying an open order for this client. Mutually exclusive with `order_userref`. One of: a long UUID (32 hex chars, dashed), a short UUID (32 hex chars, no dashes), or free text up to 18 ASCII characters."
+            },
+            "order_userref": {
+              "type": "integer",
+              "description": "Optional non-unique numeric identifier associable with any number of orders by the client (e.g. a timestamp). Not enforced unique by Kraken, so it can also group orders by pair/side/strategy for querying or cancelling. Mutually exclusive with `cl_ord_id`."
+            },
+            "conditional": {
+              "$ref": "WsConditionalCloseOrder"
+            },
+            "fee_preference": {
+              "type": "string",
+              "enum": [
+                "base",
+                "quote"
+              ],
+              "description": "Fee preference, base or quote currency. `quote` is the default for buy orders, `base` is the default for sell orders."
+            },
+            "no_mpp": {
+              "type": "boolean",
+              "default": false,
+              "deprecated": true,
+              "description": "Deprecated -- if supplied, accepted but ignored. Was: disable Market Price Protection (which protects market orders from filling at a bad price during slippage) for market orders."
+            },
+            "stp_type": {
+              "type": "string",
+              "enum": [
+                "cancel_newest",
+                "cancel_oldest",
+                "cancel_both"
+              ],
+              "default": "cancel_newest",
+              "description": "Self Trade Prevention mode, protecting against inadvertently trading against oneself: `cancel_newest` (cancel the arriving order), `cancel_oldest` (cancel the resting order), or `cancel_both`."
+            },
+            "validate": {
+              "type": "boolean",
+              "default": false,
+              "description": "If `true`, the order is validated only -- it never reaches the matching engine and no `order_id` is returned."
+            },
+            "sender_sub_id": {
+              "type": "string",
+              "description": "Alphanumeric sub-account/trader identifier enabling Self Trade Prevention at a more granular level, for institutional accounts with enhanced STP. Same three accepted formats as `cl_ord_id`."
+            },
+            "stop_price": {
+              "type": "number",
+              "deprecated": true,
+              "description": "Deprecated -- use the `triggers` object. Stop price for trigger order types."
+            },
+            "trigger": {
+              "type": "string",
+              "enum": [
+                "index",
+                "last"
+              ],
+              "default": "last",
+              "deprecated": true,
+              "description": "Deprecated -- use `triggers.reference`. Reference price to trigger the order, for triggered order types only."
+            },
+            "triggers": {
+              "$ref": "OrderTriggers"
+            }
+          }
+        },
+        {
+          "title": "WsAddOrderTrailingStopLimit",
+          "type": "object",
+          "description": "A trailing-stop-limit order: triggers a limit order at `limit_price` (an offset from the trigger price, per `limit_price_type`) once the price reverts by `triggers.price` from its peak/trough since order entry.",
+          "required": [
+            "order_type",
+            "side",
+            "order_qty",
+            "symbol",
+            "triggers",
+            "limit_price"
+          ],
+          "properties": {
+            "order_type": {
+              "type": "string",
+              "enum": [
+                "trailing-stop-limit"
+              ],
+              "description": "The execution model of the order."
+            },
+            "side": {
+              "type": "string",
+              "enum": [
+                "buy",
+                "sell"
+              ],
+              "description": "Side of the order."
+            },
+            "order_qty": {
+              "type": "number",
+              "description": "Order quantity in terms of the base asset."
+            },
+            "symbol": {
+              "type": "string",
+              "description": "The symbol of the currency pair, e.g. `BTC/USD`."
+            },
+            "time_in_force": {
+              "type": "string",
+              "enum": [
+                "gtc",
+                "gtd",
+                "ioc",
+                "fok"
+              ],
+              "default": "gtc",
+              "description": "How long the order remains in effect before expiring: `gtc` (Good Till Canceled), `gtd` (Good Till Date -- until `expire_time`), `ioc` (Immediate Or Cancel -- cancels any unfilled remainder on arrival), or `fok` (Fill Or Kill -- fills the full quantity or cancels entirely; `limit` orders only)."
+            },
+            "margin": {
+              "type": "boolean",
+              "default": false,
+              "description": "Funds the order on margin using the maximum leverage for the pair (max leverage of 5)."
+            },
+            "post_only": {
+              "type": "boolean",
+              "default": false,
+              "description": "Cancels the order if it would take liquidity on arrival; post-only orders are always posted passively in the book. Only for orders with a limit price."
+            },
+            "reduce_only": {
+              "type": "boolean",
+              "default": false,
+              "description": "Reduces an existing margin position without opening an opposite position worth more than the current value of the leveraged assets."
+            },
+            "effective_time": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Scheduled start time, RFC3339, precision to seconds."
+            },
+            "expire_time": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Expiration time of the order, RFC3339, precision to seconds. GTD orders can expire up to one month in the future."
+            },
+            "deadline": {
+              "type": "string",
+              "format": "date-time",
+              "description": "RFC3339 timestamp, millisecond precision. Valid offsets from the current time range from 500ms to 60s (default 5s). The engine will not match this order after this time -- protection against latency on time-sensitive orders."
+            },
+            "cl_ord_id": {
+              "type": "string",
+              "description": "Alphanumeric client order identifier uniquely identifying an open order for this client. Mutually exclusive with `order_userref`. One of: a long UUID (32 hex chars, dashed), a short UUID (32 hex chars, no dashes), or free text up to 18 ASCII characters."
+            },
+            "order_userref": {
+              "type": "integer",
+              "description": "Optional non-unique numeric identifier associable with any number of orders by the client (e.g. a timestamp). Not enforced unique by Kraken, so it can also group orders by pair/side/strategy for querying or cancelling. Mutually exclusive with `cl_ord_id`."
+            },
+            "conditional": {
+              "$ref": "WsConditionalCloseOrder"
+            },
+            "fee_preference": {
+              "type": "string",
+              "enum": [
+                "base",
+                "quote"
+              ],
+              "description": "Fee preference, base or quote currency. `quote` is the default for buy orders, `base` is the default for sell orders."
+            },
+            "no_mpp": {
+              "type": "boolean",
+              "default": false,
+              "deprecated": true,
+              "description": "Deprecated -- if supplied, accepted but ignored. Was: disable Market Price Protection (which protects market orders from filling at a bad price during slippage) for market orders."
+            },
+            "stp_type": {
+              "type": "string",
+              "enum": [
+                "cancel_newest",
+                "cancel_oldest",
+                "cancel_both"
+              ],
+              "default": "cancel_newest",
+              "description": "Self Trade Prevention mode, protecting against inadvertently trading against oneself: `cancel_newest` (cancel the arriving order), `cancel_oldest` (cancel the resting order), or `cancel_both`."
+            },
+            "validate": {
+              "type": "boolean",
+              "default": false,
+              "description": "If `true`, the order is validated only -- it never reaches the matching engine and no `order_id` is returned."
+            },
+            "sender_sub_id": {
+              "type": "string",
+              "description": "Alphanumeric sub-account/trader identifier enabling Self Trade Prevention at a more granular level, for institutional accounts with enhanced STP. Same three accepted formats as `cl_ord_id`."
+            },
+            "stop_price": {
+              "type": "number",
+              "deprecated": true,
+              "description": "Deprecated -- use the `triggers` object. Stop price for trigger order types."
+            },
+            "trigger": {
+              "type": "string",
+              "enum": [
+                "index",
+                "last"
+              ],
+              "default": "last",
+              "deprecated": true,
+              "description": "Deprecated -- use `triggers.reference`. Reference price to trigger the order, for triggered order types only."
+            },
+            "triggers": {
+              "$ref": "OrderTriggers"
+            },
+            "limit_price": {
+              "type": "number",
+              "description": "Limit price, for order types that support a limit price restriction."
+            },
+            "limit_price_type": {
+              "type": "string",
+              "enum": [
+                "static",
+                "pct",
+                "quote"
+              ],
+              "default": "quote",
+              "description": "Units for `limit_price`: `static` (a static market price), `pct` (a percentage offset from the reference price), or `quote` (a notional offset in the quote currency). Only available on `trailing-stop-limit` orders, where it is an offset from the trigger price (`0` sets the limit price equal to the trigger price)."
+            }
+          }
+        },
+        {
+          "title": "WsAddOrderSettlePosition",
+          "type": "object",
+          "description": "Settles an open leveraged position at the current market price.",
+          "required": [
+            "order_type",
+            "side",
+            "order_qty",
+            "symbol"
+          ],
+          "properties": {
+            "order_type": {
+              "type": "string",
+              "enum": [
+                "settle-position"
+              ],
+              "description": "The execution model of the order."
+            },
+            "side": {
+              "type": "string",
+              "enum": [
+                "buy",
+                "sell"
+              ],
+              "description": "Side of the order."
+            },
+            "order_qty": {
+              "type": "number",
+              "description": "Order quantity in terms of the base asset."
+            },
+            "symbol": {
+              "type": "string",
+              "description": "The symbol of the currency pair, e.g. `BTC/USD`."
+            },
+            "time_in_force": {
+              "type": "string",
+              "enum": [
+                "gtc",
+                "gtd",
+                "ioc",
+                "fok"
+              ],
+              "default": "gtc",
+              "description": "How long the order remains in effect before expiring: `gtc` (Good Till Canceled), `gtd` (Good Till Date -- until `expire_time`), `ioc` (Immediate Or Cancel -- cancels any unfilled remainder on arrival), or `fok` (Fill Or Kill -- fills the full quantity or cancels entirely; `limit` orders only)."
+            },
+            "margin": {
+              "type": "boolean",
+              "default": false,
+              "description": "Funds the order on margin using the maximum leverage for the pair (max leverage of 5)."
+            },
+            "post_only": {
+              "type": "boolean",
+              "default": false,
+              "description": "Cancels the order if it would take liquidity on arrival; post-only orders are always posted passively in the book. Only for orders with a limit price."
+            },
+            "reduce_only": {
+              "type": "boolean",
+              "default": false,
+              "description": "Reduces an existing margin position without opening an opposite position worth more than the current value of the leveraged assets."
+            },
+            "effective_time": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Scheduled start time, RFC3339, precision to seconds."
+            },
+            "expire_time": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Expiration time of the order, RFC3339, precision to seconds. GTD orders can expire up to one month in the future."
+            },
+            "deadline": {
+              "type": "string",
+              "format": "date-time",
+              "description": "RFC3339 timestamp, millisecond precision. Valid offsets from the current time range from 500ms to 60s (default 5s). The engine will not match this order after this time -- protection against latency on time-sensitive orders."
+            },
+            "cl_ord_id": {
+              "type": "string",
+              "description": "Alphanumeric client order identifier uniquely identifying an open order for this client. Mutually exclusive with `order_userref`. One of: a long UUID (32 hex chars, dashed), a short UUID (32 hex chars, no dashes), or free text up to 18 ASCII characters."
+            },
+            "order_userref": {
+              "type": "integer",
+              "description": "Optional non-unique numeric identifier associable with any number of orders by the client (e.g. a timestamp). Not enforced unique by Kraken, so it can also group orders by pair/side/strategy for querying or cancelling. Mutually exclusive with `cl_ord_id`."
+            },
+            "conditional": {
+              "$ref": "WsConditionalCloseOrder"
+            },
+            "fee_preference": {
+              "type": "string",
+              "enum": [
+                "base",
+                "quote"
+              ],
+              "description": "Fee preference, base or quote currency. `quote` is the default for buy orders, `base` is the default for sell orders."
+            },
+            "no_mpp": {
+              "type": "boolean",
+              "default": false,
+              "deprecated": true,
+              "description": "Deprecated -- if supplied, accepted but ignored. Was: disable Market Price Protection (which protects market orders from filling at a bad price during slippage) for market orders."
+            },
+            "stp_type": {
+              "type": "string",
+              "enum": [
+                "cancel_newest",
+                "cancel_oldest",
+                "cancel_both"
+              ],
+              "default": "cancel_newest",
+              "description": "Self Trade Prevention mode, protecting against inadvertently trading against oneself: `cancel_newest` (cancel the arriving order), `cancel_oldest` (cancel the resting order), or `cancel_both`."
+            },
+            "validate": {
+              "type": "boolean",
+              "default": false,
+              "description": "If `true`, the order is validated only -- it never reaches the matching engine and no `order_id` is returned."
+            },
+            "sender_sub_id": {
+              "type": "string",
+              "description": "Alphanumeric sub-account/trader identifier enabling Self Trade Prevention at a more granular level, for institutional accounts with enhanced STP. Same three accepted formats as `cl_ord_id`."
+            },
+            "stop_price": {
+              "type": "number",
+              "deprecated": true,
+              "description": "Deprecated -- use the `triggers` object. Stop price for trigger order types."
+            },
+            "trigger": {
+              "type": "string",
+              "enum": [
+                "index",
+                "last"
+              ],
+              "default": "last",
+              "deprecated": true,
+              "description": "Deprecated -- use `triggers.reference`. Reference price to trigger the order, for triggered order types only."
+            }
+          }
+        }
+      ]
+    },
+    "response": {
+      "title": "AddOrderResult",
+      "type": "object",
+      "description": "Result of a successful `add_order` call.",
+      "properties": {
+        "order_id": {
+          "type": "string",
+          "description": "Unique order identifier generated by Kraken. Absent when `validate=true`, since no order actually reaches the matching engine."
+        },
+        "cl_ord_id": {
+          "type": "string",
+          "description": "The client identifier specified in the request `params`, if any."
+        },
+        "order_userref": {
+          "type": "integer",
+          "description": "The client identifier specified in the request `params`, if any."
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Non-fatal warnings about the order, if any."
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result",
+    "correlate": "req_id"
+  },
+  "notes": [
+    "`token` (the auth bearer token) is documented by Kraken as a required params field but is deliberately absent from this schema: `core/transport/ws.py`'s `SocketConnection.rpc_send` merges the cached token into every outgoing `params` on the private connection -- trading calls and subscribe/unsubscribe alike -- so it is transport-injected, never a caller-supplied argument, the same way `req_id` (the declared `correlate` field) never appears in a requestBody schema. This endpoint's parameter surface is the full documented one -- clients/kraken/pkg/src/kraken/trading_ws/add_order.py's hand-written `add_order` currently only wires `symbol`/`side`/`order_type`/`order_qty`/`limit_price`/`validate`, deliberately partial per core.md's Gotchas (full coverage was left to codegen); this spec is that full coverage. Deprecated-but-still-documented fields (`no_mpp`, `stop_price`, `trigger`, `conditional.stop_price`) are kept per rule 7 and marked `\"deprecated\": true` rather than dropped."
+  ]
+}

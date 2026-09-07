@@ -1,0 +1,95 @@
+{
+  "docs": "https://docs.kraken.com/exchange/api-reference/spot-websocket-v2/batch_cancel",
+  "meta": {},
+  "redacted": [
+    "req_id"
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "ws"
+    ],
+    "path": "batch_cancel",
+    "description": "Cancels multiple orders (minimum 2, maximum 50) in a single request, identified by a mix of client or Kraken identifiers.",
+    "request": {
+      "title": "BatchCancelParams",
+      "type": "object",
+      "description": "Parameters for cancelling multiple orders (minimum 2, maximum 50) in a single request, identified by a mix of client or Kraken identifiers.",
+      "required": [
+        "orders"
+      ],
+      "properties": {
+        "orders": {
+          "title": "OrderReferenceList",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 2,
+          "maxItems": 50,
+          "description": "List containing either client `order_userref` or Kraken `order_id` identifiers, 2 to 50 of them."
+        },
+        "cl_ord_id": {
+          "title": "ClientOrderIdList",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "List of client `cl_ord_id` identifiers."
+        }
+      }
+    },
+    "response": {
+      "title": "BatchCancelReply",
+      "type": "object",
+      "description": "Reply to a `batch_cancel` request -- the count lives directly on the frame, not under a `result` key.",
+      "required": [
+        "method",
+        "req_id",
+        "success"
+      ],
+      "properties": {
+        "method": {
+          "type": "string",
+          "description": "Echoes the request method, `batch_cancel`.",
+          "enum": [
+            "batch_cancel"
+          ]
+        },
+        "req_id": {
+          "type": "integer",
+          "description": "Echoes the request's correlation id."
+        },
+        "success": {
+          "type": "boolean",
+          "description": "`true` on a successful cancellation."
+        },
+        "orders_cancelled": {
+          "type": "integer",
+          "description": "Number of orders cancelled. Confirmed live -- upstream's docs page instead describes a nested `result: {count, warnings}` shape, which the real reply does not send; see `notes`."
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Non-fatal warnings about the cancellation, if any. Documented by upstream nested under `result`; kept top-level here to match the real reply's flat shape, unconfirmed live (none appeared in this run's capture)."
+        },
+        "time_in": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server receive timestamp."
+        },
+        "time_out": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server response timestamp."
+        }
+      }
+    }
+  },
+  "notes": [
+    "`token` (the auth bearer token) is documented by Kraken as a required params field but is deliberately absent from this schema: `core/transport/ws.py`'s `SocketConnection.rpc_send` merges the cached token into every outgoing `params` on the private connection -- trading calls and subscribe/unsubscribe alike -- so it is transport-injected, never a caller-supplied argument, the same way `req_id` (the declared `correlate` field) never appears in a requestBody schema. `orders` (order_userref or order_id, mixed) and `cl_ord_id` are two separate identifier lists, both documented as usable in the same request (unlike `cancel_order`'s mutually-exclusive identifier fields), so both are kept as independent array properties.",
+    "CONFIRMED LIVE, CORE-LEVEL FINDING: unlike every other WS trading command in this subsection, `batch_cancel`'s real reply does not nest its payload under `result` -- a real capture returned `{'method': 'batch_cancel', 'orders_cancelled': 2, 'req_id': 4, 'success': True, 'time_in': ..., 'time_out': ...}`, with no `result` key at all, contradicting upstream's own docs page (which describes `result: {count, warnings}`). Consequently no `envelope` is declared here, and the response schema describes the whole frame. This means `core/transport/ws.py`'s `KrakenSocketClient.request()`, which unconditionally does `reply.get('result')`, would silently return `None` for a real `batch_cancel` call today instead of the real cancellation count -- a genuine core bug distinct from this spec fix, since the core's generic extraction assumes every WS command nests under `result`, which is true for the other 7 commands in this subsection but not this one. Needs a core-level special case (e.g. an endpoint-aware unwrap, or codegen honoring the per-endpoint `envelope` declaration precisely) before `trading_ws.batch_cancel` returns useful data through the hand-written core as it stands."
+  ]
+}

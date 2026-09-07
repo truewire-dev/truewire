@@ -1,0 +1,10 @@
+{
+  "status": 200,
+  "payload": {
+    "error": [],
+    "result": {
+      "currentTime": "2026-08-13T12:06:25Z",
+      "triggerTime": "2026-08-13T12:07:25Z"
+    }
+  }
+}

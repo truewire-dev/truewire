@@ -1,0 +1,33 @@
+[
+  {
+    "channel": "balances",
+    "type": "snapshot",
+    "data": [
+      {
+        "asset": "USDC",
+        "asset_class": "currency",
+        "wallets": [
+          {
+            "type": "spot",
+            "id": "main",
+            "balance": 10.0
+          }
+        ],
+        "balance": 10.0
+      },
+      {
+        "asset": "ETH",
+        "asset_class": "currency",
+        "wallets": [
+          {
+            "type": "spot",
+            "id": "main",
+            "balance": 1.109e-07
+          }
+        ],
+        "balance": 1.109e-07
+      }
+    ],
+    "sequence": 1
+  }
+]

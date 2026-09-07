@@ -1,0 +1,17 @@
+{
+  "status": 200,
+  "payload": {
+    "error": [],
+    "result": {
+      "status": "ok",
+      "txid": "OJTKFW-TAF2L-Y74NVK",
+      "originaltxid": "OI5PYI-6BBDT-KORGWY",
+      "volume": "0.00010",
+      "price": "10002.0",
+      "orders_cancelled": 1,
+      "descr": {
+        "order": "buy 0.00010 XBTUSDC @ limit 10002.00"
+      }
+    }
+  }
+}

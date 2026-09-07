@@ -1,0 +1,15 @@
+{
+  "status": 200,
+  "payload": {
+    "error": [],
+    "result": [
+      {
+        "address": "0x730081bac0121006a9c36a8675180d59163126c4",
+        "asset": "ETH",
+        "method": "Ether",
+        "key": "Deribit",
+        "verified": true
+      }
+    ]
+  }
+}

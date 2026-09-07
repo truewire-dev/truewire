@@ -1,0 +1,98 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/funding/withdraw-funds",
+  "meta": {
+    "signed": true
+  },
+  "redacted": [
+    "nonce"
+  ],
+  "unverified": {
+    "reason": "requires_state",
+    "detail": "This account's only registered withdrawal key (WithdrawAddresses) is labeled \"Deribit\" with a different address than the one client.toml's [policy.permissions].withdraw_addresses pre-approves (0xE089aB95D28aCA5804a2F99c2cc259A88d3Be799). Kraken requires a destination to already be a registered withdrawal key before Withdraw will accept it -- registering a new key is a manual, typically 2FA/email-confirmed action outside API scope. No in-policy address is callable right now."
+  },
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/private/Withdraw",
+    "method": "POST",
+    "description": "Make a withdrawal request. Requires the `Funds permissions - Withdraw` API key permission.",
+    "request": {
+      "title": "WithdrawRequest",
+      "type": "object",
+      "required": [
+        "asset",
+        "key",
+        "amount"
+      ],
+      "properties": {
+        "asset": {
+          "type": "string",
+          "description": "Asset being withdrawn."
+        },
+        "aclass": {
+          "type": "string",
+          "description": "Asset class of the asset being withdrawn.",
+          "enum": [
+            "currency",
+            "tokenized_asset"
+          ],
+          "default": "currency"
+        },
+        "key": {
+          "type": "string",
+          "description": "Withdrawal key name, as set up on the account."
+        },
+        "address": {
+          "type": "string",
+          "description": "Optional crypto address, used to confirm the address matches `key` (returns an `Invalid withdrawal address` error if different)."
+        },
+        "amount": {
+          "type": "string",
+          "description": "Amount to be withdrawn."
+        },
+        "max_fee": {
+          "type": "string",
+          "description": "Optional fee ceiling; if the processed withdrawal fee is higher than `max_fee`, the withdrawal fails with `EFunding:Max fee exceeded`."
+        },
+        "rebase_multiplier": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "rebased",
+                "base"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "rebased",
+          "description": "Optional parameter for viewing xstocks data. `rebased` displays in terms of underlying equity; `base` displays in terms of SPV tokens."
+        }
+      }
+    },
+    "response": {
+      "title": "WithdrawReceipt",
+      "type": "object",
+      "description": "Reference to the created withdrawal.",
+      "required": [
+        "refid"
+      ],
+      "properties": {
+        "refid": {
+          "type": "string",
+          "description": "Reference ID."
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "Upstream `requestBody` requires `nonce`; dropped from this schema since the core's `authed_request` (`core/transport/http.py`) injects a strictly-increasing nonce into every private call automatically -- it is never a caller-supplied parameter, matching the existing hand-written `deposit_methods(self, asset)` signature, which takes none."
+  ]
+}

@@ -1,0 +1,125 @@
+{
+  "docs": "https://docs.kraken.com/exchange/api-reference/spot-websocket-v2/trade",
+  "meta": {},
+  "redacted": [
+    "req_id"
+  ],
+  "spec": {
+    "kind": "stream",
+    "channel": "trade",
+    "description": "Subscribe to trade events for one or more currency pairs. A push may batch multiple trades, which does not imply they resulted from a single taker order.",
+    "parameters": {
+      "title": "TradeParams",
+      "type": "object",
+      "description": "Parameters for a `trade` channel subscription.",
+      "properties": {
+        "symbol": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Currency pairs to subscribe to, e.g. `[\"BTC/USD\", \"MATIC/GBP\"]`."
+        },
+        "snapshot": {
+          "type": "boolean",
+          "default": false,
+          "description": "Request a snapshot of the most recent 50 trades after subscribing."
+        }
+      },
+      "required": [
+        "symbol"
+      ]
+    },
+    "payload": {
+      "title": "TradeMessage",
+      "type": "object",
+      "description": "A `trade` channel push.",
+      "properties": {
+        "channel": {
+          "type": "string",
+          "enum": [
+            "trade"
+          ],
+          "description": "The channel this push belongs to."
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "snapshot",
+            "update"
+          ],
+          "description": "Whether this push is the initial snapshot or an incremental update."
+        },
+        "data": {
+          "type": "array",
+          "description": "A list of trade events.",
+          "items": {
+            "title": "TradeData",
+            "type": "object",
+            "description": "One matched trade.",
+            "properties": {
+              "symbol": {
+                "type": "string",
+                "description": "The symbol of the currency pair, e.g. `\"BTC/USD\"`."
+              },
+              "side": {
+                "type": "string",
+                "description": "The side of the taker order."
+              },
+              "qty": {
+                "type": "number",
+                "description": "Size of the trade."
+              },
+              "price": {
+                "type": "number",
+                "description": "Average price of the trade."
+              },
+              "ord_type": {
+                "type": "string",
+                "enum": [
+                  "limit",
+                  "market"
+                ],
+                "description": "The order type of the taker order."
+              },
+              "trade_id": {
+                "type": "integer",
+                "description": "Trade identifier -- a sequence number, unique per book."
+              },
+              "timestamp": {
+                "type": "string",
+                "description": "RFC3339 timestamp of this trade.",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "symbol",
+              "side",
+              "qty",
+              "price",
+              "ord_type",
+              "trade_id",
+              "timestamp"
+            ]
+          }
+        }
+      },
+      "required": [
+        "channel",
+        "type",
+        "data"
+      ]
+    }
+  },
+  "envelope": {
+    "payload": "",
+    "verb": {
+      "path": "method",
+      "subscribe": "subscribe",
+      "unsubscribe": "unsubscribe"
+    }
+  },
+  "notes": [
+    "`data[].side` is left as a bare string per rule 2: unlike `ord_type` (which has an explicit 'One of: limit, market' tag on this page), trade.md documents no closed set for `side` -- no 'One of:' tag, just 'The side of the taker order.' Both worked examples show `buy`/`sell`, and the WS trading core (`trading_ws`) already types the *request*-side `side` as `Literal['buy', 'sell']` for `add_order`, but that is a different (request) field on a different endpoint; this page never closes the set for the *response* field, so it is not invented here."
+  ]
+}

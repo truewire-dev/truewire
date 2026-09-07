@@ -1,0 +1,4 @@
+{
+  "description": "Account data: balances, trade/ledger history, open orders and positions, API key\ninfo, data-export requests, and subaccount management (fund transfers, creation).",
+  "upstream": "https://docs.kraken.com/api-reference/account-data"
+}

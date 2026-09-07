@@ -1,0 +1,41 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/trading/cancel-all-orders",
+  "meta": {
+    "signed": true
+  },
+  "redacted": [
+    "nonce"
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/private/CancelAll",
+    "method": "POST",
+    "description": "Cancel every open order for the account.\n\n**API Key Permissions Required:** `Orders and trades - Create & modify orders` or `Orders and trades - Cancel & close orders`",
+    "request": null,
+    "response": {
+      "title": "OrderCancelled",
+      "type": "object",
+      "description": "Result of a cancel request.",
+      "properties": {
+        "count": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Number of orders cancelled."
+        },
+        "pending": {
+          "type": "boolean",
+          "description": "If true, orders are pending cancellation."
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "Upstream's request body declares only `nonce`, which is transport-injected by the client core (authed_request) rather than a caller-supplied parameter -- so once dropped there is nothing left to describe, and `requestBody` is omitted entirely rather than declared as an empty object."
+  ]
+}

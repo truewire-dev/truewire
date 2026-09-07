@@ -1,0 +1,15 @@
+{
+  "method": "batch_add",
+  "req_id": 3,
+  "result": [
+    {
+      "order_id": "OOWVMC-7HDFH-B7UPWM"
+    },
+    {
+      "order_id": "O7L6T4-QEGI4-7M4PUY"
+    }
+  ],
+  "success": true,
+  "time_in": "2026-08-13T12:10:48.163380Z",
+  "time_out": "2026-08-13T12:10:48.164877Z"
+}

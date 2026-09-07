@@ -1,0 +1,5 @@
+{
+  "description": "Kraken's Spot REST API: account data, funding, Earn, subaccounts, market data, and\ntrading, authenticated (where required) with the HMAC-SHA512 API-Key/API-Sign headers.",
+  "upstream": "https://docs.kraken.com/api-reference/",
+  "core": "spot"
+}

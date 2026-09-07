@@ -1,0 +1,164 @@
+{
+  "docs": "https://docs.kraken.com/exchange/api-reference/spot-websocket-v2/ticker",
+  "meta": {},
+  "redacted": [
+    "req_id"
+  ],
+  "spec": {
+    "kind": "stream",
+    "channel": "ticker",
+    "description": "Subscribe to level 1 market data (top of book best bid/offer, and recent trade data) for one or more currency pairs. Updates are generated on trade events by default, or on best-bid-offer changes when `event_trigger` is `bbo`.",
+    "parameters": {
+      "title": "TickerParams",
+      "type": "object",
+      "description": "Parameters for a `ticker` channel subscription.",
+      "properties": {
+        "symbol": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Currency pairs to subscribe to, e.g. `[\"BTC/USD\", \"MATIC/GBP\"]`."
+        },
+        "event_trigger": {
+          "type": "string",
+          "enum": [
+            "bbo",
+            "trades"
+          ],
+          "default": "trades",
+          "description": "The book event that causes a new ticker update to be published: `bbo` on a change in the best-bid-offer price levels, `trades` on every trade."
+        },
+        "snapshot": {
+          "type": "boolean",
+          "default": true,
+          "description": "Request a snapshot after subscribing."
+        }
+      },
+      "required": [
+        "symbol"
+      ]
+    },
+    "payload": {
+      "title": "TickerMessage",
+      "type": "object",
+      "description": "A `ticker` channel push.",
+      "properties": {
+        "channel": {
+          "type": "string",
+          "enum": [
+            "ticker"
+          ],
+          "description": "The channel this push belongs to."
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "snapshot",
+            "update"
+          ],
+          "description": "Whether this push is the initial snapshot or an incremental update."
+        },
+        "data": {
+          "type": "array",
+          "description": "One entry per subscribed symbol touched by this push.",
+          "items": {
+            "title": "TickerData",
+            "type": "object",
+            "description": "One pair's level 1 market data.",
+            "properties": {
+              "symbol": {
+                "type": "string",
+                "description": "The symbol of the currency pair, e.g. `\"BTC/USD\"`."
+              },
+              "bid": {
+                "type": "number",
+                "description": "Best bid price."
+              },
+              "bid_qty": {
+                "type": "number",
+                "description": "Best bid quantity."
+              },
+              "ask": {
+                "type": "number",
+                "description": "Best ask price."
+              },
+              "ask_qty": {
+                "type": "number",
+                "description": "Best ask quantity."
+              },
+              "last": {
+                "type": "number",
+                "description": "Last traded price (only guaranteed accurate if traded within the past 24 hours)."
+              },
+              "volume": {
+                "type": "number",
+                "description": "24-hour traded volume, in base currency terms."
+              },
+              "vwap": {
+                "type": "number",
+                "description": "24-hour volume weighted average price."
+              },
+              "low": {
+                "type": "number",
+                "description": "24-hour lowest trade price."
+              },
+              "high": {
+                "type": "number",
+                "description": "24-hour highest trade price."
+              },
+              "change": {
+                "type": "number",
+                "description": "24-hour price change, in quote currency."
+              },
+              "change_pct": {
+                "type": "number",
+                "description": "24-hour price change, in percentage points."
+              },
+              "trades": {
+                "type": "integer",
+                "description": "24-hour trade count. Confirmed present on every live push, not in upstream's own published field list."
+              },
+              "timestamp": {
+                "type": "string",
+                "description": "RFC3339 timestamp of this ticker data.",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "symbol",
+              "bid",
+              "bid_qty",
+              "ask",
+              "ask_qty",
+              "last",
+              "volume",
+              "vwap",
+              "low",
+              "high",
+              "change",
+              "change_pct",
+              "timestamp"
+            ]
+          }
+        }
+      },
+      "required": [
+        "channel",
+        "type",
+        "data"
+      ]
+    }
+  },
+  "envelope": {
+    "payload": "",
+    "verb": {
+      "path": "method",
+      "subscribe": "subscribe",
+      "unsubscribe": "unsubscribe"
+    }
+  },
+  "notes": [
+    "The hand-written PoC core (`pkg/src/kraken/streams/market_data.py`) wires `ticker` with only `symbol` (no `event_trigger`/`snapshot`) and its `TickerUpdate` TypedDict omits the documented `timestamp` field present on every `data[]` entry -- both are PoC gaps, not spec gaps; this spec keeps every documented parameter and field per rule 7, and codegen should produce the complete signature/type."
+  ]
+}

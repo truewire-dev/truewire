@@ -1,0 +1,1436 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/trading/add-order",
+  "meta": {
+    "signed": true
+  },
+  "redacted": [
+    "nonce"
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/private/AddOrder",
+    "method": "POST",
+    "description": "Place a new order. See `AssetPairs` for tradable pairs, their price/quantity precisions, order minimums, and available leverage.\n\n**API Key Permissions Required:** `Orders and trades - Create & modify orders`",
+    "request": {
+      "title": "OrderRequest",
+      "description": "Parameters for placing a new Spot order. The valid combination of `price`/`price2`/`displayvol`/`trigger` depends on `ordertype` -- see each variant below.",
+      "anyOf": [
+        {
+          "title": "AddOrderMarket",
+          "type": "object",
+          "description": "A market order: executes immediately at the best available price.",
+          "properties": {
+            "pair": {
+              "type": "string",
+              "description": "Asset pair `id` or `altname`, e.g. `XBTUSD`."
+            },
+            "type": {
+              "type": "string",
+              "description": "Order direction.",
+              "enum": [
+                "buy",
+                "sell"
+              ]
+            },
+            "ordertype": {
+              "type": "string",
+              "description": "The execution model of the order.",
+              "enum": [
+                "market"
+              ]
+            },
+            "volume": {
+              "type": "string",
+              "description": "Order quantity in terms of the base asset. May be `0` for closing margin orders to automatically fill the requisite quantity."
+            },
+            "userref": {
+              "type": "integer",
+              "format": "int32",
+              "description": "An optional non-unique numeric identifier the client can associate with any number of orders (e.g. for grouping by pair/side/strategy), letting cancel/query calls target the group by `userref` instead of individual `txid`s. Uniqueness is not enforced. Mutually exclusive with `cl_ord_id`."
+            },
+            "cl_ord_id": {
+              "type": "string",
+              "description": "An alphanumeric client order identifier which uniquely identifies this order for the client. One of: a long UUID (`6d1b345e-2821-40e2-ad83-4ecb18a06876`), a short UUID with no dashes, or free-form ASCII text up to 18 characters. Mutually exclusive with `userref`."
+            },
+            "asset_class": {
+              "type": "string",
+              "description": "Required on requests for non-crypto pairs, e.g. `tokenized_asset` for xstocks.",
+              "enum": [
+                "tokenized_asset"
+              ]
+            },
+            "leverage": {
+              "type": "string",
+              "description": "Amount of leverage desired. Defaults to none."
+            },
+            "reduce_only": {
+              "type": "boolean",
+              "description": "If true, the order will only reduce a currently open position rather than increase it or open a new one.",
+              "default": false
+            },
+            "stptype": {
+              "type": "string",
+              "description": "Self Trade Prevention (STP) mode, defining which order(s) are expired to prevent a self-match: `cancel-newest` cancels the arriving order, `cancel-oldest` cancels the resting order, `cancel-both` cancels both.",
+              "enum": [
+                "cancel-newest",
+                "cancel-oldest",
+                "cancel-both"
+              ],
+              "default": "cancel-newest"
+            },
+            "oflags": {
+              "type": "string",
+              "description": "Comma-delimited list of order flags: `post` (post-only, available when `ordertype = limit`), `fcib` (prefer fee in base currency, default when selling), `fciq` (prefer fee in quote currency, default when buying, mutually exclusive with `fcib`), `nompp` (deprecated -- disabling Market Price Protection is no longer supported; accepted but ignored if supplied), `viqc` (order volume expressed in quote currency; buy market orders only, unavailable on margin orders)."
+            },
+            "timeinforce": {
+              "type": "string",
+              "description": "How long the order should remain in the book before being cancelled. `GTC` (good-'til-cancelled, default): rests until filled or cancelled. `IOC` (immediate-or-cancel): fills what it can immediately, cancels the remainder rather than resting. `GTD` (good-'til-date): must be paired with `expiretm`. `FOK` (fill-or-kill): fills the entire order immediately or cancels it entirely.",
+              "enum": [
+                "GTC",
+                "IOC",
+                "GTD",
+                "FOK"
+              ],
+              "default": "GTC"
+            },
+            "starttm": {
+              "type": "string",
+              "description": "Scheduled start time: `0` for now (default), an absolute unix timestamp, or `+<n>` for `<n>` seconds from now (URL-encode the `+` as `%2b`)."
+            },
+            "expiretm": {
+              "type": "string",
+              "description": "Expiry time for `GTD` orders, up to one month in the future: `0` for no expiration (default), an absolute unix timestamp, or `+<n>` for `<n>` seconds from now, minimum 5 (URL-encode the `+` as `%2b`)."
+            },
+            "close": {
+              "description": "Conditional close order, attached to this order. Triggered by execution of the primary order in the same quantity and opposite direction, but once triggered becomes an independent order that may reduce or increase net position, not just close it.",
+              "anyOf": [
+                {
+                  "$ref": "ConditionalCloseOrder"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "deadline": {
+              "type": "string",
+              "format": "date-time",
+              "description": "RFC3339 timestamp (e.g. `2021-04-01T00:18:45Z`) after which the matching engine should reject this order if it is still queued due to latency, minimum now()+2s, maximum now()+60s."
+            },
+            "validate": {
+              "type": "boolean",
+              "description": "If true, the order is validated only and never reaches the matching engine (no `txid` is returned).",
+              "default": false
+            },
+            "broker": {
+              "description": "Broker IIBAN (partner's Kraken IIBAN).",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "pair",
+            "type",
+            "ordertype",
+            "volume"
+          ]
+        },
+        {
+          "title": "AddOrderLimit",
+          "type": "object",
+          "description": "A limit order: rests in the book at `price` or better.",
+          "properties": {
+            "pair": {
+              "type": "string",
+              "description": "Asset pair `id` or `altname`, e.g. `XBTUSD`."
+            },
+            "type": {
+              "type": "string",
+              "description": "Order direction.",
+              "enum": [
+                "buy",
+                "sell"
+              ]
+            },
+            "ordertype": {
+              "type": "string",
+              "description": "The execution model of the order.",
+              "enum": [
+                "limit"
+              ]
+            },
+            "volume": {
+              "type": "string",
+              "description": "Order quantity in terms of the base asset. May be `0` for closing margin orders to automatically fill the requisite quantity."
+            },
+            "userref": {
+              "type": "integer",
+              "format": "int32",
+              "description": "An optional non-unique numeric identifier the client can associate with any number of orders (e.g. for grouping by pair/side/strategy), letting cancel/query calls target the group by `userref` instead of individual `txid`s. Uniqueness is not enforced. Mutually exclusive with `cl_ord_id`."
+            },
+            "cl_ord_id": {
+              "type": "string",
+              "description": "An alphanumeric client order identifier which uniquely identifies this order for the client. One of: a long UUID (`6d1b345e-2821-40e2-ad83-4ecb18a06876`), a short UUID with no dashes, or free-form ASCII text up to 18 characters. Mutually exclusive with `userref`."
+            },
+            "asset_class": {
+              "type": "string",
+              "description": "Required on requests for non-crypto pairs, e.g. `tokenized_asset` for xstocks.",
+              "enum": [
+                "tokenized_asset"
+              ]
+            },
+            "leverage": {
+              "type": "string",
+              "description": "Amount of leverage desired. Defaults to none."
+            },
+            "reduce_only": {
+              "type": "boolean",
+              "description": "If true, the order will only reduce a currently open position rather than increase it or open a new one.",
+              "default": false
+            },
+            "stptype": {
+              "type": "string",
+              "description": "Self Trade Prevention (STP) mode, defining which order(s) are expired to prevent a self-match: `cancel-newest` cancels the arriving order, `cancel-oldest` cancels the resting order, `cancel-both` cancels both.",
+              "enum": [
+                "cancel-newest",
+                "cancel-oldest",
+                "cancel-both"
+              ],
+              "default": "cancel-newest"
+            },
+            "oflags": {
+              "type": "string",
+              "description": "Comma-delimited list of order flags: `post` (post-only, available when `ordertype = limit`), `fcib` (prefer fee in base currency, default when selling), `fciq` (prefer fee in quote currency, default when buying, mutually exclusive with `fcib`), `nompp` (deprecated -- disabling Market Price Protection is no longer supported; accepted but ignored if supplied), `viqc` (order volume expressed in quote currency; buy market orders only, unavailable on margin orders)."
+            },
+            "timeinforce": {
+              "type": "string",
+              "description": "How long the order should remain in the book before being cancelled. `GTC` (good-'til-cancelled, default): rests until filled or cancelled. `IOC` (immediate-or-cancel): fills what it can immediately, cancels the remainder rather than resting. `GTD` (good-'til-date): must be paired with `expiretm`. `FOK` (fill-or-kill): fills the entire order immediately or cancels it entirely.",
+              "enum": [
+                "GTC",
+                "IOC",
+                "GTD",
+                "FOK"
+              ],
+              "default": "GTC"
+            },
+            "starttm": {
+              "type": "string",
+              "description": "Scheduled start time: `0` for now (default), an absolute unix timestamp, or `+<n>` for `<n>` seconds from now (URL-encode the `+` as `%2b`)."
+            },
+            "expiretm": {
+              "type": "string",
+              "description": "Expiry time for `GTD` orders, up to one month in the future: `0` for no expiration (default), an absolute unix timestamp, or `+<n>` for `<n>` seconds from now, minimum 5 (URL-encode the `+` as `%2b`)."
+            },
+            "close": {
+              "description": "Conditional close order, attached to this order. Triggered by execution of the primary order in the same quantity and opposite direction, but once triggered becomes an independent order that may reduce or increase net position, not just close it.",
+              "anyOf": [
+                {
+                  "$ref": "ConditionalCloseOrder"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "deadline": {
+              "type": "string",
+              "format": "date-time",
+              "description": "RFC3339 timestamp (e.g. `2021-04-01T00:18:45Z`) after which the matching engine should reject this order if it is still queued due to latency, minimum now()+2s, maximum now()+60s."
+            },
+            "validate": {
+              "type": "boolean",
+              "description": "If true, the order is validated only and never reaches the matching engine (no `txid` is returned).",
+              "default": false
+            },
+            "broker": {
+              "description": "Broker IIBAN (partner's Kraken IIBAN).",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "price": {
+              "type": "string",
+              "description": "Limit price for the order. May be prefixed with `+`/`-` (offset from last traded price) or `#` (add or subtract depending on order direction), and suffixed with `%` for a relative percentage instead of an absolute difference."
+            }
+          },
+          "required": [
+            "pair",
+            "type",
+            "ordertype",
+            "volume",
+            "price"
+          ]
+        },
+        {
+          "title": "AddOrderIceberg",
+          "type": "object",
+          "description": "An iceberg order: a limit order that shows only `displayvol` of its quantity in the book while the rest remains hidden.",
+          "properties": {
+            "pair": {
+              "type": "string",
+              "description": "Asset pair `id` or `altname`, e.g. `XBTUSD`."
+            },
+            "type": {
+              "type": "string",
+              "description": "Order direction.",
+              "enum": [
+                "buy",
+                "sell"
+              ]
+            },
+            "ordertype": {
+              "type": "string",
+              "description": "The execution model of the order.",
+              "enum": [
+                "iceberg"
+              ]
+            },
+            "volume": {
+              "type": "string",
+              "description": "Order quantity in terms of the base asset. May be `0` for closing margin orders to automatically fill the requisite quantity."
+            },
+            "userref": {
+              "type": "integer",
+              "format": "int32",
+              "description": "An optional non-unique numeric identifier the client can associate with any number of orders (e.g. for grouping by pair/side/strategy), letting cancel/query calls target the group by `userref` instead of individual `txid`s. Uniqueness is not enforced. Mutually exclusive with `cl_ord_id`."
+            },
+            "cl_ord_id": {
+              "type": "string",
+              "description": "An alphanumeric client order identifier which uniquely identifies this order for the client. One of: a long UUID (`6d1b345e-2821-40e2-ad83-4ecb18a06876`), a short UUID with no dashes, or free-form ASCII text up to 18 characters. Mutually exclusive with `userref`."
+            },
+            "asset_class": {
+              "type": "string",
+              "description": "Required on requests for non-crypto pairs, e.g. `tokenized_asset` for xstocks.",
+              "enum": [
+                "tokenized_asset"
+              ]
+            },
+            "leverage": {
+              "type": "string",
+              "description": "Amount of leverage desired. Defaults to none."
+            },
+            "reduce_only": {
+              "type": "boolean",
+              "description": "If true, the order will only reduce a currently open position rather than increase it or open a new one.",
+              "default": false
+            },
+            "stptype": {
+              "type": "string",
+              "description": "Self Trade Prevention (STP) mode, defining which order(s) are expired to prevent a self-match: `cancel-newest` cancels the arriving order, `cancel-oldest` cancels the resting order, `cancel-both` cancels both.",
+              "enum": [
+                "cancel-newest",
+                "cancel-oldest",
+                "cancel-both"
+              ],
+              "default": "cancel-newest"
+            },
+            "oflags": {
+              "type": "string",
+              "description": "Comma-delimited list of order flags: `post` (post-only, available when `ordertype = limit`), `fcib` (prefer fee in base currency, default when selling), `fciq` (prefer fee in quote currency, default when buying, mutually exclusive with `fcib`), `nompp` (deprecated -- disabling Market Price Protection is no longer supported; accepted but ignored if supplied), `viqc` (order volume expressed in quote currency; buy market orders only, unavailable on margin orders)."
+            },
+            "timeinforce": {
+              "type": "string",
+              "description": "How long the order should remain in the book before being cancelled. `GTC` (good-'til-cancelled, default): rests until filled or cancelled. `IOC` (immediate-or-cancel): fills what it can immediately, cancels the remainder rather than resting. `GTD` (good-'til-date): must be paired with `expiretm`. `FOK` (fill-or-kill): fills the entire order immediately or cancels it entirely.",
+              "enum": [
+                "GTC",
+                "IOC",
+                "GTD",
+                "FOK"
+              ],
+              "default": "GTC"
+            },
+            "starttm": {
+              "type": "string",
+              "description": "Scheduled start time: `0` for now (default), an absolute unix timestamp, or `+<n>` for `<n>` seconds from now (URL-encode the `+` as `%2b`)."
+            },
+            "expiretm": {
+              "type": "string",
+              "description": "Expiry time for `GTD` orders, up to one month in the future: `0` for no expiration (default), an absolute unix timestamp, or `+<n>` for `<n>` seconds from now, minimum 5 (URL-encode the `+` as `%2b`)."
+            },
+            "close": {
+              "description": "Conditional close order, attached to this order. Triggered by execution of the primary order in the same quantity and opposite direction, but once triggered becomes an independent order that may reduce or increase net position, not just close it.",
+              "anyOf": [
+                {
+                  "$ref": "ConditionalCloseOrder"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "deadline": {
+              "type": "string",
+              "format": "date-time",
+              "description": "RFC3339 timestamp (e.g. `2021-04-01T00:18:45Z`) after which the matching engine should reject this order if it is still queued due to latency, minimum now()+2s, maximum now()+60s."
+            },
+            "validate": {
+              "type": "boolean",
+              "description": "If true, the order is validated only and never reaches the matching engine (no `txid` is returned).",
+              "default": false
+            },
+            "broker": {
+              "description": "Broker IIBAN (partner's Kraken IIBAN).",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "price": {
+              "type": "string",
+              "description": "Limit price for the order. May be prefixed with `+`/`-` (offset from last traded price) or `#` (add or subtract depending on order direction), and suffixed with `%` for a relative percentage instead of an absolute difference."
+            },
+            "displayvol": {
+              "type": "string",
+              "description": "Quantity to show in the book while the rest of the order quantity (`volume`) remains hidden. Minimum value is 1/15 of `volume`."
+            }
+          },
+          "required": [
+            "pair",
+            "type",
+            "ordertype",
+            "volume",
+            "price",
+            "displayvol"
+          ]
+        },
+        {
+          "title": "AddOrderStopLoss",
+          "type": "object",
+          "description": "A stop-loss order: becomes a market order once `price` (the trigger) is reached in an unfavourable direction.",
+          "properties": {
+            "pair": {
+              "type": "string",
+              "description": "Asset pair `id` or `altname`, e.g. `XBTUSD`."
+            },
+            "type": {
+              "type": "string",
+              "description": "Order direction.",
+              "enum": [
+                "buy",
+                "sell"
+              ]
+            },
+            "ordertype": {
+              "type": "string",
+              "description": "The execution model of the order.",
+              "enum": [
+                "stop-loss"
+              ]
+            },
+            "volume": {
+              "type": "string",
+              "description": "Order quantity in terms of the base asset. May be `0` for closing margin orders to automatically fill the requisite quantity."
+            },
+            "userref": {
+              "type": "integer",
+              "format": "int32",
+              "description": "An optional non-unique numeric identifier the client can associate with any number of orders (e.g. for grouping by pair/side/strategy), letting cancel/query calls target the group by `userref` instead of individual `txid`s. Uniqueness is not enforced. Mutually exclusive with `cl_ord_id`."
+            },
+            "cl_ord_id": {
+              "type": "string",
+              "description": "An alphanumeric client order identifier which uniquely identifies this order for the client. One of: a long UUID (`6d1b345e-2821-40e2-ad83-4ecb18a06876`), a short UUID with no dashes, or free-form ASCII text up to 18 characters. Mutually exclusive with `userref`."
+            },
+            "asset_class": {
+              "type": "string",
+              "description": "Required on requests for non-crypto pairs, e.g. `tokenized_asset` for xstocks.",
+              "enum": [
+                "tokenized_asset"
+              ]
+            },
+            "leverage": {
+              "type": "string",
+              "description": "Amount of leverage desired. Defaults to none."
+            },
+            "reduce_only": {
+              "type": "boolean",
+              "description": "If true, the order will only reduce a currently open position rather than increase it or open a new one.",
+              "default": false
+            },
+            "stptype": {
+              "type": "string",
+              "description": "Self Trade Prevention (STP) mode, defining which order(s) are expired to prevent a self-match: `cancel-newest` cancels the arriving order, `cancel-oldest` cancels the resting order, `cancel-both` cancels both.",
+              "enum": [
+                "cancel-newest",
+                "cancel-oldest",
+                "cancel-both"
+              ],
+              "default": "cancel-newest"
+            },
+            "oflags": {
+              "type": "string",
+              "description": "Comma-delimited list of order flags: `post` (post-only, available when `ordertype = limit`), `fcib` (prefer fee in base currency, default when selling), `fciq` (prefer fee in quote currency, default when buying, mutually exclusive with `fcib`), `nompp` (deprecated -- disabling Market Price Protection is no longer supported; accepted but ignored if supplied), `viqc` (order volume expressed in quote currency; buy market orders only, unavailable on margin orders)."
+            },
+            "timeinforce": {
+              "type": "string",
+              "description": "How long the order should remain in the book before being cancelled. `GTC` (good-'til-cancelled, default): rests until filled or cancelled. `IOC` (immediate-or-cancel): fills what it can immediately, cancels the remainder rather than resting. `GTD` (good-'til-date): must be paired with `expiretm`. `FOK` (fill-or-kill): fills the entire order immediately or cancels it entirely.",
+              "enum": [
+                "GTC",
+                "IOC",
+                "GTD",
+                "FOK"
+              ],
+              "default": "GTC"
+            },
+            "starttm": {
+              "type": "string",
+              "description": "Scheduled start time: `0` for now (default), an absolute unix timestamp, or `+<n>` for `<n>` seconds from now (URL-encode the `+` as `%2b`)."
+            },
+            "expiretm": {
+              "type": "string",
+              "description": "Expiry time for `GTD` orders, up to one month in the future: `0` for no expiration (default), an absolute unix timestamp, or `+<n>` for `<n>` seconds from now, minimum 5 (URL-encode the `+` as `%2b`)."
+            },
+            "close": {
+              "description": "Conditional close order, attached to this order. Triggered by execution of the primary order in the same quantity and opposite direction, but once triggered becomes an independent order that may reduce or increase net position, not just close it.",
+              "anyOf": [
+                {
+                  "$ref": "ConditionalCloseOrder"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "deadline": {
+              "type": "string",
+              "format": "date-time",
+              "description": "RFC3339 timestamp (e.g. `2021-04-01T00:18:45Z`) after which the matching engine should reject this order if it is still queued due to latency, minimum now()+2s, maximum now()+60s."
+            },
+            "validate": {
+              "type": "boolean",
+              "description": "If true, the order is validated only and never reaches the matching engine (no `txid` is returned).",
+              "default": false
+            },
+            "broker": {
+              "description": "Broker IIBAN (partner's Kraken IIBAN).",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "price": {
+              "type": "string",
+              "description": "Trigger price for the order. May be prefixed with `+`/`-` (offset from last traded price) or `#` (add or subtract depending on order direction), and suffixed with `%` for a relative percentage instead of an absolute difference."
+            },
+            "trigger": {
+              "type": "string",
+              "description": "Price signal used to trigger this order (and any attached conditional close order). During connectivity issues with external index feeds, the last trade price is used as a fallback reference.",
+              "enum": [
+                "index",
+                "last"
+              ],
+              "default": "last"
+            }
+          },
+          "required": [
+            "pair",
+            "type",
+            "ordertype",
+            "volume",
+            "price"
+          ]
+        },
+        {
+          "title": "AddOrderTakeProfit",
+          "type": "object",
+          "description": "A take-profit order: becomes a market order once `price` (the trigger) is reached in a favourable direction.",
+          "properties": {
+            "pair": {
+              "type": "string",
+              "description": "Asset pair `id` or `altname`, e.g. `XBTUSD`."
+            },
+            "type": {
+              "type": "string",
+              "description": "Order direction.",
+              "enum": [
+                "buy",
+                "sell"
+              ]
+            },
+            "ordertype": {
+              "type": "string",
+              "description": "The execution model of the order.",
+              "enum": [
+                "take-profit"
+              ]
+            },
+            "volume": {
+              "type": "string",
+              "description": "Order quantity in terms of the base asset. May be `0` for closing margin orders to automatically fill the requisite quantity."
+            },
+            "userref": {
+              "type": "integer",
+              "format": "int32",
+              "description": "An optional non-unique numeric identifier the client can associate with any number of orders (e.g. for grouping by pair/side/strategy), letting cancel/query calls target the group by `userref` instead of individual `txid`s. Uniqueness is not enforced. Mutually exclusive with `cl_ord_id`."
+            },
+            "cl_ord_id": {
+              "type": "string",
+              "description": "An alphanumeric client order identifier which uniquely identifies this order for the client. One of: a long UUID (`6d1b345e-2821-40e2-ad83-4ecb18a06876`), a short UUID with no dashes, or free-form ASCII text up to 18 characters. Mutually exclusive with `userref`."
+            },
+            "asset_class": {
+              "type": "string",
+              "description": "Required on requests for non-crypto pairs, e.g. `tokenized_asset` for xstocks.",
+              "enum": [
+                "tokenized_asset"
+              ]
+            },
+            "leverage": {
+              "type": "string",
+              "description": "Amount of leverage desired. Defaults to none."
+            },
+            "reduce_only": {
+              "type": "boolean",
+              "description": "If true, the order will only reduce a currently open position rather than increase it or open a new one.",
+              "default": false
+            },
+            "stptype": {
+              "type": "string",
+              "description": "Self Trade Prevention (STP) mode, defining which order(s) are expired to prevent a self-match: `cancel-newest` cancels the arriving order, `cancel-oldest` cancels the resting order, `cancel-both` cancels both.",
+              "enum": [
+                "cancel-newest",
+                "cancel-oldest",
+                "cancel-both"
+              ],
+              "default": "cancel-newest"
+            },
+            "oflags": {
+              "type": "string",
+              "description": "Comma-delimited list of order flags: `post` (post-only, available when `ordertype = limit`), `fcib` (prefer fee in base currency, default when selling), `fciq` (prefer fee in quote currency, default when buying, mutually exclusive with `fcib`), `nompp` (deprecated -- disabling Market Price Protection is no longer supported; accepted but ignored if supplied), `viqc` (order volume expressed in quote currency; buy market orders only, unavailable on margin orders)."
+            },
+            "timeinforce": {
+              "type": "string",
+              "description": "How long the order should remain in the book before being cancelled. `GTC` (good-'til-cancelled, default): rests until filled or cancelled. `IOC` (immediate-or-cancel): fills what it can immediately, cancels the remainder rather than resting. `GTD` (good-'til-date): must be paired with `expiretm`. `FOK` (fill-or-kill): fills the entire order immediately or cancels it entirely.",
+              "enum": [
+                "GTC",
+                "IOC",
+                "GTD",
+                "FOK"
+              ],
+              "default": "GTC"
+            },
+            "starttm": {
+              "type": "string",
+              "description": "Scheduled start time: `0` for now (default), an absolute unix timestamp, or `+<n>` for `<n>` seconds from now (URL-encode the `+` as `%2b`)."
+            },
+            "expiretm": {
+              "type": "string",
+              "description": "Expiry time for `GTD` orders, up to one month in the future: `0` for no expiration (default), an absolute unix timestamp, or `+<n>` for `<n>` seconds from now, minimum 5 (URL-encode the `+` as `%2b`)."
+            },
+            "close": {
+              "description": "Conditional close order, attached to this order. Triggered by execution of the primary order in the same quantity and opposite direction, but once triggered becomes an independent order that may reduce or increase net position, not just close it.",
+              "anyOf": [
+                {
+                  "$ref": "ConditionalCloseOrder"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "deadline": {
+              "type": "string",
+              "format": "date-time",
+              "description": "RFC3339 timestamp (e.g. `2021-04-01T00:18:45Z`) after which the matching engine should reject this order if it is still queued due to latency, minimum now()+2s, maximum now()+60s."
+            },
+            "validate": {
+              "type": "boolean",
+              "description": "If true, the order is validated only and never reaches the matching engine (no `txid` is returned).",
+              "default": false
+            },
+            "broker": {
+              "description": "Broker IIBAN (partner's Kraken IIBAN).",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "price": {
+              "type": "string",
+              "description": "Trigger price for the order. May be prefixed with `+`/`-` (offset from last traded price) or `#` (add or subtract depending on order direction), and suffixed with `%` for a relative percentage instead of an absolute difference."
+            },
+            "trigger": {
+              "type": "string",
+              "description": "Price signal used to trigger this order (and any attached conditional close order). During connectivity issues with external index feeds, the last trade price is used as a fallback reference.",
+              "enum": [
+                "index",
+                "last"
+              ],
+              "default": "last"
+            }
+          },
+          "required": [
+            "pair",
+            "type",
+            "ordertype",
+            "volume",
+            "price"
+          ]
+        },
+        {
+          "title": "AddOrderStopLossLimit",
+          "type": "object",
+          "description": "A stop-loss-limit order: becomes a limit order at `price2` once `price` (the trigger) is reached in an unfavourable direction.",
+          "properties": {
+            "pair": {
+              "type": "string",
+              "description": "Asset pair `id` or `altname`, e.g. `XBTUSD`."
+            },
+            "type": {
+              "type": "string",
+              "description": "Order direction.",
+              "enum": [
+                "buy",
+                "sell"
+              ]
+            },
+            "ordertype": {
+              "type": "string",
+              "description": "The execution model of the order.",
+              "enum": [
+                "stop-loss-limit"
+              ]
+            },
+            "volume": {
+              "type": "string",
+              "description": "Order quantity in terms of the base asset. May be `0` for closing margin orders to automatically fill the requisite quantity."
+            },
+            "userref": {
+              "type": "integer",
+              "format": "int32",
+              "description": "An optional non-unique numeric identifier the client can associate with any number of orders (e.g. for grouping by pair/side/strategy), letting cancel/query calls target the group by `userref` instead of individual `txid`s. Uniqueness is not enforced. Mutually exclusive with `cl_ord_id`."
+            },
+            "cl_ord_id": {
+              "type": "string",
+              "description": "An alphanumeric client order identifier which uniquely identifies this order for the client. One of: a long UUID (`6d1b345e-2821-40e2-ad83-4ecb18a06876`), a short UUID with no dashes, or free-form ASCII text up to 18 characters. Mutually exclusive with `userref`."
+            },
+            "asset_class": {
+              "type": "string",
+              "description": "Required on requests for non-crypto pairs, e.g. `tokenized_asset` for xstocks.",
+              "enum": [
+                "tokenized_asset"
+              ]
+            },
+            "leverage": {
+              "type": "string",
+              "description": "Amount of leverage desired. Defaults to none."
+            },
+            "reduce_only": {
+              "type": "boolean",
+              "description": "If true, the order will only reduce a currently open position rather than increase it or open a new one.",
+              "default": false
+            },
+            "stptype": {
+              "type": "string",
+              "description": "Self Trade Prevention (STP) mode, defining which order(s) are expired to prevent a self-match: `cancel-newest` cancels the arriving order, `cancel-oldest` cancels the resting order, `cancel-both` cancels both.",
+              "enum": [
+                "cancel-newest",
+                "cancel-oldest",
+                "cancel-both"
+              ],
+              "default": "cancel-newest"
+            },
+            "oflags": {
+              "type": "string",
+              "description": "Comma-delimited list of order flags: `post` (post-only, available when `ordertype = limit`), `fcib` (prefer fee in base currency, default when selling), `fciq` (prefer fee in quote currency, default when buying, mutually exclusive with `fcib`), `nompp` (deprecated -- disabling Market Price Protection is no longer supported; accepted but ignored if supplied), `viqc` (order volume expressed in quote currency; buy market orders only, unavailable on margin orders)."
+            },
+            "timeinforce": {
+              "type": "string",
+              "description": "How long the order should remain in the book before being cancelled. `GTC` (good-'til-cancelled, default): rests until filled or cancelled. `IOC` (immediate-or-cancel): fills what it can immediately, cancels the remainder rather than resting. `GTD` (good-'til-date): must be paired with `expiretm`. `FOK` (fill-or-kill): fills the entire order immediately or cancels it entirely.",
+              "enum": [
+                "GTC",
+                "IOC",
+                "GTD",
+                "FOK"
+              ],
+              "default": "GTC"
+            },
+            "starttm": {
+              "type": "string",
+              "description": "Scheduled start time: `0` for now (default), an absolute unix timestamp, or `+<n>` for `<n>` seconds from now (URL-encode the `+` as `%2b`)."
+            },
+            "expiretm": {
+              "type": "string",
+              "description": "Expiry time for `GTD` orders, up to one month in the future: `0` for no expiration (default), an absolute unix timestamp, or `+<n>` for `<n>` seconds from now, minimum 5 (URL-encode the `+` as `%2b`)."
+            },
+            "close": {
+              "description": "Conditional close order, attached to this order. Triggered by execution of the primary order in the same quantity and opposite direction, but once triggered becomes an independent order that may reduce or increase net position, not just close it.",
+              "anyOf": [
+                {
+                  "$ref": "ConditionalCloseOrder"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "deadline": {
+              "type": "string",
+              "format": "date-time",
+              "description": "RFC3339 timestamp (e.g. `2021-04-01T00:18:45Z`) after which the matching engine should reject this order if it is still queued due to latency, minimum now()+2s, maximum now()+60s."
+            },
+            "validate": {
+              "type": "boolean",
+              "description": "If true, the order is validated only and never reaches the matching engine (no `txid` is returned).",
+              "default": false
+            },
+            "broker": {
+              "description": "Broker IIBAN (partner's Kraken IIBAN).",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "price": {
+              "type": "string",
+              "description": "Trigger price for the order. May be prefixed with `+`/`-` (offset from last traded price) or `#` (add or subtract depending on order direction), and suffixed with `%` for a relative percentage instead of an absolute difference."
+            },
+            "price2": {
+              "type": "string",
+              "description": "Limit price for the order once triggered. May be prefixed with `+`/`-` (offset from last traded price) or `#` (add or subtract depending on order direction), and suffixed with `%` for a relative percentage instead of an absolute difference."
+            },
+            "trigger": {
+              "type": "string",
+              "description": "Price signal used to trigger this order (and any attached conditional close order). During connectivity issues with external index feeds, the last trade price is used as a fallback reference.",
+              "enum": [
+                "index",
+                "last"
+              ],
+              "default": "last"
+            }
+          },
+          "required": [
+            "pair",
+            "type",
+            "ordertype",
+            "volume",
+            "price",
+            "price2"
+          ]
+        },
+        {
+          "title": "AddOrderTakeProfitLimit",
+          "type": "object",
+          "description": "A take-profit-limit order: becomes a limit order at `price2` once `price` (the trigger) is reached in a favourable direction.",
+          "properties": {
+            "pair": {
+              "type": "string",
+              "description": "Asset pair `id` or `altname`, e.g. `XBTUSD`."
+            },
+            "type": {
+              "type": "string",
+              "description": "Order direction.",
+              "enum": [
+                "buy",
+                "sell"
+              ]
+            },
+            "ordertype": {
+              "type": "string",
+              "description": "The execution model of the order.",
+              "enum": [
+                "take-profit-limit"
+              ]
+            },
+            "volume": {
+              "type": "string",
+              "description": "Order quantity in terms of the base asset. May be `0` for closing margin orders to automatically fill the requisite quantity."
+            },
+            "userref": {
+              "type": "integer",
+              "format": "int32",
+              "description": "An optional non-unique numeric identifier the client can associate with any number of orders (e.g. for grouping by pair/side/strategy), letting cancel/query calls target the group by `userref` instead of individual `txid`s. Uniqueness is not enforced. Mutually exclusive with `cl_ord_id`."
+            },
+            "cl_ord_id": {
+              "type": "string",
+              "description": "An alphanumeric client order identifier which uniquely identifies this order for the client. One of: a long UUID (`6d1b345e-2821-40e2-ad83-4ecb18a06876`), a short UUID with no dashes, or free-form ASCII text up to 18 characters. Mutually exclusive with `userref`."
+            },
+            "asset_class": {
+              "type": "string",
+              "description": "Required on requests for non-crypto pairs, e.g. `tokenized_asset` for xstocks.",
+              "enum": [
+                "tokenized_asset"
+              ]
+            },
+            "leverage": {
+              "type": "string",
+              "description": "Amount of leverage desired. Defaults to none."
+            },
+            "reduce_only": {
+              "type": "boolean",
+              "description": "If true, the order will only reduce a currently open position rather than increase it or open a new one.",
+              "default": false
+            },
+            "stptype": {
+              "type": "string",
+              "description": "Self Trade Prevention (STP) mode, defining which order(s) are expired to prevent a self-match: `cancel-newest` cancels the arriving order, `cancel-oldest` cancels the resting order, `cancel-both` cancels both.",
+              "enum": [
+                "cancel-newest",
+                "cancel-oldest",
+                "cancel-both"
+              ],
+              "default": "cancel-newest"
+            },
+            "oflags": {
+              "type": "string",
+              "description": "Comma-delimited list of order flags: `post` (post-only, available when `ordertype = limit`), `fcib` (prefer fee in base currency, default when selling), `fciq` (prefer fee in quote currency, default when buying, mutually exclusive with `fcib`), `nompp` (deprecated -- disabling Market Price Protection is no longer supported; accepted but ignored if supplied), `viqc` (order volume expressed in quote currency; buy market orders only, unavailable on margin orders)."
+            },
+            "timeinforce": {
+              "type": "string",
+              "description": "How long the order should remain in the book before being cancelled. `GTC` (good-'til-cancelled, default): rests until filled or cancelled. `IOC` (immediate-or-cancel): fills what it can immediately, cancels the remainder rather than resting. `GTD` (good-'til-date): must be paired with `expiretm`. `FOK` (fill-or-kill): fills the entire order immediately or cancels it entirely.",
+              "enum": [
+                "GTC",
+                "IOC",
+                "GTD",
+                "FOK"
+              ],
+              "default": "GTC"
+            },
+            "starttm": {
+              "type": "string",
+              "description": "Scheduled start time: `0` for now (default), an absolute unix timestamp, or `+<n>` for `<n>` seconds from now (URL-encode the `+` as `%2b`)."
+            },
+            "expiretm": {
+              "type": "string",
+              "description": "Expiry time for `GTD` orders, up to one month in the future: `0` for no expiration (default), an absolute unix timestamp, or `+<n>` for `<n>` seconds from now, minimum 5 (URL-encode the `+` as `%2b`)."
+            },
+            "close": {
+              "description": "Conditional close order, attached to this order. Triggered by execution of the primary order in the same quantity and opposite direction, but once triggered becomes an independent order that may reduce or increase net position, not just close it.",
+              "anyOf": [
+                {
+                  "$ref": "ConditionalCloseOrder"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "deadline": {
+              "type": "string",
+              "format": "date-time",
+              "description": "RFC3339 timestamp (e.g. `2021-04-01T00:18:45Z`) after which the matching engine should reject this order if it is still queued due to latency, minimum now()+2s, maximum now()+60s."
+            },
+            "validate": {
+              "type": "boolean",
+              "description": "If true, the order is validated only and never reaches the matching engine (no `txid` is returned).",
+              "default": false
+            },
+            "broker": {
+              "description": "Broker IIBAN (partner's Kraken IIBAN).",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "price": {
+              "type": "string",
+              "description": "Trigger price for the order. May be prefixed with `+`/`-` (offset from last traded price) or `#` (add or subtract depending on order direction), and suffixed with `%` for a relative percentage instead of an absolute difference."
+            },
+            "price2": {
+              "type": "string",
+              "description": "Limit price for the order once triggered. May be prefixed with `+`/`-` (offset from last traded price) or `#` (add or subtract depending on order direction), and suffixed with `%` for a relative percentage instead of an absolute difference."
+            },
+            "trigger": {
+              "type": "string",
+              "description": "Price signal used to trigger this order (and any attached conditional close order). During connectivity issues with external index feeds, the last trade price is used as a fallback reference.",
+              "enum": [
+                "index",
+                "last"
+              ],
+              "default": "last"
+            }
+          },
+          "required": [
+            "pair",
+            "type",
+            "ordertype",
+            "volume",
+            "price",
+            "price2"
+          ]
+        },
+        {
+          "title": "AddOrderTrailingStop",
+          "type": "object",
+          "description": "A trailing-stop order: triggers as a market order once the price reverts by `price` from its peak/trough since order entry.",
+          "properties": {
+            "pair": {
+              "type": "string",
+              "description": "Asset pair `id` or `altname`, e.g. `XBTUSD`."
+            },
+            "type": {
+              "type": "string",
+              "description": "Order direction.",
+              "enum": [
+                "buy",
+                "sell"
+              ]
+            },
+            "ordertype": {
+              "type": "string",
+              "description": "The execution model of the order.",
+              "enum": [
+                "trailing-stop"
+              ]
+            },
+            "volume": {
+              "type": "string",
+              "description": "Order quantity in terms of the base asset. May be `0` for closing margin orders to automatically fill the requisite quantity."
+            },
+            "userref": {
+              "type": "integer",
+              "format": "int32",
+              "description": "An optional non-unique numeric identifier the client can associate with any number of orders (e.g. for grouping by pair/side/strategy), letting cancel/query calls target the group by `userref` instead of individual `txid`s. Uniqueness is not enforced. Mutually exclusive with `cl_ord_id`."
+            },
+            "cl_ord_id": {
+              "type": "string",
+              "description": "An alphanumeric client order identifier which uniquely identifies this order for the client. One of: a long UUID (`6d1b345e-2821-40e2-ad83-4ecb18a06876`), a short UUID with no dashes, or free-form ASCII text up to 18 characters. Mutually exclusive with `userref`."
+            },
+            "asset_class": {
+              "type": "string",
+              "description": "Required on requests for non-crypto pairs, e.g. `tokenized_asset` for xstocks.",
+              "enum": [
+                "tokenized_asset"
+              ]
+            },
+            "leverage": {
+              "type": "string",
+              "description": "Amount of leverage desired. Defaults to none."
+            },
+            "reduce_only": {
+              "type": "boolean",
+              "description": "If true, the order will only reduce a currently open position rather than increase it or open a new one.",
+              "default": false
+            },
+            "stptype": {
+              "type": "string",
+              "description": "Self Trade Prevention (STP) mode, defining which order(s) are expired to prevent a self-match: `cancel-newest` cancels the arriving order, `cancel-oldest` cancels the resting order, `cancel-both` cancels both.",
+              "enum": [
+                "cancel-newest",
+                "cancel-oldest",
+                "cancel-both"
+              ],
+              "default": "cancel-newest"
+            },
+            "oflags": {
+              "type": "string",
+              "description": "Comma-delimited list of order flags: `post` (post-only, available when `ordertype = limit`), `fcib` (prefer fee in base currency, default when selling), `fciq` (prefer fee in quote currency, default when buying, mutually exclusive with `fcib`), `nompp` (deprecated -- disabling Market Price Protection is no longer supported; accepted but ignored if supplied), `viqc` (order volume expressed in quote currency; buy market orders only, unavailable on margin orders)."
+            },
+            "timeinforce": {
+              "type": "string",
+              "description": "How long the order should remain in the book before being cancelled. `GTC` (good-'til-cancelled, default): rests until filled or cancelled. `IOC` (immediate-or-cancel): fills what it can immediately, cancels the remainder rather than resting. `GTD` (good-'til-date): must be paired with `expiretm`. `FOK` (fill-or-kill): fills the entire order immediately or cancels it entirely.",
+              "enum": [
+                "GTC",
+                "IOC",
+                "GTD",
+                "FOK"
+              ],
+              "default": "GTC"
+            },
+            "starttm": {
+              "type": "string",
+              "description": "Scheduled start time: `0` for now (default), an absolute unix timestamp, or `+<n>` for `<n>` seconds from now (URL-encode the `+` as `%2b`)."
+            },
+            "expiretm": {
+              "type": "string",
+              "description": "Expiry time for `GTD` orders, up to one month in the future: `0` for no expiration (default), an absolute unix timestamp, or `+<n>` for `<n>` seconds from now, minimum 5 (URL-encode the `+` as `%2b`)."
+            },
+            "close": {
+              "description": "Conditional close order, attached to this order. Triggered by execution of the primary order in the same quantity and opposite direction, but once triggered becomes an independent order that may reduce or increase net position, not just close it.",
+              "anyOf": [
+                {
+                  "$ref": "ConditionalCloseOrder"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "deadline": {
+              "type": "string",
+              "format": "date-time",
+              "description": "RFC3339 timestamp (e.g. `2021-04-01T00:18:45Z`) after which the matching engine should reject this order if it is still queued due to latency, minimum now()+2s, maximum now()+60s."
+            },
+            "validate": {
+              "type": "boolean",
+              "description": "If true, the order is validated only and never reaches the matching engine (no `txid` is returned).",
+              "default": false
+            },
+            "broker": {
+              "description": "Broker IIBAN (partner's Kraken IIBAN).",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "price": {
+              "type": "string",
+              "description": "Relative trailing offset from the last traded price. Must use the `+` prefix (direction is inferred from the order's buy/sell side), and also accepts the `%` suffix."
+            },
+            "trigger": {
+              "type": "string",
+              "description": "Price signal used to trigger this order (and any attached conditional close order). During connectivity issues with external index feeds, the last trade price is used as a fallback reference.",
+              "enum": [
+                "index",
+                "last"
+              ],
+              "default": "last"
+            }
+          },
+          "required": [
+            "pair",
+            "type",
+            "ordertype",
+            "volume",
+            "price"
+          ]
+        },
+        {
+          "title": "AddOrderTrailingStopLimit",
+          "type": "object",
+          "description": "A trailing-stop-limit order: triggers a limit order at an offset (`price2`) from the trigger price once the price reverts by `price` from its peak/trough since order entry.",
+          "properties": {
+            "pair": {
+              "type": "string",
+              "description": "Asset pair `id` or `altname`, e.g. `XBTUSD`."
+            },
+            "type": {
+              "type": "string",
+              "description": "Order direction.",
+              "enum": [
+                "buy",
+                "sell"
+              ]
+            },
+            "ordertype": {
+              "type": "string",
+              "description": "The execution model of the order.",
+              "enum": [
+                "trailing-stop-limit"
+              ]
+            },
+            "volume": {
+              "type": "string",
+              "description": "Order quantity in terms of the base asset. May be `0` for closing margin orders to automatically fill the requisite quantity."
+            },
+            "userref": {
+              "type": "integer",
+              "format": "int32",
+              "description": "An optional non-unique numeric identifier the client can associate with any number of orders (e.g. for grouping by pair/side/strategy), letting cancel/query calls target the group by `userref` instead of individual `txid`s. Uniqueness is not enforced. Mutually exclusive with `cl_ord_id`."
+            },
+            "cl_ord_id": {
+              "type": "string",
+              "description": "An alphanumeric client order identifier which uniquely identifies this order for the client. One of: a long UUID (`6d1b345e-2821-40e2-ad83-4ecb18a06876`), a short UUID with no dashes, or free-form ASCII text up to 18 characters. Mutually exclusive with `userref`."
+            },
+            "asset_class": {
+              "type": "string",
+              "description": "Required on requests for non-crypto pairs, e.g. `tokenized_asset` for xstocks.",
+              "enum": [
+                "tokenized_asset"
+              ]
+            },
+            "leverage": {
+              "type": "string",
+              "description": "Amount of leverage desired. Defaults to none."
+            },
+            "reduce_only": {
+              "type": "boolean",
+              "description": "If true, the order will only reduce a currently open position rather than increase it or open a new one.",
+              "default": false
+            },
+            "stptype": {
+              "type": "string",
+              "description": "Self Trade Prevention (STP) mode, defining which order(s) are expired to prevent a self-match: `cancel-newest` cancels the arriving order, `cancel-oldest` cancels the resting order, `cancel-both` cancels both.",
+              "enum": [
+                "cancel-newest",
+                "cancel-oldest",
+                "cancel-both"
+              ],
+              "default": "cancel-newest"
+            },
+            "oflags": {
+              "type": "string",
+              "description": "Comma-delimited list of order flags: `post` (post-only, available when `ordertype = limit`), `fcib` (prefer fee in base currency, default when selling), `fciq` (prefer fee in quote currency, default when buying, mutually exclusive with `fcib`), `nompp` (deprecated -- disabling Market Price Protection is no longer supported; accepted but ignored if supplied), `viqc` (order volume expressed in quote currency; buy market orders only, unavailable on margin orders)."
+            },
+            "timeinforce": {
+              "type": "string",
+              "description": "How long the order should remain in the book before being cancelled. `GTC` (good-'til-cancelled, default): rests until filled or cancelled. `IOC` (immediate-or-cancel): fills what it can immediately, cancels the remainder rather than resting. `GTD` (good-'til-date): must be paired with `expiretm`. `FOK` (fill-or-kill): fills the entire order immediately or cancels it entirely.",
+              "enum": [
+                "GTC",
+                "IOC",
+                "GTD",
+                "FOK"
+              ],
+              "default": "GTC"
+            },
+            "starttm": {
+              "type": "string",
+              "description": "Scheduled start time: `0` for now (default), an absolute unix timestamp, or `+<n>` for `<n>` seconds from now (URL-encode the `+` as `%2b`)."
+            },
+            "expiretm": {
+              "type": "string",
+              "description": "Expiry time for `GTD` orders, up to one month in the future: `0` for no expiration (default), an absolute unix timestamp, or `+<n>` for `<n>` seconds from now, minimum 5 (URL-encode the `+` as `%2b`)."
+            },
+            "close": {
+              "description": "Conditional close order, attached to this order. Triggered by execution of the primary order in the same quantity and opposite direction, but once triggered becomes an independent order that may reduce or increase net position, not just close it.",
+              "anyOf": [
+                {
+                  "$ref": "ConditionalCloseOrder"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "deadline": {
+              "type": "string",
+              "format": "date-time",
+              "description": "RFC3339 timestamp (e.g. `2021-04-01T00:18:45Z`) after which the matching engine should reject this order if it is still queued due to latency, minimum now()+2s, maximum now()+60s."
+            },
+            "validate": {
+              "type": "boolean",
+              "description": "If true, the order is validated only and never reaches the matching engine (no `txid` is returned).",
+              "default": false
+            },
+            "broker": {
+              "description": "Broker IIBAN (partner's Kraken IIBAN).",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "price": {
+              "type": "string",
+              "description": "Relative trailing offset from the last traded price. Must use the `+` prefix (direction is inferred from the order's buy/sell side), and also accepts the `%` suffix."
+            },
+            "price2": {
+              "type": "string",
+              "description": "Relative offset (`+`/`-` prefix, optionally `%` suffix) from the trigger price to the limit price -- `+0` sets the limit price equal to the trigger price."
+            },
+            "trigger": {
+              "type": "string",
+              "description": "Price signal used to trigger this order (and any attached conditional close order). During connectivity issues with external index feeds, the last trade price is used as a fallback reference.",
+              "enum": [
+                "index",
+                "last"
+              ],
+              "default": "last"
+            }
+          },
+          "required": [
+            "pair",
+            "type",
+            "ordertype",
+            "volume",
+            "price",
+            "price2"
+          ]
+        },
+        {
+          "title": "AddOrderSettlePosition",
+          "type": "object",
+          "description": "Settles an open leveraged position at the current market price.",
+          "properties": {
+            "pair": {
+              "type": "string",
+              "description": "Asset pair `id` or `altname`, e.g. `XBTUSD`."
+            },
+            "type": {
+              "type": "string",
+              "description": "Order direction.",
+              "enum": [
+                "buy",
+                "sell"
+              ]
+            },
+            "ordertype": {
+              "type": "string",
+              "description": "The execution model of the order.",
+              "enum": [
+                "settle-position"
+              ]
+            },
+            "volume": {
+              "type": "string",
+              "description": "Order quantity in terms of the base asset. May be `0` for closing margin orders to automatically fill the requisite quantity."
+            },
+            "userref": {
+              "type": "integer",
+              "format": "int32",
+              "description": "An optional non-unique numeric identifier the client can associate with any number of orders (e.g. for grouping by pair/side/strategy), letting cancel/query calls target the group by `userref` instead of individual `txid`s. Uniqueness is not enforced. Mutually exclusive with `cl_ord_id`."
+            },
+            "cl_ord_id": {
+              "type": "string",
+              "description": "An alphanumeric client order identifier which uniquely identifies this order for the client. One of: a long UUID (`6d1b345e-2821-40e2-ad83-4ecb18a06876`), a short UUID with no dashes, or free-form ASCII text up to 18 characters. Mutually exclusive with `userref`."
+            },
+            "asset_class": {
+              "type": "string",
+              "description": "Required on requests for non-crypto pairs, e.g. `tokenized_asset` for xstocks.",
+              "enum": [
+                "tokenized_asset"
+              ]
+            },
+            "leverage": {
+              "type": "string",
+              "description": "Amount of leverage desired. Defaults to none."
+            },
+            "reduce_only": {
+              "type": "boolean",
+              "description": "If true, the order will only reduce a currently open position rather than increase it or open a new one.",
+              "default": false
+            },
+            "stptype": {
+              "type": "string",
+              "description": "Self Trade Prevention (STP) mode, defining which order(s) are expired to prevent a self-match: `cancel-newest` cancels the arriving order, `cancel-oldest` cancels the resting order, `cancel-both` cancels both.",
+              "enum": [
+                "cancel-newest",
+                "cancel-oldest",
+                "cancel-both"
+              ],
+              "default": "cancel-newest"
+            },
+            "oflags": {
+              "type": "string",
+              "description": "Comma-delimited list of order flags: `post` (post-only, available when `ordertype = limit`), `fcib` (prefer fee in base currency, default when selling), `fciq` (prefer fee in quote currency, default when buying, mutually exclusive with `fcib`), `nompp` (deprecated -- disabling Market Price Protection is no longer supported; accepted but ignored if supplied), `viqc` (order volume expressed in quote currency; buy market orders only, unavailable on margin orders)."
+            },
+            "timeinforce": {
+              "type": "string",
+              "description": "How long the order should remain in the book before being cancelled. `GTC` (good-'til-cancelled, default): rests until filled or cancelled. `IOC` (immediate-or-cancel): fills what it can immediately, cancels the remainder rather than resting. `GTD` (good-'til-date): must be paired with `expiretm`. `FOK` (fill-or-kill): fills the entire order immediately or cancels it entirely.",
+              "enum": [
+                "GTC",
+                "IOC",
+                "GTD",
+                "FOK"
+              ],
+              "default": "GTC"
+            },
+            "starttm": {
+              "type": "string",
+              "description": "Scheduled start time: `0` for now (default), an absolute unix timestamp, or `+<n>` for `<n>` seconds from now (URL-encode the `+` as `%2b`)."
+            },
+            "expiretm": {
+              "type": "string",
+              "description": "Expiry time for `GTD` orders, up to one month in the future: `0` for no expiration (default), an absolute unix timestamp, or `+<n>` for `<n>` seconds from now, minimum 5 (URL-encode the `+` as `%2b`)."
+            },
+            "close": {
+              "description": "Conditional close order, attached to this order. Triggered by execution of the primary order in the same quantity and opposite direction, but once triggered becomes an independent order that may reduce or increase net position, not just close it.",
+              "anyOf": [
+                {
+                  "$ref": "ConditionalCloseOrder"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "deadline": {
+              "type": "string",
+              "format": "date-time",
+              "description": "RFC3339 timestamp (e.g. `2021-04-01T00:18:45Z`) after which the matching engine should reject this order if it is still queued due to latency, minimum now()+2s, maximum now()+60s."
+            },
+            "validate": {
+              "type": "boolean",
+              "description": "If true, the order is validated only and never reaches the matching engine (no `txid` is returned).",
+              "default": false
+            },
+            "broker": {
+              "description": "Broker IIBAN (partner's Kraken IIBAN).",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "pair",
+            "type",
+            "ordertype",
+            "volume"
+          ]
+        }
+      ]
+    },
+    "response": {
+      "title": "OrderAdded",
+      "type": "object",
+      "description": "Result of placing a new order.",
+      "properties": {
+        "descr": {
+          "title": "OrderDescription",
+          "type": "object",
+          "description": "Human-readable description of the order (and its conditional close, if one was attached).",
+          "properties": {
+            "order": {
+              "type": "string",
+              "description": "Human-readable order description."
+            },
+            "close": {
+              "type": "string",
+              "description": "Human-readable conditional close order description, if one was attached."
+            }
+          }
+        },
+        "txid": {
+          "type": "array",
+          "description": "Transaction ID(s) for the order -- present only once the order actually reaches the matching engine, i.e. absent when `validate` was set.",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "`nonce` is dropped from the request body across every private endpoint in this subsection: the client core (authed_request) injects a strictly-increasing nonce itself, so it is never a caller-supplied parameter, mirroring how the brief treats WS req_id as transport-assigned.",
+    "Upstream models the conditional close order as three flat bracket-notation fields (`close[ordertype]`, `close[price]`, `close[price2]`) rather than a nested object, but AddOrderBatch's own request example demonstrates the real wire shape is a nested `close: {ordertype, price, price2}` object -- modeled that way here (titled `ConditionalCloseOrder`, anyOf-with-null per spec-authoring rule 4) since the spec describes shape, not wire encoding.",
+    "`oflags` is kept as a free-text string (not an enum) because its value is a comma-delimited combination of flags, not a single closed value.",
+    "`broker` is nullable per upstream's `nullable: true`."
+  ]
+}

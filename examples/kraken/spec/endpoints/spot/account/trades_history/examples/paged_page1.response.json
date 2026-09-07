@@ -1,0 +1,43 @@
+{
+  "status": 200,
+  "payload": {
+    "error": [],
+    "result": {
+      "count": 3,
+      "trades": {
+        "TP1AAA-11111-AAAAAA": {
+          "ordertxid": "OP1AAA-11111-AAAAAA",
+          "pair": "XXBTZUSD",
+          "time": 1786600000.1234,
+          "type": "buy",
+          "ordertype": "limit",
+          "price": "62000.10000",
+          "cost": "6.20001",
+          "fee": "0.01612",
+          "vol": "0.00010000",
+          "margin": "0.00000",
+          "leverage": "none",
+          "misc": "",
+          "trade_id": 100001,
+          "maker": true
+        },
+        "TP1AAA-22222-BBBBBB": {
+          "ordertxid": "OP1AAA-22222-BBBBBB",
+          "pair": "XXBTZUSD",
+          "time": 1786600100.5678,
+          "type": "sell",
+          "ordertype": "limit",
+          "price": "62050.20000",
+          "cost": "6.20502",
+          "fee": "0.01613",
+          "vol": "0.00010000",
+          "margin": "0.00000",
+          "leverage": "none",
+          "misc": "",
+          "trade_id": 100002,
+          "maker": false
+        }
+      }
+    }
+  }
+}

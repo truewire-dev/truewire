@@ -1,0 +1,11 @@
+{
+  "method": "subscribe",
+  "req_id": 0,
+  "result": {
+    "channel": "balances",
+    "snapshot": true
+  },
+  "success": true,
+  "time_in": "2026-08-13T11:58:47.159611Z",
+  "time_out": "2026-08-13T11:58:47.165963Z"
+}

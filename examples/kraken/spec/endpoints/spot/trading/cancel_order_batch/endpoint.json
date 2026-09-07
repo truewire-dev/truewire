@@ -1,0 +1,71 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/trading/cancel-order-batch",
+  "meta": {
+    "signed": true
+  },
+  "redacted": [
+    "nonce"
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/private/CancelOrderBatch",
+    "method": "POST",
+    "description": "Cancel multiple open orders by `txid`, `userref` or `cl_ord_id` -- up to 50 unique identifiers/references total across `orders` and `cl_ord_ids`.\n\n**API Key Permissions Required:** `Orders and trades - Create & modify orders` or `Orders and trades - Cancel & close orders`",
+    "request": {
+      "title": "CancelOrderBatchRequest",
+      "description": "Parameters identifying the orders to cancel, up to 50 unique identifiers total.",
+      "type": "object",
+      "properties": {
+        "orders": {
+          "title": "CancelOrderBatchTxids",
+          "type": "array",
+          "description": "Open order transaction IDs or user references to cancel, up to 50 total unique IDs/references across `orders` and `cl_ord_ids`.",
+          "items": {
+            "description": "Open order transaction ID (txid) or user reference (userref).",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ]
+          }
+        },
+        "cl_ord_ids": {
+          "title": "CancelOrderBatchClientIds",
+          "type": "array",
+          "description": "Client order identifiers to cancel, up to 50 total unique IDs/references across `orders` and `cl_ord_ids`.",
+          "items": {
+            "type": "string",
+            "description": "An alphanumeric client order identifier which uniquely identifies an open order for this client."
+          }
+        }
+      }
+    },
+    "response": {
+      "title": "OrderCancelled",
+      "type": "object",
+      "description": "Result of a cancel request.",
+      "properties": {
+        "count": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Number of orders cancelled."
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "`nonce` is dropped from the request body -- transport-injected by the client core (authed_request), never a caller-supplied parameter.",
+    "Upstream's declared `properties` schema for both `orders` and `cl_ord_ids` documents them as arrays of objects (`{txid}` / `{cl_ord_id}`), but both the OpenAPI file's own inline `example` and the live doc page's example instead show a flat array of bare strings (`\"orders\": [\"OP5V2Y-RYKVL-ET3V3B\", ...]`). Confirmed empirically during example capture (2026-08-21): the object shape (`{\"orders\": [{\"txid\": \"...\"}]}`) is rejected live with `EOrder:Invalid order`; the flat-string shape (`{\"orders\": [\"...\"]}`) succeeds. Spec'd here as flat arrays of strings/integers, matching venue reality over upstream's own inconsistent schema declaration.",
+    "`orders[]` converted from upstream's `oneOf: [string, integer]` to `anyOf` per spec-authoring rule 4.",
+    "The response has no declared schema upstream at all (only an `example`, `{error: [], result: {count: 2}}`) -- reused the `OrderCancelled` shape from CancelOrder/CancelAll (`count` only, since `pending` isn't shown in this endpoint's example and is unconfirmed here)."
+  ]
+}

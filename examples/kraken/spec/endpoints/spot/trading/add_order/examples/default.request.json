@@ -1,0 +1,9 @@
+{
+  "request": {
+    "pair": "XBTUSDC",
+    "type": "buy",
+    "ordertype": "limit",
+    "price": "10000",
+    "volume": "0.0001"
+  }
+}

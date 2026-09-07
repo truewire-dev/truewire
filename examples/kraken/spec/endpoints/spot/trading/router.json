@@ -1,0 +1,4 @@
+{
+  "description": "Order entry over REST: place, amend, edit, and cancel single orders and\nbatches, the Dead Man's Switch (cancel-all-after), and minting a WebSocket auth token.",
+  "upstream": "https://docs.kraken.com/api-reference/trading"
+}

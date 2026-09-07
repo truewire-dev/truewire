@@ -1,0 +1,98 @@
+{
+  "docs": "https://docs.kraken.com/exchange/api-reference/spot-websocket-v2/status",
+  "meta": {},
+  "redacted": [
+    "req_id"
+  ],
+  "unverified": {
+    "reason": "runtime_error",
+    "detail": "Live v2 server rejects an explicit {\"method\":\"subscribe\",\"params\":{\"channel\":\"status\"}} subscribe request with \"Symbol(s) not found\" (confirmed 2026-08-13, both via the real client core and a bare websocket connection) -- contradicts this endpoint's own notes, which derived the subscribe shape from the reconnection guide. The channel does auto-push a real status update immediately on connection with no subscribe at all, e.g. {\"channel\":\"status\",\"type\":\"update\",\"data\":[{\"version\":\"2.0.10\",\"system\":\"online\",\"api_version\":\"v2\",\"connection_id\":15016751721099966496}]} -- but that arrives before/without any subscribe ack, so the real client's subscribe()-based surface cannot capture a passing example for it as currently spec'd."
+  },
+  "spec": {
+    "kind": "stream",
+    "channel": "status",
+    "description": "Subscribe to exchange status: automatically pushed once on successful connection and again whenever the trading engine status changes. There is no way to directly request a fresh status update.",
+    "parameters": null,
+    "payload": {
+      "title": "StatusMessage",
+      "type": "object",
+      "description": "A `status` channel push.",
+      "properties": {
+        "channel": {
+          "type": "string",
+          "enum": [
+            "status"
+          ],
+          "description": "The channel this push belongs to."
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "update"
+          ],
+          "description": "This channel only ever pushes `update` -- there is no `snapshot` type."
+        },
+        "data": {
+          "type": "array",
+          "description": "One entry describing the current exchange status.",
+          "items": {
+            "title": "StatusData",
+            "type": "object",
+            "description": "Exchange status data.",
+            "properties": {
+              "system": {
+                "type": "string",
+                "enum": [
+                  "online",
+                  "cancel_only",
+                  "maintenance",
+                  "post_only",
+                  "limit_only"
+                ],
+                "description": "The status of the trading engine. `online`: markets operate normally. `maintenance`: markets are offline, no orders can be placed or cancelled. `cancel_only`: orders can be cancelled but not placed, no matching occurs. `post_only`: only `post_only` limit orders can be submitted, orders can be cancelled, no matching occurs. `limit_only`: documented separately on the WebSocket reconnection guide, not on this channel's own reference page."
+              },
+              "api_version": {
+                "type": "string",
+                "enum": [
+                  "v2"
+                ],
+                "description": "The version of the WebSocket API."
+              },
+              "connection_id": {
+                "type": "integer",
+                "description": "A unique connection identifier, for debugging."
+              },
+              "version": {
+                "type": "string",
+                "description": "The version of the WebSocket service."
+              }
+            },
+            "required": [
+              "system",
+              "api_version",
+              "connection_id",
+              "version"
+            ]
+          }
+        }
+      },
+      "required": [
+        "channel",
+        "type",
+        "data"
+      ]
+    }
+  },
+  "envelope": {
+    "payload": "",
+    "verb": {
+      "path": "method",
+      "subscribe": "subscribe",
+      "unsubscribe": "unsubscribe"
+    }
+  },
+  "notes": [
+    "status.md documents no `Subscribe` request/response tab at all -- an apparent gap, since it is in fact a normal subscription: https://docs.kraken.com/exchange/guides/websockets/reconnection confirms `{\"method\": \"subscribe\", \"params\": {\"channel\": \"status\"}}` with no channel-specific parameters, so `requestBody` is omitted here (there is nothing beyond the implicit `channel` the `spec.channel` field already carries). No worked subscribe-ack example exists for this channel either; `StatusSubscribeResult` is inferred from the shared ack shape every sibling channel documents (`{channel, warnings}`, since `status` takes no `snapshot`/other param to echo), not from a directly observed example -- flagging in case a captured example later contradicts it. `system`'s enum is the union of two disagreeing sources: this channel's own page lists 4 values (`online`, `cancel_only`, `maintenance`, `post_only`); the reconnection guide's worked list adds a 5th, `limit_only`. Both are official docs.kraken.com pages; the union is kept rather than picking one, and the discrepancy is called out per rule 2/spec-authoring's 'documented is load-bearing' principle -- this is a same-day-fetched cross-page conflict, not a guess.",
+    "CAPTURE FINDING (2026-08-13): explicitly subscribing to `status` -- `{\"method\": \"subscribe\", \"params\": {\"channel\": \"status\"}}`, the exact shape this endpoint's notes derive from the reconnection guide -- is rejected by the live v2 server every time with `\"Symbol(s) not found\"`. Reproduced 3x, both through the real client core and via a bare `websockets` connection bypassing it entirely, so this is not a client bug. The channel does push a real, well-formed `status` \"update\" the instant the socket connects, with no subscribe needed at all -- so the assumption that `status` is \"in fact a normal subscription\" (this endpoint's existing note) does not hold against the real engine; it looks closer to a push-only, connection-triggered channel. Left `unverified` (`runtime_error`) instead of forcing a fake reply -- the next spec-authoring pass should decide whether `responses.reply` should be dropped/reworked for this endpoint, and how (or whether) the generated client should expose it at all."
+  ]
+}

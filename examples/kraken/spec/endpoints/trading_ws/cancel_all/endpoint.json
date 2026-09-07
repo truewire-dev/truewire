@@ -1,0 +1,46 @@
+{
+  "docs": "https://docs.kraken.com/exchange/api-reference/spot-websocket-v2/cancel_all",
+  "meta": {},
+  "redacted": [
+    "req_id"
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "ws"
+    ],
+    "path": "cancel_all",
+    "description": "Cancels all open orders on the account, including untriggered orders and orders resting in the book. The details of each individual cancelled order are also streamed on the `executions` channel.",
+    "request": {
+      "title": "CancelAllParams",
+      "type": "object",
+      "description": "No caller-supplied parameters beyond the transport-injected auth token.",
+      "properties": {}
+    },
+    "response": {
+      "title": "CancelAllResult",
+      "type": "object",
+      "description": "Result of a successful `cancel_all` call.",
+      "properties": {
+        "count": {
+          "type": "integer",
+          "description": "Number of orders cancelled."
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Non-fatal warnings about the cancellation, if any."
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result",
+    "correlate": "req_id"
+  },
+  "notes": [
+    "`token` (the auth bearer token) is documented by Kraken as a required params field but is deliberately absent from this schema: `core/transport/ws.py`'s `SocketConnection.rpc_send` merges the cached token into every outgoing `params` on the private connection -- trading calls and subscribe/unsubscribe alike -- so it is transport-injected, never a caller-supplied argument, the same way `req_id` (the declared `correlate` field) never appears in a requestBody schema. No other documented request parameters exist for this command."
+  ]
+}

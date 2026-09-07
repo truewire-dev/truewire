@@ -1,0 +1,10 @@
+{
+  "method": "cancel_all",
+  "req_id": 6,
+  "result": {
+    "count": 1
+  },
+  "success": true,
+  "time_in": "2026-08-13T12:10:48.239214Z",
+  "time_out": "2026-08-13T12:10:48.240820Z"
+}

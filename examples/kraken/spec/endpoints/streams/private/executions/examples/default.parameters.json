@@ -1,0 +1,9 @@
+{
+  "parameters": {},
+  "payload": {
+    "method": "subscribe",
+    "params": {
+      "channel": "executions"
+    }
+  }
+}

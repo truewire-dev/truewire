@@ -1,0 +1,27 @@
+{
+  "status": 200,
+  "payload": {
+    "error": [],
+    "result": {
+      "asset_details": {
+        "ETH": {
+          "balance": "0.0000001109",
+          "hold_trade": "0.0000000000",
+          "collateral_value": 0.99
+        },
+        "USDC": {
+          "balance": "10.00000000",
+          "hold_trade": "0.00000000",
+          "collateral_value": 0.995
+        }
+      },
+      "limits_monitor": {
+        "total_credit_usd": "0",
+        "total_credit_used_usd": "0",
+        "total_collateral_value_usd": "9.9491",
+        "equity_usd": "9.9491",
+        "debt_to_equity": "0"
+      }
+    }
+  }
+}

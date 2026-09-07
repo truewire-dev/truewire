@@ -1,0 +1,13 @@
+{
+  "method": "subscribe",
+  "req_id": 0,
+  "result": {
+    "channel": "ticker",
+    "event_trigger": "trades",
+    "snapshot": true,
+    "symbol": "BTC/USD"
+  },
+  "success": true,
+  "time_in": "2026-08-13T12:07:04.318614Z",
+  "time_out": "2026-08-13T12:07:04.318669Z"
+}

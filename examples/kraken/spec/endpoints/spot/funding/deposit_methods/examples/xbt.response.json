@@ -1,0 +1,50 @@
+{
+  "status": 200,
+  "payload": {
+    "error": [],
+    "result": [
+      {
+        "method": "Bitcoin",
+        "limit": false,
+        "fee": "0.00",
+        "gen-address": true,
+        "minimum": "0.0001"
+      },
+      {
+        "method": "Bitcoin Lightning",
+        "limit": false,
+        "fee": "0",
+        "fee-percentage": "0.3",
+        "minimum": "0.00001"
+      },
+      {
+        "method": "kBTC - Ink (Unified)",
+        "limit": false,
+        "fee": "0",
+        "gen-address": true,
+        "minimum": "0.000028"
+      },
+      {
+        "method": "kBTC - Unichain (Unified)",
+        "limit": false,
+        "fee": "0.0",
+        "gen-address": true,
+        "minimum": "0.000028"
+      },
+      {
+        "method": "kBTC - Ethereum (Unified)",
+        "limit": false,
+        "fee": "0.0",
+        "gen-address": true,
+        "minimum": "0.000028"
+      },
+      {
+        "method": "kBTC - Optimism (Unified)",
+        "limit": false,
+        "fee": "0.0",
+        "gen-address": true,
+        "minimum": "0.000028"
+      }
+    ]
+  }
+}

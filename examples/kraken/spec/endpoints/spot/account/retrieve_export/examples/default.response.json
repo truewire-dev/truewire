@@ -1,0 +1,9 @@
+{
+  "status": 200,
+  "payload": {
+    "content_type": "application/zip",
+    "content_length": 32768,
+    "note": "application/octet-stream body (a ZIP archive), not the standard {error, result} JSON envelope -- see this endpoint's own `notes`. magic_bytes confirms the ZIP local-file-header signature (PK\\x03\\x04).",
+    "magic_bytes": "504b0304"
+  }
+}

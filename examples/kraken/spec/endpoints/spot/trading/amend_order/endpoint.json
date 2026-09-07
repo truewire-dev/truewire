@@ -1,0 +1,82 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/trading/amend-order",
+  "meta": {
+    "signed": true
+  },
+  "redacted": [
+    "nonce"
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/private/AmendOrder",
+    "method": "POST",
+    "description": "Modify an existing order's parameters in place, without cancelling and replacing it: Kraken-assigned and client-assigned order identifiers stay the same, queue priority in the order book is preserved where possible, and if the amended quantity drops below the already-filled quantity the remaining quantity is cancelled.\n\n**API Key Permissions Required:** `Orders and trades - Create & modify orders` or `Orders and trades - Cancel & close orders`",
+    "request": {
+      "title": "AmendOrderRequest",
+      "description": "Parameters for amending a live order in place.",
+      "type": "object",
+      "properties": {
+        "txid": {
+          "type": "string",
+          "description": "The Kraken identifier for the order to amend. Either `txid` or `cl_ord_id` is required."
+        },
+        "cl_ord_id": {
+          "type": "string",
+          "description": "The client identifier for the order to amend. Either `txid` or `cl_ord_id` is required."
+        },
+        "order_qty": {
+          "type": "string",
+          "description": "The new order quantity, in terms of the base asset."
+        },
+        "display_qty": {
+          "type": "string",
+          "description": "For `iceberg` orders only, the new quantity to show in the book while the rest of the order quantity remains hidden. Minimum value is 1/15 of the remaining order quantity."
+        },
+        "limit_price": {
+          "type": "string",
+          "description": "The new limit price (for order types that support a limit price). May use relative pricing: `+`/`-` prefix as an offset from the reference price (e.g. `+50` or `-100`), optionally suffixed with `%`."
+        },
+        "trigger_price": {
+          "type": "string",
+          "description": "The new trigger price (for triggered order types only). May use relative pricing: `+`/`-` prefix as an offset from the reference price, optionally suffixed with `%`."
+        },
+        "pair": {
+          "type": "string",
+          "description": "Required on amends for non-crypto pairs, e.g. the pair symbol for xstocks."
+        },
+        "post_only": {
+          "type": "boolean",
+          "description": "For `limit_price` amends only. If true, the limit price change is rejected unless it can be posted passively in the book.",
+          "default": false
+        },
+        "deadline": {
+          "type": "string",
+          "description": "RFC3339 timestamp (e.g. `2021-04-01T00:18:45Z`) after which the matching engine should reject this amend if it is still queued due to latency, minimum now()+2s, maximum now()+60s.",
+          "format": "date-time"
+        }
+      }
+    },
+    "response": {
+      "title": "OrderAmended",
+      "type": "object",
+      "description": "Result of amending a live order.",
+      "properties": {
+        "amend_id": {
+          "type": "string",
+          "description": "The unique Kraken identifier generated for this amend transaction."
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "`nonce` is dropped from the request body -- transport-injected by the client core (authed_request), never a caller-supplied parameter.",
+    "Upstream's `required` list holds only `nonce`: despite prose stating 'either txid or cl_ord_id is required', neither is formally marked required in the schema, so none of AmendOrder's fields end up required here.",
+    "See the amend transaction guide (https://docs.kraken.com/docs/guides/spot-amends) for further detail, linked from upstream's description but not independently verified here."
+  ]
+}

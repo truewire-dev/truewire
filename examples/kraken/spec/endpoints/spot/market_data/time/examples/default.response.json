@@ -1,0 +1,10 @@
+{
+  "status": 200,
+  "payload": {
+    "error": [],
+    "result": {
+      "unixtime": 1786622325,
+      "rfc1123": "Thu, 13 Aug 26 11:58:45 +0000"
+    }
+  }
+}

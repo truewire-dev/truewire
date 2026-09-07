@@ -1,0 +1,16 @@
+{
+  "status": 200,
+  "payload": {
+    "error": [],
+    "result": {
+      "USDC": {
+        "balance": "10.00000000",
+        "hold_trade": "0.00000000"
+      },
+      "XETH": {
+        "balance": "0.0000001109",
+        "hold_trade": "0.0000000000"
+      }
+    }
+  }
+}

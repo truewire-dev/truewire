@@ -1,0 +1,280 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/account-data/get-open-orders",
+  "meta": {
+    "signed": true
+  },
+  "redacted": [
+    "nonce"
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/private/OpenOrders",
+    "method": "POST",
+    "description": "Retrieve information about currently open orders. Returns every open order matching the given filters -- there is no pagination.\n\n**API Key Permissions Required:** `Orders and trades - Query open orders & trades`",
+    "request": {
+      "title": "OpenOrdersRequest",
+      "type": "object",
+      "properties": {
+        "trades": {
+          "description": "Whether or not to include trades related to position in output.",
+          "type": "boolean",
+          "default": false
+        },
+        "userref": {
+          "description": "Restrict results to the given user reference id.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "cl_ord_id": {
+          "description": "Restrict results to the given client order id.",
+          "type": "string"
+        },
+        "rebase_multiplier": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "rebased",
+                "base"
+              ],
+              "default": "rebased"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional parameter for viewing xstocks data. `rebased` displays in terms of underlying equity, `base` displays in terms of SPV tokens."
+        }
+      }
+    },
+    "response": {
+      "title": "OpenOrders",
+      "description": "Currently open orders.",
+      "type": "object",
+      "properties": {
+        "open": {
+          "description": "Open orders, keyed by transaction ID.",
+          "type": "object",
+          "additionalProperties": {
+            "title": "OpenOrder",
+            "description": "One open order.",
+            "type": "object",
+            "properties": {
+              "refid": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Referral order transaction ID that created this order."
+              },
+              "userref": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Optional numeric client identifier associated with one or more orders."
+              },
+              "cl_ord_id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Optional alphanumeric client identifier associated with the order."
+              },
+              "status": {
+                "description": "Status of the order: `pending` (pending book entry), `open`, `closed`, `canceled`, or `expired`.",
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "open",
+                  "closed",
+                  "canceled",
+                  "expired"
+                ]
+              },
+              "opentm": {
+                "description": "Unix timestamp of when the order was placed.",
+                "type": "number"
+              },
+              "starttm": {
+                "description": "Unix timestamp of order start time (or 0 if not set).",
+                "type": "number"
+              },
+              "expiretm": {
+                "description": "Unix timestamp of order end time (or 0 if not set).",
+                "type": "number"
+              },
+              "descr": {
+                "title": "OrderDescription",
+                "description": "Order description info.",
+                "type": "object",
+                "properties": {
+                  "pair": {
+                    "description": "Asset pair.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "description": "Type of order.",
+                    "type": "string",
+                    "enum": [
+                      "buy",
+                      "sell"
+                    ]
+                  },
+                  "ordertype": {
+                    "description": "The execution model of the order.",
+                    "type": "string",
+                    "enum": [
+                      "market",
+                      "limit",
+                      "iceberg",
+                      "stop-loss",
+                      "take-profit",
+                      "stop-loss-limit",
+                      "take-profit-limit",
+                      "trailing-stop",
+                      "trailing-stop-limit",
+                      "settle-position"
+                    ]
+                  },
+                  "price": {
+                    "description": "Primary price.",
+                    "type": "string",
+                    "format": "decimal-string"
+                  },
+                  "price2": {
+                    "description": "Secondary price.",
+                    "type": "string",
+                    "format": "decimal-string"
+                  },
+                  "leverage": {
+                    "description": "Amount of leverage.",
+                    "type": "string"
+                  },
+                  "order": {
+                    "description": "Order description, as human-readable text.",
+                    "type": "string"
+                  },
+                  "close": {
+                    "description": "Conditional close order description (if conditional close set).",
+                    "type": "string"
+                  },
+                  "aclass": {
+                    "description": "Asset class of the pair.",
+                    "type": "string"
+                  }
+                }
+              },
+              "time_in_force": {
+                "description": "Time-in-force of the order: `gtc` (good till cancelled), `ioc` (immediate or cancel), `gtd` (good till date), or `fok` (fill or kill).",
+                "type": "string",
+                "enum": [
+                  "gtc",
+                  "ioc",
+                  "gtd",
+                  "fok"
+                ]
+              },
+              "vol": {
+                "description": "Volume of order (base currency).",
+                "type": "string",
+                "format": "decimal-string"
+              },
+              "vol_exec": {
+                "description": "Volume executed (base currency).",
+                "type": "string",
+                "format": "decimal-string"
+              },
+              "cost": {
+                "description": "Total cost (quote currency).",
+                "type": "string",
+                "format": "decimal-string"
+              },
+              "fee": {
+                "description": "Total fee (quote currency).",
+                "type": "string",
+                "format": "decimal-string"
+              },
+              "price": {
+                "description": "Average price (quote currency).",
+                "type": "string",
+                "format": "decimal-string"
+              },
+              "stopprice": {
+                "description": "Stop price (quote currency).",
+                "type": "string",
+                "format": "decimal-string"
+              },
+              "limitprice": {
+                "description": "Triggered limit price (quote currency, when limit-based order type triggered).",
+                "type": "string",
+                "format": "decimal-string"
+              },
+              "trigger": {
+                "description": "Price signal used to trigger `stop-loss`/`take-profit`/`stop-loss-limit`/`take-profit-limit` orders. `last` is the implied trigger if this field is not set.",
+                "type": "string",
+                "enum": [
+                  "last",
+                  "index"
+                ],
+                "default": "last"
+              },
+              "margin": {
+                "description": "Indicates if the order is funded on margin.",
+                "type": "boolean"
+              },
+              "misc": {
+                "description": "Comma-delimited list of miscellaneous info: `stopped` (triggered by stop price), `touched` (triggered by touch price), `liquidated`, `partial` (partial fill), `amended` (order parameters modified).",
+                "type": "string"
+              },
+              "sender_sub_id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "For institutional accounts, identifies the underlying sub-account/trader for Self Trade Prevention (STP)."
+              },
+              "oflags": {
+                "description": "Comma-delimited list of order flags: `post` (post-only, available when ordertype = limit), `fcib` (prefer fee in base currency, default if selling), `fciq` (prefer fee in quote currency, default if buying, mutually exclusive with `fcib`), `nompp` (deprecated -- accepted but ignored), `viqc` (order volume expressed in quote currency; buy market orders only, not available on margin orders).",
+                "type": "string",
+                "example": "post"
+              },
+              "trades": {
+                "description": "List of trade IDs related to the order (if trades info requested and data available).",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "No pagination block: the upstream doc page explicitly states this endpoint has no offset/count/limit parameters and returns every open order matching the filters."
+  ]
+}

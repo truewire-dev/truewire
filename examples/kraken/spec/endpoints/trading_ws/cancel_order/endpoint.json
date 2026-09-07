@@ -1,0 +1,72 @@
+{
+  "docs": "https://docs.kraken.com/exchange/api-reference/spot-websocket-v2/cancel_order",
+  "meta": {},
+  "redacted": [
+    "req_id"
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "ws"
+    ],
+    "path": "cancel_order",
+    "description": "Cancels one or more open orders in a single request, identified by a range of client or Kraken identifiers. The details of each cancelled order are also streamed on the `executions` channel.",
+    "request": {
+      "title": "CancelOrderParams",
+      "type": "object",
+      "description": "Parameters identifying one or more open orders to cancel. Exactly one of `order_id`, `cl_ord_id`, `order_userref` should be supplied -- they cannot be combined in the same request.",
+      "properties": {
+        "order_id": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Kraken `order_id` identifiers to cancel. Cannot be combined with `cl_ord_id` or `order_userref` in the same request."
+        },
+        "cl_ord_id": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Client `cl_ord_id` identifiers to cancel. Cannot be combined with `order_id` or `order_userref` in the same request."
+        },
+        "order_userref": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "description": "Client `order_userref` identifiers to cancel. Cannot be combined with `order_id` or `cl_ord_id` in the same request."
+        }
+      }
+    },
+    "response": {
+      "title": "CancelOrderResult",
+      "type": "object",
+      "description": "Result describing one cancelled order.",
+      "properties": {
+        "order_id": {
+          "type": "string",
+          "description": "Kraken identifier of the cancelled order."
+        },
+        "cl_ord_id": {
+          "type": "string",
+          "description": "Client identifier of the cancelled order, if any."
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Non-fatal warnings about the cancellation, if any."
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result",
+    "correlate": "req_id"
+  },
+  "notes": [
+    "`token` (the auth bearer token) is documented by Kraken as a required params field but is deliberately absent from this schema: `core/transport/ws.py`'s `SocketConnection.rpc_send` merges the cached token into every outgoing `params` on the private connection -- trading calls and subscribe/unsubscribe alike -- so it is transport-injected, never a caller-supplied argument, the same way `req_id` (the declared `correlate` field) never appears in a requestBody schema. Exactly one of `order_id`/`cl_ord_id`/`order_userref` should be supplied; none is declared JSON Schema `required` since this is a mutual-exclusivity business rule over independently-optional array fields, documented in each field's description instead (an `anyOf` would misrepresent it as a shape union, which it isn't). Separately: the doc page states \"When cancelling multiple orders, there will be a stream of individual order responses\" -- i.e. cancelling N orders in one `cancel_order` call appears to answer with N reply frames sharing one `req_id`, not one aggregate reply. `responses.reply` here describes a single such frame (`CancelOrderResult`); this is a real mismatch against the format's \"one command, one answering frame\" model and against `WsRpcClient.request`'s single-`await`-single-reply implementation (`core/transport/ws.py`) -- flagging for review, not resolving here, since nothing in this pass touches `pkg/`."
+  ]
+}

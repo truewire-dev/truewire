@@ -1,0 +1,161 @@
+{
+  "docs": "https://docs.kraken.com/exchange/api-reference/spot-websocket-v2/book",
+  "meta": {},
+  "redacted": [
+    "req_id"
+  ],
+  "spec": {
+    "kind": "stream",
+    "channel": "book",
+    "description": "Subscribe to the level 2 (L2) order book -- individual price levels with aggregated order quantities at each level -- for one or more currency pairs, including a CRC32 checksum of the top 10 bids and asks for local book verification.",
+    "parameters": {
+      "title": "BookParams",
+      "type": "object",
+      "description": "Parameters for a `book` channel subscription.",
+      "properties": {
+        "symbol": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Currency pairs to subscribe to, e.g. `[\"BTC/USD\", \"MATIC/GBP\"]`."
+        },
+        "depth": {
+          "type": "integer",
+          "enum": [
+            10,
+            25,
+            100,
+            500,
+            1000
+          ],
+          "default": 10,
+          "description": "The number of price levels, per side of the book, to be received."
+        },
+        "snapshot": {
+          "type": "boolean",
+          "default": true,
+          "description": "Request a snapshot after subscribing."
+        }
+      },
+      "required": [
+        "symbol"
+      ]
+    },
+    "payload": {
+      "title": "BookMessage",
+      "type": "object",
+      "description": "A `book` channel push.",
+      "properties": {
+        "channel": {
+          "type": "string",
+          "enum": [
+            "book"
+          ],
+          "description": "The channel this push belongs to."
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "snapshot",
+            "update"
+          ],
+          "description": "Whether this push is the initial snapshot or an incremental update."
+        },
+        "data": {
+          "type": "array",
+          "description": "One entry per subscribed symbol touched by this push.",
+          "items": {
+            "title": "BookData",
+            "type": "object",
+            "description": "One symbol's book snapshot or incremental change.",
+            "properties": {
+              "symbol": {
+                "type": "string",
+                "description": "The symbol of the currency pair, e.g. `\"BTC/USD\"`."
+              },
+              "bids": {
+                "type": "array",
+                "description": "Bid price levels included in this push.",
+                "items": {
+                  "title": "BookLevel",
+                  "type": "object",
+                  "description": "One order book price level.",
+                  "properties": {
+                    "price": {
+                      "type": "number",
+                      "description": "The price at this level."
+                    },
+                    "qty": {
+                      "type": "number",
+                      "description": "The aggregated quantity at this level; `0` means the level should be removed."
+                    }
+                  },
+                  "required": [
+                    "price",
+                    "qty"
+                  ]
+                }
+              },
+              "asks": {
+                "type": "array",
+                "description": "Ask price levels included in this push.",
+                "items": {
+                  "title": "BookLevel",
+                  "type": "object",
+                  "description": "One order book price level.",
+                  "properties": {
+                    "price": {
+                      "type": "number",
+                      "description": "The price at this level."
+                    },
+                    "qty": {
+                      "type": "number",
+                      "description": "The aggregated quantity at this level; `0` means the level should be removed."
+                    }
+                  },
+                  "required": [
+                    "price",
+                    "qty"
+                  ]
+                }
+              },
+              "checksum": {
+                "type": "integer",
+                "description": "CRC32 checksum of the top 10 bids and asks, for local book verification."
+              },
+              "timestamp": {
+                "type": "string",
+                "description": "RFC3339 timestamp of this book snapshot or update.",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "symbol",
+              "bids",
+              "asks",
+              "checksum",
+              "timestamp"
+            ]
+          }
+        }
+      },
+      "required": [
+        "channel",
+        "type",
+        "data"
+      ]
+    }
+  },
+  "envelope": {
+    "payload": "",
+    "verb": {
+      "path": "method",
+      "subscribe": "subscribe",
+      "unsubscribe": "unsubscribe"
+    }
+  },
+  "notes": [
+    "Deviation from the assignment brief: the brief suggested modeling `bids`/`asks` rows with `prefixItems` (positional tuples). Kraken's WS v2 wire format documents and demonstrates them as named `{price, qty}` objects, not positional arrays -- confirmed both by book.md's `ResponseField` listing and by the worked checksum example on https://docs.kraken.com/exchange/guides/websockets/book-checksum-v2 (`{\"price\": \"45283.5\", \"qty\": \"0.10000000\"}`). v2's own design goal, stated on the WebSocket introduction page, is explicitly to move away from v1's positional/variable-length fields in favor of named objects. `prefixItems` describes a fixed-length heterogeneous row; `bids`/`asks` are homogeneous, variable-length lists of a repeated two-field record, which is rule 3's non-case -- so each row is modeled as `items: {title: \"BookLevel\", ...}` (a normal array-of-object), not `prefixItems`. Rule 3 (bounded `prefixItems`) is not applicable to any of the 7 endpoints in this batch: ticker/trade/ohlc/book/status/instrument all use named-object rows throughout, per v2's stated design."
+  ]
+}

@@ -1,0 +1,186 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/transparency/pre-trade-data",
+  "meta": {},
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/public/PreTrade",
+    "method": "GET",
+    "description": "Returns the price levels in the order book with aggregated order quantities at each price level. The top 10 levels are returned for each trading pair.",
+    "request": {
+      "title": "PreTradeRequest",
+      "type": "object",
+      "properties": {
+        "symbol": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 32,
+          "description": "A list of symbols for the currency pairs."
+        }
+      },
+      "required": [
+        "symbol"
+      ]
+    },
+    "response": {
+      "title": "PreTradeBook",
+      "description": "The top-10-level aggregated order book for a pair, plus reference/venue metadata.",
+      "type": "object",
+      "properties": {
+        "symbol": {
+          "type": "string",
+          "maxLength": 32,
+          "description": "The symbol of the currency pair."
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 350,
+          "description": "The full description of the currency pair."
+        },
+        "base_asset": {
+          "type": "string",
+          "description": "ISO 4217 currency code for the base asset."
+        },
+        "base_dti_code": {
+          "type": "string",
+          "description": "Digital Token Identifier (DTI) code for the base asset."
+        },
+        "base_dti_short_name": {
+          "type": "string",
+          "description": "DTI short name for the base asset."
+        },
+        "quote_dti_code": {
+          "type": "string",
+          "description": "Digital Token Identifier (DTI) code for the quote asset."
+        },
+        "quote_dti_short_name": {
+          "type": "string",
+          "description": "DTI short name for the quote asset."
+        },
+        "base_notation": {
+          "type": "string",
+          "description": "Indicates how the base quantity is expressed: `UNIT` (nominal units) or `NOML` (notional value).",
+          "enum": [
+            "UNIT",
+            "NOML"
+          ]
+        },
+        "quote_asset": {
+          "type": "string",
+          "description": "ISO 4217 currency in which the trading price is expressed."
+        },
+        "quote_notation": {
+          "type": "string",
+          "description": "Indicates that the price is expressed in monetary value.",
+          "enum": [
+            "MONE"
+          ]
+        },
+        "venue": {
+          "type": "string",
+          "description": "ISO 10383 Market Identifier Code (MIC) of the trading platform where the order was submitted.",
+          "enum": [
+            "PGSL"
+          ]
+        },
+        "system": {
+          "type": "string",
+          "description": "Indicates the order system is a Central Limit Order Book.",
+          "enum": [
+            "CLOB"
+          ]
+        },
+        "bids": {
+          "type": "array",
+          "description": "Top-10 aggregated bid levels.",
+          "items": {
+            "title": "PreTradeBidLevel",
+            "description": "One aggregated bid price level.",
+            "type": "object",
+            "properties": {
+              "side": {
+                "type": "string",
+                "description": "Indicates this level is a bid.",
+                "enum": [
+                  "BUY"
+                ]
+              },
+              "price": {
+                "type": "string",
+                "description": "Price level in the Central Limit Order Book (CLOB)."
+              },
+              "qty": {
+                "type": "string",
+                "description": "The aggregated quantity at the price level."
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "The number of orders in the price level."
+              },
+              "submission_ts": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Timestamp the order at this price level was submitted."
+              },
+              "publication_ts": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Timestamp the price level was last updated and published."
+              }
+            }
+          }
+        },
+        "asks": {
+          "type": "array",
+          "description": "Top-10 aggregated ask levels.",
+          "items": {
+            "title": "PreTradeAskLevel",
+            "description": "One aggregated ask price level.",
+            "type": "object",
+            "properties": {
+              "side": {
+                "type": "string",
+                "description": "Indicates this level is an offer.",
+                "enum": [
+                  "SELL"
+                ]
+              },
+              "price": {
+                "type": "string",
+                "description": "Price level in the Central Limit Order Book (CLOB)."
+              },
+              "qty": {
+                "type": "string",
+                "description": "The aggregated quantity at the price level."
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "The number of orders in the price level."
+              },
+              "submission_ts": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Timestamp the order at this price level was submitted."
+              },
+              "publication_ts": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Timestamp the price level was last updated and published."
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "bids/asks are two distinct titled schemas (PreTradeBidLevel enum['BUY'] vs PreTradeAskLevel enum['SELL']) rather than one shared object, matching how upstream's own OpenAPI already declares them separately with different fixed `side` enums. base_asset/quote_asset dropped upstream's non-standard `format: \"ISO 4217\"` (not a real JSON Schema format) in favor of stating it in `description`; submission_ts/publication_ts use the real `format: \"date-time\"` in place of upstream's non-standard `format: \"ISO 8601\"`. count's upstream `minLength: 1` (invalid on an integer) was corrected to `minimum: 1`. No `pagination` block: this always returns exactly the top 10 levels per side, not a walkable collection."
+  ]
+}

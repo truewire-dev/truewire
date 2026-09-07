@@ -1,0 +1,12 @@
+{
+  "method": "subscribe",
+  "req_id": 4,
+  "result": {
+    "channel": "trade",
+    "snapshot": true,
+    "symbol": "BTC/USD"
+  },
+  "success": true,
+  "time_in": "2026-08-13T12:07:05.938377Z",
+  "time_out": "2026-08-13T12:07:05.938419Z"
+}

@@ -1,0 +1,39 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/market-data/get-system-status",
+  "meta": {},
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/public/SystemStatus",
+    "method": "GET",
+    "description": "Get the current system status or trading mode.",
+    "request": null,
+    "response": {
+      "title": "SystemStatus",
+      "description": "The exchange's current operational status.",
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "description": "Current system status: `online` (operating normally, all order types accepted), `maintenance` (offline, no new orders or cancellations), `cancel_only` (resting orders can be cancelled but none submitted, no trades occur), or `post_only` (only post-only limit orders accepted, existing orders may still be cancelled, no trades occur).",
+          "enum": [
+            "online",
+            "maintenance",
+            "cancel_only",
+            "post_only"
+          ]
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Current timestamp (RFC3339)."
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  }
+}

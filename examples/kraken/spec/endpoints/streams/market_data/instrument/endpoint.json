@@ -1,0 +1,242 @@
+{
+  "docs": "https://docs.kraken.com/exchange/api-reference/spot-websocket-v2/instrument",
+  "meta": {},
+  "redacted": [
+    "req_id"
+  ],
+  "spec": {
+    "kind": "stream",
+    "channel": "instrument",
+    "description": "Subscribe to reference data for all active assets and tradeable pairs -- symbol identifiers, precisions, and trading parameters and rules.",
+    "parameters": {
+      "title": "InstrumentParams",
+      "type": "object",
+      "description": "Parameters for an `instrument` channel subscription. Unlike the other market-data channels, this one takes no `symbol` list -- it always streams the full reference data set.",
+      "properties": {
+        "execution_venue": {
+          "type": "string",
+          "enum": [
+            "international",
+            "bitnomial-exchange"
+          ],
+          "default": "international",
+          "description": "The execution venue for the instrument channel."
+        },
+        "include_tokenized_assets": {
+          "type": "boolean",
+          "default": false,
+          "description": "If `true`, include xStocks in the response; otherwise include crypto spot pairs only."
+        },
+        "snapshot": {
+          "type": "boolean",
+          "default": true,
+          "description": "Request a snapshot after subscribing."
+        }
+      }
+    },
+    "payload": {
+      "title": "InstrumentMessage",
+      "type": "object",
+      "description": "An `instrument` channel push. Unlike the other market-data channels, `data` is a single object (an `{assets, pairs}` reference-data set), not an array of per-symbol entries.",
+      "properties": {
+        "channel": {
+          "type": "string",
+          "enum": [
+            "instrument"
+          ],
+          "description": "The channel this push belongs to."
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "snapshot",
+            "update"
+          ],
+          "description": "Whether this push is the initial snapshot or an incremental update."
+        },
+        "data": {
+          "title": "InstrumentData",
+          "type": "object",
+          "description": "The reference-data set carried by this push.",
+          "properties": {
+            "assets": {
+              "type": "array",
+              "description": "Assets included in this push.",
+              "items": {
+                "title": "InstrumentAsset",
+                "type": "object",
+                "description": "Reference data for one asset.",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "Asset identifier."
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "depositonly",
+                      "disabled",
+                      "enabled",
+                      "fundingtemporarilydisabled",
+                      "withdrawalonly",
+                      "workinprogress"
+                    ],
+                    "description": "Status of the asset."
+                  },
+                  "precision": {
+                    "type": "integer",
+                    "description": "Maximum precision for asset ledger, balances."
+                  },
+                  "precision_display": {
+                    "type": "integer",
+                    "description": "Recommended display precision."
+                  },
+                  "borrowable": {
+                    "type": "boolean",
+                    "description": "Flag if asset is borrowable."
+                  },
+                  "collateral_value": {
+                    "type": "number",
+                    "description": "Valuation as margin collateral, if applicable."
+                  },
+                  "margin_rate": {
+                    "type": "number",
+                    "description": "Interest rate to borrow the asset."
+                  },
+                  "multiplier": {
+                    "type": "number",
+                    "description": "Multiplier of the tokenised asset -- fixed conversion rate of the token."
+                  },
+                  "class": {
+                    "type": "string",
+                    "description": "Asset class, e.g. `currency`."
+                  }
+                },
+                "required": [
+                  "id"
+                ]
+              }
+            },
+            "pairs": {
+              "type": "array",
+              "description": "Tradeable pairs included in this push.",
+              "items": {
+                "title": "InstrumentPair",
+                "type": "object",
+                "description": "Reference data for one tradeable pair.",
+                "properties": {
+                  "symbol": {
+                    "type": "string",
+                    "description": "The symbol of the currency pair, e.g. `\"BTC/USD\"`."
+                  },
+                  "base": {
+                    "type": "string",
+                    "description": "Asset identifier of the base currency."
+                  },
+                  "quote": {
+                    "type": "string",
+                    "description": "Asset identifier of the quote currency."
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "cancel_only",
+                      "delisted",
+                      "limit_only",
+                      "maintenance",
+                      "online",
+                      "post_only",
+                      "reduce_only",
+                      "work_in_progress"
+                    ],
+                    "description": "Status of the pair."
+                  },
+                  "qty_precision": {
+                    "type": "integer",
+                    "description": "Maximum precision used for order quantities."
+                  },
+                  "qty_increment": {
+                    "type": "number",
+                    "description": "Minimum quantity increment for new orders."
+                  },
+                  "qty_min": {
+                    "type": "number",
+                    "description": "Minimum quantity, in base currency, for new orders."
+                  },
+                  "price_precision": {
+                    "type": "integer",
+                    "description": "Maximum precision used for order prices."
+                  },
+                  "price_increment": {
+                    "type": "number",
+                    "description": "Minimum price increment for new orders."
+                  },
+                  "cost_precision": {
+                    "type": "integer",
+                    "description": "Maximum precision used for cost prices."
+                  },
+                  "cost_min": {
+                    "type": "number",
+                    "description": "Minimum cost (price * qty) for new orders."
+                  },
+                  "has_index": {
+                    "type": "boolean",
+                    "description": "Whether the pair has an index available, e.g. for stop-loss triggers."
+                  },
+                  "marginable": {
+                    "type": "boolean",
+                    "description": "Whether the pair can be traded on margin."
+                  },
+                  "margin_initial": {
+                    "type": "number",
+                    "description": "Initial margin requirement, in percent. Present on marginable pairs only."
+                  },
+                  "position_limit_long": {
+                    "type": "integer",
+                    "description": "Limit for long positions. Present on marginable pairs only."
+                  },
+                  "position_limit_short": {
+                    "type": "integer",
+                    "description": "Limit for short positions. Present on marginable pairs only."
+                  },
+                  "ws_display_price_precision": {
+                    "type": "integer",
+                    "description": "Recommended display precision for prices in WebSocket feeds."
+                  },
+                  "tick_size": {
+                    "type": "number",
+                    "deprecated": true,
+                    "description": "Minimum price increment for new orders. Deprecated -- use `price_increment`."
+                  }
+                },
+                "required": [
+                  "symbol"
+                ]
+              }
+            }
+          },
+          "required": [
+            "assets",
+            "pairs"
+          ]
+        }
+      },
+      "required": [
+        "channel",
+        "type",
+        "data"
+      ]
+    }
+  },
+  "envelope": {
+    "payload": "",
+    "verb": {
+      "path": "method",
+      "subscribe": "subscribe",
+      "unsubscribe": "unsubscribe"
+    }
+  },
+  "notes": [
+    "`data` is a single object (`{assets, pairs}`), not an array, unlike every other market-data channel in this batch -- kept as-is rather than force-fit into the `data: array` pattern the others share. No field on this page carries a `required` tag at all; `id` (assets) and `symbol` (pairs) are marked required here as the sole always-present identifiers evidenced by every worked example (snapshot and update alike), everything else is `NotRequired` since the update example shows a partial asset entry and several pair fields are explicitly documented as conditional ('On marginable pairs only'). Note the venue is internally inconsistent on enum casing between this endpoint and `status`: asset `status` uses no-underscore values (`workinprogress`) while pair `status` and the `status` channel's `system` both use underscored values (`work_in_progress`, `cancel_only`) -- both are transcribed verbatim from the docs, not normalized."
+  ]
+}

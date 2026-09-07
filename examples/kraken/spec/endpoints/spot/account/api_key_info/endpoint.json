@@ -1,0 +1,124 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/account-data/get-api-key-info",
+  "meta": {
+    "signed": true
+  },
+  "redacted": [
+    "nonce"
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/private/GetApiKeyInfo",
+    "method": "POST",
+    "description": "Retrieve information about the API key used to make the request, including its name, permissions, restrictions, and usage timestamps.\n\n**API Key Permissions Required:** `None`",
+    "request": {
+      "title": "ApiKeyInfoRequest",
+      "type": "object",
+      "properties": {
+        "otp": {
+          "description": "Two-factor authentication password, required only if 2FA is configured for the API key.",
+          "type": "string"
+        }
+      }
+    },
+    "response": {
+      "title": "ApiKeyInfo",
+      "description": "Information about the API key used to make the request.",
+      "type": "object",
+      "properties": {
+        "apiKeyName": {
+          "description": "Name/label assigned to the API key.",
+          "type": "string"
+        },
+        "apiKey": {
+          "description": "The API key string.",
+          "type": "string"
+        },
+        "nonce": {
+          "description": "Current nonce value tracked for the API key.",
+          "type": "string"
+        },
+        "nonceWindow": {
+          "description": "Custom nonce window value (0 if not configured).",
+          "type": "integer",
+          "format": "int64"
+        },
+        "permissions": {
+          "description": "Permissions assigned to the API key. Values correspond to the API key permission settings: `query-funds` (Funds - Query), `add-funds` (Funds - Deposit), `withdraw-funds` (Funds - Withdraw), `earn-funds` (Funds - Earn), `query-open-trades` (Orders and trades - Query open orders & trades), `query-closed-trades` (Orders and trades - Query closed orders & trades), `modify-trades` (Orders and trades - Create & modify orders), `close-trades` (Orders and trades - Cancel & close orders), `query-ledger` (Data - Query ledger entries), `export-data` (Data - Export data), `create-ws-token` (WebSocket interface - On), `add-withdraw-address` (Add withdrawal addresses), `update-withdraw-address` (Update withdrawal addresses).",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "query-funds",
+              "add-funds",
+              "withdraw-funds",
+              "earn-funds",
+              "query-open-trades",
+              "query-closed-trades",
+              "modify-trades",
+              "close-trades",
+              "query-ledger",
+              "export-data",
+              "create-ws-token",
+              "add-withdraw-address",
+              "update-withdraw-address"
+            ]
+          }
+        },
+        "iban": {
+          "description": "IIBAN (Internal IBAN) of the account associated with the API key.",
+          "type": "string"
+        },
+        "validUntil": {
+          "description": "Unix timestamp for key expiration (0 if not set).",
+          "type": "string"
+        },
+        "queryFrom": {
+          "description": "Unix timestamp for the earliest allowed query date (0 if not set).",
+          "type": "string"
+        },
+        "queryTo": {
+          "description": "Unix timestamp for the latest allowed query date (0 if not set).",
+          "type": "string"
+        },
+        "createdTime": {
+          "description": "Unix timestamp of when the API key was created.",
+          "type": "string",
+          "format": "epoch-seconds"
+        },
+        "modifiedTime": {
+          "description": "Unix timestamp of when the API key was last modified.",
+          "type": "string",
+          "format": "epoch-seconds"
+        },
+        "ipAllowlist": {
+          "description": "IP addresses/ranges allowed to use this API key (empty if unrestricted).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "lastUsed": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Unix timestamp of when the API key was last used (`null` if never used)."
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "Dropped the redundant `spot.account.get_api_key_info` -> `spot.account.api_key_info` prefix per the `Get`-drop naming convention. `permissions` items are enumerated against the 13-value table the description documents."
+  ]
+}

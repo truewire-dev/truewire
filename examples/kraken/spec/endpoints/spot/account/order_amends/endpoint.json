@@ -1,0 +1,126 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/account-data/get-order-amends",
+  "meta": {
+    "signed": true
+  },
+  "redacted": [
+    "nonce"
+  ],
+  "unverified": {
+    "reason": "requires_state",
+    "detail": "No orders exist on this account to look up amend history for -- needs a real order_id."
+  },
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/private/OrderAmends",
+    "method": "POST",
+    "description": "Retrieve an audit trail of amend transactions on the specified order. The list is ordered by ascending amend timestamp; the first entry contains the original order parameters and has `amend_type` of `original`.\n\n**API Key Permissions Required:** `Orders and trades - Query open orders & trades` or `Orders and trades - Query closed orders & trades`, depending on the status of the order.",
+    "request": {
+      "title": "OrderAmendsRequest",
+      "type": "object",
+      "required": [
+        "order_id"
+      ],
+      "properties": {
+        "order_id": {
+          "description": "The Kraken order identifier for the amended order.",
+          "type": "string"
+        },
+        "rebase_multiplier": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "rebased",
+                "base"
+              ],
+              "default": "rebased"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional parameter for viewing xstocks data. `rebased` displays in terms of underlying equity, `base` displays in terms of SPV tokens."
+        }
+      }
+    },
+    "response": {
+      "title": "OrderAmends",
+      "description": "The amend transaction history for one order.",
+      "type": "object",
+      "properties": {
+        "count": {
+          "description": "Total count of new and amend transactions (including the original order).",
+          "type": "integer"
+        },
+        "amends": {
+          "description": "Amend transactions, ordered by ascending amend timestamp.",
+          "type": "array",
+          "items": {
+            "title": "OrderAmend",
+            "description": "One amend transaction.",
+            "type": "object",
+            "properties": {
+              "amend_id": {
+                "description": "Kraken amend identifier.",
+                "type": "string"
+              },
+              "amend_type": {
+                "description": "The type of amend transaction: `original` (original order values on order entry), `user` (user-requested amendment), or `restated` (engine order maintenance amendment).",
+                "type": "string",
+                "enum": [
+                  "original",
+                  "user",
+                  "restated"
+                ]
+              },
+              "order_qty": {
+                "description": "Order quantity in terms of the base asset.",
+                "type": "string"
+              },
+              "display_qty": {
+                "description": "The quantity shown in the book for iceberg orders.",
+                "type": "string"
+              },
+              "remaining_qty": {
+                "description": "Remaining un-traded quantity on the order.",
+                "type": "string"
+              },
+              "limit_price": {
+                "description": "The limit price restriction on the order.",
+                "type": "string"
+              },
+              "trigger_price": {
+                "description": "The trigger price on trigger order types.",
+                "type": "string"
+              },
+              "reason": {
+                "description": "Description of the reason for this amend.",
+                "type": "string"
+              },
+              "post_only": {
+                "description": "Indicates if the transaction was restricted from taking liquidity.",
+                "type": "boolean"
+              },
+              "timestamp": {
+                "description": "The UNIX timestamp for the amend transaction, in nanosecond precision.",
+                "type": "integer",
+                "format": "epoch-nanos"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "Upstream's OpenAPI `required` array lists `txid` (copied from a sibling operation), but the actual field is `order_id`, which the doc page and example both confirm is required. Corrected here to `required: [\"order_id\"]`. No pagination block: `count` is a plain total, not paired with any offset/limit parameter -- the whole amend history is returned in one response.",
+    "`amends[].timestamp` declares `format: \"epoch-nanos\"` (rule 3): the field's own description states nanosecond precision (an integer UNIX timestamp in nanoseconds), which is now a supported format -- renders to the client core's `TimestampNanos` (`typed_core.times.EpochConverter.nanoseconds()`)."
+  ]
+}

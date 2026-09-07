@@ -1,0 +1,87 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/market-data/get-asset-info",
+  "meta": {},
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/public/Assets",
+    "method": "GET",
+    "description": "Get information about the assets that are available for deposit, withdrawal, trading and earn.",
+    "request": {
+      "title": "AssetsRequest",
+      "type": "object",
+      "properties": {
+        "asset": {
+          "type": "string",
+          "description": "Comma delimited list of assets to get info on (optional, default all available assets)."
+        },
+        "aclass": {
+          "type": "string",
+          "enum": [
+            "currency",
+            "tokenized_asset"
+          ],
+          "default": "currency",
+          "description": "Filters the asset class to retrieve: `currency` (spot currency pairs) or `tokenized_asset` (xstocks)."
+        },
+        "assetVersion": {
+          "type": "integer",
+          "enum": [
+            1
+          ],
+          "description": "Controls whether response keys and asset identifier fields use Kraken's internal names or display names. Omitted (default): internal names are used, asset keys use the legacy `X`/`Z`-prefixed format (`XXBT`, `ZUSD`). `assetVersion=1`: display names are used, asset keys become their canonical display names (`BTC`, `USD`). Only `assetVersion=1` is currently supported. The `altname` field is not affected by this parameter."
+        }
+      }
+    },
+    "response": {
+      "description": "Asset id (or display name, per `assetVersion`) mapped to its info.",
+      "type": "object",
+      "additionalProperties": {
+        "title": "AssetInfo",
+        "description": "One asset's deposit/withdrawal/trading/earn info.",
+        "type": "object",
+        "properties": {
+          "aclass": {
+            "type": "string",
+            "description": "Asset class."
+          },
+          "altname": {
+            "type": "string",
+            "description": "Alternate name."
+          },
+          "decimals": {
+            "type": "integer",
+            "description": "Number of decimal places for record keeping amounts of this asset."
+          },
+          "display_decimals": {
+            "type": "integer",
+            "description": "Number of decimal places shown for display purposes in frontends."
+          },
+          "collateral_value": {
+            "type": "number",
+            "description": "Valuation as margin collateral, if applicable."
+          },
+          "status": {
+            "type": "string",
+            "description": "Status of the asset.",
+            "enum": [
+              "enabled",
+              "deposit_only",
+              "withdrawal_only",
+              "funding_temporarily_disabled"
+            ]
+          },
+          "margin_rate": {
+            "type": "string",
+            "description": "Interest rate charged when borrowing this asset for margin trading, as a decimal string."
+          }
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  }
+}

@@ -1,0 +1,107 @@
+{
+  "docs": "https://docs.kraken.com/api-reference/funding/get-deposit-addresses",
+  "meta": {
+    "signed": true
+  },
+  "redacted": [
+    "nonce"
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/0/private/DepositAddresses",
+    "method": "POST",
+    "description": "Retrieve (or generate a new) deposit address for a particular asset and method. Requires the `Funds permissions - Query` API key permission.",
+    "request": {
+      "title": "DepositAddressesRequest",
+      "type": "object",
+      "required": [
+        "asset",
+        "method"
+      ],
+      "properties": {
+        "asset": {
+          "type": "string",
+          "description": "Asset being deposited."
+        },
+        "aclass": {
+          "type": "string",
+          "description": "Asset class (optional). Only `currency` is broadly used today; `tokenized_asset` covers xstocks-style tokenized equities.",
+          "enum": [
+            "currency",
+            "tokenized_asset"
+          ],
+          "default": "currency"
+        },
+        "method": {
+          "type": "string",
+          "description": "Name of the deposit method."
+        },
+        "new": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether or not to generate a new address."
+        },
+        "amount": {
+          "description": "Amount you wish to deposit (only required for `method=Bitcoin Lightning`).",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        }
+      }
+    },
+    "response": {
+      "type": "array",
+      "description": "Deposit addresses for the requested asset and method.",
+      "items": {
+        "title": "DepositAddress",
+        "type": "object",
+        "description": "One deposit address for a particular asset and method.",
+        "required": [
+          "address",
+          "expiretm"
+        ],
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Deposit address."
+          },
+          "expiretm": {
+            "type": "string",
+            "description": "Expiration time as a unix timestamp, or `0` if not expiring."
+          },
+          "new": {
+            "type": "boolean",
+            "description": "Whether or not the address has ever been used."
+          },
+          "tag": {
+            "type": "string",
+            "description": "Destination tag for XRP deposit addresses, or memo for STX/XLM/EOS deposit addresses."
+          },
+          "memo": {
+            "type": "string",
+            "description": "Memo for some deposit addresses (seen alongside `tag` in Kraken's own documented example response, though this property is not declared on the upstream schema -- see this endpoint's `notes`)."
+          }
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "result"
+  },
+  "notes": [
+    "Upstream `requestBody` requires `nonce`; dropped from this schema since the core's `authed_request` (`core/transport/http.py`) injects a strictly-increasing nonce into every private call automatically -- it is never a caller-supplied parameter, matching the existing hand-written `deposit_methods(self, asset)` signature, which takes none.",
+    "Upstream declares `amount` with `oneOf` (string/integer/number); rewritten as `anyOf` per spec-authoring rule 4 (`oneOf`/`allOf` raise `NotImplementedError` in the parser).",
+    "Upstream's documented example response includes an entry with a `memo` property (`{\"address\": \"krakenkraken\", \"expiretm\": \"0\", \"memo\": \"4150096490\"}`), but the `address` component schema only declares `address`/`expiretm`/`new`/`tag` -- `memo` is not a declared property, even though `tag`'s own description says it \"contains tags for XRP... and memos for STX, XLM, and EOS deposit addresses\". Added `memo` as an optional property to match the documented example rather than silently drop a field the venue is shown to actually return."
+  ]
+}

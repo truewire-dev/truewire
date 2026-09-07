@@ -1,0 +1,5 @@
+{
+  "description": "Private, token-authenticated Spot WebSocket v2 channels: real-time balance\nupdates and order execution reports.",
+  "upstream": "https://docs.kraken.com/exchange/api-reference/spot-websocket",
+  "core": "socket"
+}

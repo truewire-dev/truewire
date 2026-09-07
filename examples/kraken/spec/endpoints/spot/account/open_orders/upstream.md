@@ -1,0 +1,30 @@
+# Get Open Orders
+
+`POST /private/OpenOrders` -- retrieves information about currently open orders. Requires
+the `Orders and trades - Query open orders & trades` API key permission.
+
+No pagination parameters exist -- every open order matching `userref`/`cl_ord_id`
+filters is returned in one response. `trades: true` additionally includes the list of
+trade IDs related to each order's position.
+
+## Example response
+
+```json
+{
+  "error": [],
+  "result": {
+    "open": {
+      "OQCLML-BW3P3-BUCMWZ": {
+        "refid": null, "userref": 0, "status": "open",
+        "opentm": 1688666559.8974, "starttm": 0, "expiretm": 0,
+        "descr": {"pair": "XBTUSD", "type": "buy", "ordertype": "limit", "price": "30010.0", "price2": "0", "leverage": "none", "order": "buy 1.25000000 XBTUSD @ limit 30010.0", "close": ""},
+        "vol": "1.25000000", "vol_exec": "0.37500000", "cost": "11253.7", "fee": "0.00000",
+        "price": "30010.0", "stopprice": "0.00000", "limitprice": "0.00000", "misc": "", "oflags": "fciq",
+        "trades": ["TCCCTY-WE2O6-P3NB37"]
+      }
+    }
+  }
+}
+```
+
+Reference: [Get Open Orders](https://docs.kraken.com/api-reference/account-data/get-open-orders)

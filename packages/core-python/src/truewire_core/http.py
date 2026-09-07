@@ -1,10 +1,46 @@
-from typing_extensions import Any, Mapping
+from typing_extensions import Any, Iterator, Mapping
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 import asyncio
 import os
 import httpx
 
 from truewire_core.exceptions import NetworkError
+
+
+@dataclass(frozen=True)
+class Exchange:
+  """One request and the response it got, exactly as they crossed the wire."""
+  request: httpx.Request
+  response: httpx.Response
+
+
+_recording: ContextVar[list[Exchange] | None] = ContextVar('truewire_http_recording', default=None)
+
+
+@contextmanager
+def recording() -> Iterator[list[Exchange]]:
+  """Record every exchange any `HttpClient` makes inside the block, in order.
+
+  What a `truewire capture` needs and nothing more: the wire-level request and response,
+  before the client core unwraps an envelope or maps an error, so a recorded example
+  describes what the API actually sent. Scoped to the current task via a context variable,
+  so concurrent callers outside the block record nothing.
+
+  Examples:
+    ```python
+    with recording() as exchanges:
+      pet = await client.pets.get_pet(pet_id=42)
+    status, body = exchanges[-1].response.status_code, exchanges[-1].response.json()
+    ```
+  """
+  exchanges: list[Exchange] = []
+  token = _recording.set(exchanges)
+  try:
+    yield exchanges
+  finally:
+    _recording.reset(token)
 
 def _default_limits() -> httpx.Limits:
   if os.environ.get('HTTPS_PROXY') or os.environ.get('HTTP_PROXY'):
@@ -57,12 +93,16 @@ class HttpClient:
   ):
     try:
       client = await self.client
-      return await client.request(
+      response = await client.request(
         method, url, params=params, cookies=cookies, json=json,
         content=content, data=data, files=files, auth=auth, follow_redirects=follow_redirects,
         timeout=timeout, extensions=extensions,
         headers=headers,
       )
+      exchanges = _recording.get()
+      if exchanges is not None:
+        exchanges.append(Exchange(request=response.request, response=response))
+      return response
     except httpx.HTTPError as e:
       req = f'{method} {url}'
       raise NetworkError(f'Error sending request to {req}', *e.args) from e

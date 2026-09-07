@@ -89,6 +89,6 @@
     }
   },
   "notes": [
-    "The `page1`..`page4` examples are one real walk over the repository at 11 commits with `per_page: 3`: three full pages and a short fourth, which is what ends `list_commits_paged`."
+    "The `page1`..`page4` examples are one real walk with `per_page: 3`, pinned to the 0.1.0 release commit through `sha` so re-recording yields the same 11 commits: three full pages and a short fourth, which is what ends `list_commits_paged`."
   ]
 }

@@ -89,7 +89,13 @@ def load_client(project: Project, new_kwargs: dict[str, Any]) -> Any:
   src = str(project.python_src)
   if src not in sys.path:
     sys.path.insert(0, src)
-  module = importlib.import_module(project.package_name)
+  # Import the package as it is on disk now: a `generate` in this same process imported
+  # the placeholder package first (the generator imports the target to resolve its core),
+  # and that stale module would otherwise be returned from the import cache.
+  package = project.package_name
+  for name in [n for n in sys.modules if n == package or n.startswith(package + '.')]:
+    del sys.modules[name]
+  module = importlib.import_module(package)
   root = getattr(module, root_class_name(project))
   return root.new(**new_kwargs)
 

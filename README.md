@@ -20,6 +20,7 @@ truewire import openapi spec.yaml     # optional: seed spec/ from an OpenAPI 3.0
 truewire check                        # lint the spec: titles, enums, formats, pagination, envelopes
 truewire generate python              # write the typed client into src/petstore
 pip install -e .                      # the project ships its own pyproject.toml
+truewire capture pets.get_pet --request '{"petId": 42}'   # record one live call as an example pair
 truewire mock                         # serve every recorded example over HTTP and WS on localhost
 ```
 
@@ -50,7 +51,7 @@ async with Petstore.new(base_url='http://127.0.0.1:8321') as client:
   pet = await client.pets.get_pet(pet_id=42)   # served from spec/endpoints/pets/get_pet/examples/
 ```
 
-The full CLI is `truewire init | import | check | examples | surface | generate | mock | mcp | standards | docs`. Run `truewire --help` for each command.
+The full CLI is `truewire init | import | capture | check | examples | surface | generate | mock | mcp | standards | docs`. Run `truewire --help` for each command.
 
 Hand the same endpoints to an agent as MCP tools, one per endpoint, answered through the generated client:
 
@@ -65,7 +66,7 @@ truewire mcp --project petstore --new base_url=https://petstore.example.com/v1
 | --- | --- |
 | Spec format | One directory per endpoint: `endpoint.json` (JSON Schema 2020-12 request and response), `upstream.md`, and `examples/`. Declared blocks for `pagination`, `envelope`, `push`, `redacted`, `unverified`, `meta`. Not OpenAPI, but imports from it. |
 | Checks | `truewire check` runs 18 lint rules over the spec (titles, enums, timestamp formats, positional rows, unions, descriptions, pagination references, envelope paths, stream verbs). `truewire examples --require-verified` fails when an endpoint has neither a recorded example nor a stated reason. `truewire surface` fails when a spec'd endpoint has no reachable method. |
-| Examples and mock server | Recorded request/response pairs and WebSocket captures, replayed by `truewire mock` over real HTTP and WS: subscribe/unsubscribe lifecycle, push-on-connect, push-after-RPC, correlation ids, declared redaction, and a 409 when two examples match one request. |
+| Examples and mock server | Recorded request/response pairs (`truewire capture` records a live call through your own client and core, so the pair carries the real headers, signing and envelope) and WebSocket captures, replayed by `truewire mock` over real HTTP and WS: subscribe/unsubscribe lifecycle, push-on-connect, push-after-RPC, correlation ids, declared redaction, and a 409 when two examples match one request. |
 | Python generator and `truewire-core` | `truewire generate python` emits async endpoint methods with typed `TypedDict` responses, `validate` and `transport` keywords, `_paged` walkers, and router classes with docstrings. `truewire-core` is the small MIT runtime: HTTP, WebSocket streams and RPC, validation, paging, timestamps, errors. |
 | Standards | `truewire standards` runs the checks that guard a client's public surface: docstring shape, duplicate schemas, secret placeholders in examples, router coverage, no `__call__` classes. |
 | Docs | `truewire docs check` type-checks every code block in your README and docs against the generated package, so an example that no longer compiles fails CI. |

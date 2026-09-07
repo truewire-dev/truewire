@@ -1,8 +1,10 @@
 name: Release truewire (crates.io)
 
-# Manual: publishes crates/truewire at the version in its Cargo.toml. Uses the
-# CARGO_REGISTRY_TOKEN repository secret for the first publish; once the crate exists,
-# configure Trusted Publishing on crates.io for this workflow and drop the secret.
+# Manual: publishes crates/truewire at the version in its Cargo.toml, skipping a version
+# that is already on crates.io. Authenticates with crates.io Trusted Publishing (OIDC):
+# on crates.io the trusted publisher is owner truewire-dev, repository truewire, workflow
+# release-crate.yml, environment crates-io. A CARGO_REGISTRY_TOKEN secret is used instead
+# only if it is set (first publish before the trusted publisher exists).
 on:
   workflow_dispatch:
 
@@ -13,6 +15,7 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    environment: crates-io
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -23,9 +26,13 @@ jobs:
           code=$(curl -s -o /dev/null -w "%{http_code}" "https://crates.io/api/v1/crates/truewire/$version")
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "published=$([ "$code" = "200" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - name: Trusted Publishing token
+        if: steps.check.outputs.published == 'false' && !secrets.CARGO_REGISTRY_TOKEN
+        id: auth
+        uses: rust-lang/crates-io-auth-action@v1
       - name: Publish
         if: steps.check.outputs.published == 'false'
         working-directory: crates/truewire
         env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN || steps.auth.outputs.token }}
         run: cargo publish --allow-dirty

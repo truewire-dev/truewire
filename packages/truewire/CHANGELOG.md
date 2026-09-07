@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.0 (2026-09-07)
+
+- `truewire import registry <name>`: start a project from a spec in
+  [truewire-dev/registry](https://github.com/truewire-dev/registry): copies the spec tree,
+  merges the `[cores]` sections it needs into `truewire.toml`, runs `check`, and names any
+  core the project still lacks a `[python.cores]` entry for. `--registry` accepts a git URL
+  or a local checkout.
+- Agent skills under `.agents/skills/` (discover, spec, core, implement, docs, review),
+  proven by an agent run on endpoints not in the repository and revised from its findings.
+- A `page` walk ended by `short_page` measures against the size parameter's documented
+  `default` when the caller omits the size, instead of ending only on an empty page.
+- `truewire examples` counts an endpoint with `meta.public: true` as public.
+- `capture --help` shows a paginated walk recorded with the page index explicit.
+
 ## 0.2.0 (2026-09-07)
 
 - `truewire capture <function> --request '{...}'`: call one endpoint against the live API

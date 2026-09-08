@@ -269,6 +269,19 @@ def test_a_stale_unverified_declaration_fails_regardless_of_require_verified(
   assert 'declare `unverified` despite having' in capsys.readouterr().err
 
 
+def test_a_stale_unverified_failure_names_the_endpoints_without_verbose(tmp_path, capsys):
+  """The fix is one deletion per endpoint, so the failure says where; before, the list
+  was behind `--verbose` and the message told the reader to rerun."""
+  write_client_with_a_stale_unverified_endpoint(tmp_path)
+
+  with pytest.raises(typer.Exit):
+    examples(path=str(tmp_path), verbose=False, require_verified=False)
+
+  err = capsys.readouterr().err
+  assert 'remove the stale declaration from:\n  http/widget_0' in err
+  assert '--verbose' not in err
+
+
 def write_subdivided_client(root: Path, *, subdivisions: dict[str, int]) -> None:
   """Build a synthetic client tree with one named subdivision per entry.
 

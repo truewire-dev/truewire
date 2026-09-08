@@ -203,15 +203,14 @@ def examples(
 
     if totals['stale_unverified']:
       # Unconditional: a stale `unverified` declaration is a spec correctness bug, not a
-      # coverage gap, so it fails regardless of `--require-verified`.
-      if verbose:
-        typer.echo('')
-        typer.echo('Stale `unverified` declarations (paired examples already exist):')
-        for path in stale_unverified:
-          typer.echo(path)
+      # coverage gap, so it fails regardless of `--require-verified`. The endpoints are
+      # named in the failure itself: the fix is one deletion per line, and needing
+      # `--verbose` to learn where was the complaint (`truewire capture` now drops the
+      # block itself when it writes the pair).
       raise ExamplesError(
         f'{totals["stale_unverified"]} endpoint(s) declare `unverified` despite having '
-        f'paired examples; remove the stale declaration (rerun with --verbose to list them)'
+        f'paired examples; remove the stale declaration from:\n'
+        + '\n'.join(f'  {path}' for path in stale_unverified)
       )
 
     if require_verified:

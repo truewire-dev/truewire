@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **`truewire capture` drops the stale `unverified` block.** The pair it writes is the
+  evidence the declaration said was missing (ADR 0001), and leaving the block in place
+  failed `truewire examples` on the next run. `capture` now removes it from
+  `endpoint.json`, every other key kept in place, and says so. The `examples` failure for
+  a stale declaration names the endpoints in the message itself instead of asking for
+  `--verbose`.
+
 ## 0.6.0 (2026-09-08)
 
 - **`truewire init --template bearer|hmac|jsonrpc|ws`** (`docs/cores.md`): a hand-written

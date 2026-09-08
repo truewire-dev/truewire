@@ -72,7 +72,13 @@ What works, in the repository (branch `arch/ts-generator`, then main): `@truewir
 
 Done when: a project generates a TypeScript package that type-checks, validates at runtime, and passes the same mock-backed tests as the Python package generated from the same spec.
 
-### 11. Docs site generator
+### 11. Rust runtime and generator
+
+Status: in progress. The runtime exists: `truewire-core` (`crates/truewire-core`) holds the core contract as traits (`HttpEndpoint<Meta>`, `CommandEndpoint<Meta>`, `StreamEndpoint<Meta>`), `HttpClient` over `reqwest` with wire-level `recording()`, `serde` validation with JSON-pointer errors and one newtype per narrowing scalar format (`TimestampMillis`, `DateIso`, `DecimalString`, ...), `PaginatedResponse` with the terminator helpers a generated walker calls, and `ws::Socket` over `tokio-tungstenite` with request/reply correlation, channel subscriptions and serial acknowledgements. `cargo test`, `cargo clippy -- -D warnings` and `cargo fmt --check` run in CI. Not done: `truewire generate rust`, an example project, publishing to crates.io (the `truewire` crate name is reserved by `crates/truewire`). See [docs/rust.md](docs/rust.md).
+
+Done when: a project generates a Rust crate that compiles, validates at runtime, and passes the same mock-backed tests as the Python and TypeScript packages generated from the same spec, with `truewire-core` on crates.io.
+
+### 12. Docs site generator
 
 Status: new. Each endpoint already has a description, an upstream link, a request schema, a response schema and real recorded examples. A docs generator renders that as a site where every example is a real recording, not a hand-written guess.
 
@@ -80,17 +86,17 @@ Done when: `truewire docs build` produces a static site for a project, every cod
 
 ## P3: hosted
 
-### 12. Truewire Cloud
+### 13. Truewire Cloud
 
 Status: new. A hosted registry with private specs, managed regeneration and publishing (a GitHub App: spec change, pull request, package release), and hosted mock endpoints for CI. Free for public specs.
 
 Done when: a team can push a spec change and receive a reviewed pull request with the regenerated package, and CI can point at a hosted mock URL instead of running one locally.
 
-### 13. Go generator, richer gRPC, AsyncAPI import
+### 14. Go generator, richer gRPC, AsyncAPI import
 
 Status: new. A third language, gRPC beyond unary calls, and an importer for AsyncAPI documents where they exist.
 
-Done when: each lands with the same end-to-end proof the Python and TypeScript generators have.
+Done when: each lands with the same end-to-end proof the Python, TypeScript and Rust generators have.
 
 ## Non-goals (for now)
 

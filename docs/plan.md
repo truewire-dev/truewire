@@ -167,3 +167,16 @@ The tests in `packages/truewire/test/test_plan.py` pin the GitHub example's plan
   Python backend keeps its own path for both.
 - `auth` is reserved (architecture review, item 4) and always `null`: no spec field
   declares it yet.
+- **Integer width and signedness.** `scalar{base: "integer"}` carries no range and no
+  narrower format, so a backend has to render every integer as its language's widest
+  signed type. A schema's `minimum: 0`, a `format: int32`, or an id larger than a signed
+  64-bit value cannot be expressed here, so Rust renders `i64` throughout. Python does not
+  notice (its `int` is unbounded) and TypeScript has the same blind spot behind
+  `Number.MAX_SAFE_INTEGER`. A width format, or `minimum`/`maximum` on the scalar node,
+  would close it. Found while writing the Rust runtime.
+- **Union discriminators.** `union{variants}` lists its variants in order and nothing
+  else, so a backend must try them in order. TypeScript's codec keeps the inner path and
+  message when none matches; Rust's `#[serde(untagged)]` reports only that nothing matched,
+  at the union's own path. An OpenAPI `discriminator` is dropped by `truewire import
+  openapi` and has no node here; with one, a backend could render a tagged union and give
+  an exact error. Found while writing the Rust runtime.

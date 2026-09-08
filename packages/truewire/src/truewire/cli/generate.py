@@ -1,4 +1,4 @@
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 import importlib.util
 import json
 from pathlib import Path
@@ -251,8 +251,94 @@ def typecheck_project(project: Project) -> bool:
   return True
 
 
+def generate_typescript(
+  project: Project, *, delete: bool = False, check: bool = False,
+  log: Callable[[str], None] = lambda message: None,
+):
+  """`truewire generate typescript`: render the plan through the TypeScript backend into
+  `<[typescript].src>/<[typescript].package>/`, under the same manifest discipline as the
+  Python backend (`.truewire/typescript-files.json`; `--check`, `--delete`).
+
+  Raises:
+    CodegenError: The project declares no `[typescript]` section, or the manifest is
+      missing where `--delete`/`--check` need it, or the plan cannot be built.
+  """
+  from truewire.codegen.typescript import render_package
+  from truewire.plan.build import build_plan
+  from truewire.project import NotAProject
+
+  language = 'typescript'
+  root = project.root
+  client = project.name
+  try:
+    output_root = project.typescript_package_dir
+  except NotAProject as exc:
+    raise CodegenError(str(exc))
+  manifest_path = project.manifest_path(language)
+  if delete:
+    if not manifest_path.exists():
+      raise CodegenError(
+        f'Cannot delete generated files: missing manifest {manifest_path.relative_to(root)}'
+      )
+    owned = load_generated_manifest(manifest_path)
+    deleted = reconcile_generated_output(output_root, owned, set())
+    manifest_path.unlink()
+    absent = len(owned) - deleted
+    detail = f'; {absent} already absent' if absent else ''
+    typer.echo(
+      f'Deleted {deleted} generated files for {client}{detail}; removed '
+      f'{manifest_path.relative_to(root)}.'
+    )
+    return
+
+  log(f'[{client}] building plan')
+  try:
+    plan = build_plan(project)
+  except ValueError as exc:
+    raise CodegenError(str(exc))
+  log(f'[{client}] rendering {language}')
+  rendered = render_package(plan, project)
+  planned: dict[Path, str] = {}
+  for path, content in rendered.files.items():
+    add_planned_file(planned, path=path, content=content)
+  for note in rendered.skipped:
+    typer.echo(f'skipped {note}', err=True)
+
+  if check:
+    if not manifest_path.exists():
+      raise CodegenError(
+        f'Cannot check generated files: missing manifest {manifest_path.relative_to(root)}'
+      )
+    owned = load_generated_manifest(manifest_path)
+    issues = check_generated_manifest(output_root, owned, set(planned))
+    for relative in sorted(planned):
+      destination = generated_destination(output_root, relative)
+      if destination.is_file() and destination.read_text() != planned[relative]:
+        issues.append(f'out of date: {relative}')
+    if issues:
+      typer.echo(f'Codegen manifest mismatch for {client}:', err=True)
+      for issue in issues:
+        typer.echo(f'- {issue}', err=True)
+      raise typer.Exit(code=1)
+    typer.echo(f'Codegen manifest matches {client} ({len(planned)} files).')
+    return
+
+  bootstrapping = not manifest_path.is_file()
+  previous = load_generated_manifest(manifest_path)
+  log(f'[{client}] reconciling generated files')
+  reconcile_generated_output(output_root, previous, set(planned))
+  write_planned_files(output_root, planned)
+  manifest_path.parent.mkdir(parents=True, exist_ok=True)
+  write_generated_manifest(manifest_path, planned)
+  if bootstrapping:
+    typer.echo(
+      f'Initialized {manifest_path.relative_to(root)}; preserved existing unowned files.'
+    )
+  typer.echo(f'Generated {client} ({language}) into {output_root.relative_to(root)}')
+
+
 def generate(
-  language: str = typer.Argument('python', help='Target language. Only `python` is supported today.'),
+  language: str = typer.Argument('python', help='Target language: `python` or `typescript`.'),
   project: str | None = PROJECT_OPTION,
   verbose: int = typer.Option(0, '--verbose', '-v', count=True),
   delete: Annotated[
@@ -267,7 +353,7 @@ def generate(
   """Generate the project's package from its spec, for the given language.
 
   Args:
-    language: Codegen backend to generate with. Only `python` is supported today.
+    language: Codegen backend to generate with: `python` (the default) or `typescript`.
     project: Project directory (holding `truewire.toml`); the nearest one by default.
     verbose: Repeat for more detail: `-v` logs per-stage progress, `-vv` logs every file written.
     delete: Delete manifest-owned files without loading the backend or spec.
@@ -352,6 +438,15 @@ def generate(
     suffix = '.'.join(target)
     return dots + suffix if suffix else dots
 
+  if language == 'typescript':
+    try:
+      if delete and check:
+        raise CodegenError('`--delete` and `--check` cannot be combined')
+      generate_typescript(resolve_project(project), delete=delete, check=check, log=log)
+    except CodegenError as exc:
+      typer.echo(str(exc), err=True)
+      raise typer.Exit(code=1)
+    return
   if language != 'python':
     typer.echo(f'Unsupported language for now: {language}', err=True)
     raise typer.Exit(code=1)

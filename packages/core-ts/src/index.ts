@@ -12,4 +12,7 @@ export * as t from './validation.js'
 export { parseJson, dumpJson, type Codec, type Infer, type InferObject, type OptionalCodec } from './validation.js'
 export { HttpClient, type Exchange, type HttpClientOptions, type Query, type Recording, type RequestOptions } from './http.js'
 export { PaginatedResponse, type Page, type Next, type Invoker } from './paging.js'
+export type {
+  Call, CallOptions, CommandCall, CommandEndpoint, HttpCall, HttpEndpoint, StreamEndpoint, SubscribeCall,
+} from './contract.js'
 export * as ws from './ws/index.js'

@@ -150,14 +150,32 @@ class PythonCodegenConfig(BaseModel):
   never actually read by any codegen backend."""
 
 
+class TypescriptCodegenConfig(BaseModel):
+  """The `[typescript]` section: where the generated TypeScript package goes and what its
+  root class is called. The TypeScript backend reads no per-core binding: a generated
+  class takes its core as a constructor argument typed by the `@truewire/core` contract
+  (`HttpEndpoint<Meta>`), and the hand-written `core/index.ts` satisfies it
+  structurally (ADR 0011)."""
+  model_config = ConfigDict(extra='forbid')
+
+  name: str | None = Field(default=None, min_length=1)
+  """Generated root class name; defaults to `[python].name`, else PascalCase of `[project].name`."""
+  package: str | None = Field(default=None, min_length=1)
+  """Directory of the generated package under `src` (`github` for `src/github/`). Defaults
+  to `[project].name`."""
+  src: str = 'src'
+  """Directory the package lives under, relative to the project root."""
+
+
 class CodegenConfig(BaseModel):
-  """The codegen sections of `truewire.toml` -- `[python]` is sectioned by target language so a future
-  non-Python backend gets its own section without touching this one; `cores`
-  is language-neutral and sits alongside it, keyed by the identical symbolic core name
+  """The codegen sections of `truewire.toml` -- `[python]` and `[typescript]` are sectioned by
+  target language so each backend has its own section without touching the other; `cores`
+  is language-neutral and sits alongside them, keyed by the identical symbolic core name
   `[python.cores]`/`router.json`'s own `core` field already resolve."""
   model_config = ConfigDict(extra='forbid')
 
   python: PythonCodegenConfig | None = None
+  typescript: TypescriptCodegenConfig | None = None
   cores: dict[str, CoreConfig] | None = None
   """Symbolic core name -> its declared `meta` shape. Optional per name --
   most cores need no entry at all -- and, unlike `[python.cores]`, never required to
@@ -166,10 +184,11 @@ class CodegenConfig(BaseModel):
 
 def load_codegen_config(data: dict[str, Any]) -> CodegenConfig:
   """
-  Validate the codegen sections (`cores`, `python`) of an already-decoded `truewire.toml`.
+  Validate the codegen sections (`cores`, `python`, `typescript`) of an already-decoded
+  `truewire.toml`.
 
   Args:
-    data: A mapping holding at most the `cores` and `python` keys.
+    data: A mapping holding at most the `cores`, `python` and `typescript` keys.
 
   Raises:
     pydantic.ValidationError: Invalid configuration.
@@ -193,4 +212,6 @@ def load_codegen_toml(root: Path) -> CodegenConfig:
     raise FileNotFoundError(f'{root}: expected truewire.toml')
   with path.open('rb') as handle:
     data = tomllib.load(handle)
-  return load_codegen_config({key: data[key] for key in ('cores', 'python') if key in data})
+  return load_codegen_config(
+    {key: data[key] for key in ('cores', 'python', 'typescript') if key in data}
+  )

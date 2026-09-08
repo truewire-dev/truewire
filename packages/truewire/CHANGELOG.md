@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 (2026-09-08)
 
 - **The generator reads a declared core contract and never imports the target package**
   (ADR 0011). Composing a child through `.new()` is declared in `truewire.toml`:

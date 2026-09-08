@@ -75,6 +75,8 @@ export type ListReleasesPagedRequest = Omit<Request, 'page'>
 export class ListReleases {
   constructor(readonly core: HttpEndpoint<DefaultMeta>) {}
 
+  /** With `validate: false`: the parsed body as it came, typed `unknown`. */
+  listReleasesPaged(request: ListReleasesPagedRequest, options: CallOptions & { validate: false }): PaginatedResponse<unknown, number>
   /**
    * List releases, newest first. Includes drafts and pre-releases the caller can see.
    *
@@ -82,6 +84,7 @@ export class ListReleases {
    *
    * @see https://docs.github.com/en/rest/releases/releases#list-releases
    */
+  listReleasesPaged(request: ListReleasesPagedRequest, options?: CallOptions): PaginatedResponse<Release, number>
   listReleasesPaged(request: ListReleasesPagedRequest, options?: CallOptions): PaginatedResponse<Release, number> {
     const next = async (page: number): Promise<[Release[], number | null]> => {
       const response = await this.listReleases({ ...request, page }, options)
@@ -92,11 +95,14 @@ export class ListReleases {
     return new PaginatedResponse(1, next)
   }
 
+  /** With `validate: false`: the parsed body as it came, typed `unknown`. */
+  listReleases(request: Request, options: CallOptions & { validate: false }): Promise<unknown>
   /**
    * List releases, newest first. Includes drafts and pre-releases the caller can see.
    *
    * @see https://docs.github.com/en/rest/releases/releases#list-releases
    */
+  listReleases(request: Request, options?: CallOptions): Promise<Releases>
   async listReleases(request: Request, options?: CallOptions): Promise<Releases> {
     return this.core.request({
       method: 'GET',

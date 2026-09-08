@@ -28,24 +28,32 @@ export class Repos {
     this.listTags_ = new listTags.ListTags(core)
   }
 
+  /** With `validate: false`: the parsed body as it came, typed `unknown`. */
+  get(request: get.Request, options: CallOptions & { validate: false }): Promise<unknown>
   /**
    * Get a repository. Metadata, counts and the license as GitHub reports them.
    *
    * @see https://docs.github.com/en/rest/repos/repos#get-a-repository
    */
+  get(request: get.Request, options?: CallOptions): Promise<get.Repository>
   get(request: get.Request, options?: CallOptions): Promise<get.Repository> {
     return this.get_.get(request, options)
   }
 
+  /** With `validate: false`: the parsed body as it came, typed `unknown`. */
+  getCommit(request: getCommit.Request, options: CallOptions & { validate: false }): Promise<unknown>
   /**
    * Get one commit with its diff statistics and changed files.
    *
    * @see https://docs.github.com/en/rest/commits/commits#get-a-commit
    */
+  getCommit(request: getCommit.Request, options?: CallOptions): Promise<getCommit.CommitDetail>
   getCommit(request: getCommit.Request, options?: CallOptions): Promise<getCommit.CommitDetail> {
     return this.getCommit_.getCommit(request, options)
   }
 
+  /** With `validate: false`: the parsed body as it came, typed `unknown`. */
+  listCommitsPaged(request: listCommits.ListCommitsPagedRequest, options: CallOptions & { validate: false }): PaginatedResponse<unknown, number>
   /**
    * List commits reachable from a branch or sha, newest first. Pages are joined by `page`/`per_page`; the generated `list_commits_paged` walks them until a short page.
    *
@@ -53,19 +61,25 @@ export class Repos {
    *
    * @see https://docs.github.com/en/rest/commits/commits#list-commits
    */
+  listCommitsPaged(request: listCommits.ListCommitsPagedRequest, options?: CallOptions): PaginatedResponse<Commit, number>
   listCommitsPaged(request: listCommits.ListCommitsPagedRequest, options?: CallOptions): PaginatedResponse<Commit, number> {
     return this.listCommits_.listCommitsPaged(request, options)
   }
 
+  /** With `validate: false`: the parsed body as it came, typed `unknown`. */
+  listCommits(request: listCommits.Request, options: CallOptions & { validate: false }): Promise<unknown>
   /**
    * List commits reachable from a branch or sha, newest first. Pages are joined by `page`/`per_page`; the generated `list_commits_paged` walks them until a short page.
    *
    * @see https://docs.github.com/en/rest/commits/commits#list-commits
    */
+  listCommits(request: listCommits.Request, options?: CallOptions): Promise<listCommits.Commits>
   listCommits(request: listCommits.Request, options?: CallOptions): Promise<listCommits.Commits> {
     return this.listCommits_.listCommits(request, options)
   }
 
+  /** With `validate: false`: the parsed body as it came, typed `unknown`. */
+  listReleasesPaged(request: listReleases.ListReleasesPagedRequest, options: CallOptions & { validate: false }): PaginatedResponse<unknown, number>
   /**
    * List releases, newest first. Includes drafts and pre-releases the caller can see.
    *
@@ -73,19 +87,25 @@ export class Repos {
    *
    * @see https://docs.github.com/en/rest/releases/releases#list-releases
    */
+  listReleasesPaged(request: listReleases.ListReleasesPagedRequest, options?: CallOptions): PaginatedResponse<listReleases.Release, number>
   listReleasesPaged(request: listReleases.ListReleasesPagedRequest, options?: CallOptions): PaginatedResponse<listReleases.Release, number> {
     return this.listReleases_.listReleasesPaged(request, options)
   }
 
+  /** With `validate: false`: the parsed body as it came, typed `unknown`. */
+  listReleases(request: listReleases.Request, options: CallOptions & { validate: false }): Promise<unknown>
   /**
    * List releases, newest first. Includes drafts and pre-releases the caller can see.
    *
    * @see https://docs.github.com/en/rest/releases/releases#list-releases
    */
+  listReleases(request: listReleases.Request, options?: CallOptions): Promise<listReleases.Releases>
   listReleases(request: listReleases.Request, options?: CallOptions): Promise<listReleases.Releases> {
     return this.listReleases_.listReleases(request, options)
   }
 
+  /** With `validate: false`: the parsed body as it came, typed `unknown`. */
+  listTagsPaged(request: listTags.ListTagsPagedRequest, options: CallOptions & { validate: false }): PaginatedResponse<unknown, number>
   /**
    * List repository tags, newest first.
    *
@@ -93,15 +113,19 @@ export class Repos {
    *
    * @see https://docs.github.com/en/rest/repos/repos#list-repository-tags
    */
+  listTagsPaged(request: listTags.ListTagsPagedRequest, options?: CallOptions): PaginatedResponse<listTags.Tag, number>
   listTagsPaged(request: listTags.ListTagsPagedRequest, options?: CallOptions): PaginatedResponse<listTags.Tag, number> {
     return this.listTags_.listTagsPaged(request, options)
   }
 
+  /** With `validate: false`: the parsed body as it came, typed `unknown`. */
+  listTags(request: listTags.Request, options: CallOptions & { validate: false }): Promise<unknown>
   /**
    * List repository tags, newest first.
    *
    * @see https://docs.github.com/en/rest/repos/repos#list-repository-tags
    */
+  listTags(request: listTags.Request, options?: CallOptions): Promise<listTags.Tags>
   listTags(request: listTags.Request, options?: CallOptions): Promise<listTags.Tags> {
     return this.listTags_.listTags(request, options)
   }

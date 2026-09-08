@@ -2,9 +2,14 @@
 pyright (`clients/kraken/pyrightconfig.json`) as this client's guardrail against a
 future change silently degrading a public return type to `Any`
 (`docs/production_standards.md` S17). Never executed -- only type-checked.
+
+The one call that is `Any` on purpose is `validate=False`: it returns the body as the
+wire sent it, and its overload says so (`reveal_type(..., expected_text='Any')` below).
 """
 
 from decimal import Decimal
+
+from typing_extensions import reveal_type
 
 from kraken import Kraken
 from kraken.spot.market_data.ticker import AssetTicker
@@ -53,8 +58,15 @@ async def market_data() -> None:
     for price, volume, timestamp in asks:
       print(price, volume, timestamp)
 
-    server_time: ServerTime = await client.spot.market_data.time(validate=False)
+    server_time: ServerTime = await client.spot.market_data.time()
     print(server_time.get('unixtime'))
+
+    raw_time = await client.spot.market_data.time(validate=False)
+    reveal_type(raw_time, expected_text='Any')
+    reveal_type(
+      client.spot.account.trades_history_paged(validate=False),
+      expected_text='AsyncIterator[Any]',
+    )
 
 
 async def account_data() -> None:
@@ -88,9 +100,8 @@ async def rest_add_order_variants() -> None:
       # ^ Kraken's own dry-run flag: a real `AddOrderMarket` field, distinct from the
       # method's own `validate=` kwarg below.
     }
-    market_result: OrderAdded = await client.spot.trading.add_order(
-      market_order, validate=False
-    )
+    market_result = await client.spot.trading.add_order(market_order, validate=False)
+    reveal_type(market_result, expected_text='Any')
     print(market_result.get('txid'))
 
     limit_order: AddOrderLimit = {
@@ -126,9 +137,8 @@ async def ws_add_order_variants() -> None:
       # ^ Kraken's dry-run flag again -- still a plain dict field here, still distinct
       # from `add_order`'s own `validate=` kwarg below.
     }
-    dry_run_result: AddOrderResult = await client.trading_ws.add_order(
-      ws_market_order, validate=False
-    )
+    dry_run_result = await client.trading_ws.add_order(ws_market_order, validate=False)
+    reveal_type(dry_run_result, expected_text='Any')
     print(dry_run_result.get('order_id'))
 
     ws_limit_order: WsAddOrderLimit = {

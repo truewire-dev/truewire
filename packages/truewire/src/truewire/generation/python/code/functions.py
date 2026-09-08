@@ -113,10 +113,23 @@ class Function:
   self-shadow a builtin generic in its return annotation (`self_shadowing_alias`).
   Emit at module scope, before the class -- `return_type` already reads the alias name."""
   decorators: list[str] = field(default_factory=list)
+  overloads: list['Function'] = field(default_factory=list)
+  """`@overload` variants rendered before this header, each closed with `...` -- this
+  header is then the implementation. A variant's own `decorators` should carry
+  `@overload`; a decorator meant for the whole function (`@deprecated`) stays on the
+  implementation, which is where a type checker reads it for every variant."""
   tab: str = '  '
 
   def code(self, *, max_line_length: int = 80) -> str:
-    """Render the header, on one line when it fits and grouped otherwise."""
+    """Render the header, on one line when it fits and grouped otherwise -- preceded by
+    every `overloads` entry as a one-line stub (`... -> T: ...`)."""
+    stubs = [
+      f'{variant.header(max_line_length=max_line_length)} ...' for variant in self.overloads
+    ]
+    return '\n'.join([*stubs, self.header(max_line_length=max_line_length)])
+
+  def header(self, *, max_line_length: int = 80) -> str:
+    """Render this header alone, `overloads` ignored, ending in the `:` its body follows."""
     arg_codes = ['self'] if self.method else []
     arg_codes.extend(arg.code() for arg in self.args)
     arg_len = sum(map(len, arg_codes))

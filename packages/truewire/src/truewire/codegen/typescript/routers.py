@@ -11,7 +11,8 @@ from typing_extensions import Mapping
 from truewire.plan.model import PackagePlan, RouterPlan
 
 from .endpoint import (
-  META_FILE, EndpointModule, endpoint_file, render_params, render_return, render_type,
+  META_FILE, EndpointModule, emit_signatures, endpoint_file, render_params, render_return,
+  render_type,
 )
 from .names import binding, camel_case, property_key
 from .printer import BANNER, relative_specifier
@@ -109,7 +110,7 @@ def render_router(
       module.aliases = {name: f'{alias}.{name}' for name in rendered.types}
       for method in rendered.methods:
         w.blank()
-        w.jsdoc(*method.doc, tags=method.tags)
+        emit_signatures(module, method)
         params = render_params(module, method.params)
         returns = render_return(module, method.returns)
         args = ', '.join(param.name for param in method.params)

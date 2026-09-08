@@ -54,6 +54,8 @@ export type ListTagsPagedRequest = Omit<Request, 'page'>
 export class ListTags {
   constructor(readonly core: HttpEndpoint<DefaultMeta>) {}
 
+  /** With `validate: false`: the parsed body as it came, typed `unknown`. */
+  listTagsPaged(request: ListTagsPagedRequest, options: CallOptions & { validate: false }): PaginatedResponse<unknown, number>
   /**
    * List repository tags, newest first.
    *
@@ -61,6 +63,7 @@ export class ListTags {
    *
    * @see https://docs.github.com/en/rest/repos/repos#list-repository-tags
    */
+  listTagsPaged(request: ListTagsPagedRequest, options?: CallOptions): PaginatedResponse<Tag, number>
   listTagsPaged(request: ListTagsPagedRequest, options?: CallOptions): PaginatedResponse<Tag, number> {
     const next = async (page: number): Promise<[Tag[], number | null]> => {
       const response = await this.listTags({ ...request, page }, options)
@@ -71,11 +74,14 @@ export class ListTags {
     return new PaginatedResponse(1, next)
   }
 
+  /** With `validate: false`: the parsed body as it came, typed `unknown`. */
+  listTags(request: Request, options: CallOptions & { validate: false }): Promise<unknown>
   /**
    * List repository tags, newest first.
    *
    * @see https://docs.github.com/en/rest/repos/repos#list-repository-tags
    */
+  listTags(request: Request, options?: CallOptions): Promise<Tags>
   async listTags(request: Request, options?: CallOptions): Promise<Tags> {
     return this.core.request({
       method: 'GET',

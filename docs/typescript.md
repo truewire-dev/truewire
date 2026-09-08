@@ -62,9 +62,12 @@ Names Truewire invents are camelCase/PascalCase (`list_commits` becomes `listCom
 (`per_page`, `html_url`), so the request object *is* the wire object and a recorded
 `request.json` is a valid argument as it stands. Every method takes the request as its
 first parameter and an options object as its second: `{ validate?: boolean; signal?:
-AbortSignal }`. `validate: false` returns the raw `JSON.parse` value cast to the response
-type, as in Python. The output is printed by the generator itself (two-space indent, sorted
-imports, JSDoc from the spec's descriptions); no formatter runs over it.
+AbortSignal }`. `validate: false` returns the raw `JSON.parse` value, typed `unknown`: each
+method is declared twice, an overload for `{ validate: false }` returning `unknown` and one
+for every other call returning the declared type, as Python's `@overload`s return `Any` and
+the record ([docs/generated.md](generated.md#validatefalse-returns-the-raw-body)). The output
+is printed by the generator itself (two-space indent, sorted imports, JSDoc from the spec's
+descriptions); no formatter runs over it.
 
 A type is an `interface` (or a `type` alias) and, beside it, a codec of the same name:
 

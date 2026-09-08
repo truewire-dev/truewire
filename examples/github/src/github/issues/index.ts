@@ -15,6 +15,8 @@ export class Issues {
     this.list_ = new list.List(core)
   }
 
+  /** With `validate: false`: the parsed body as it came, typed `unknown`. */
+  listPaged(request: list.ListPagedRequest, options: CallOptions & { validate: false }): PaginatedResponse<unknown, number>
   /**
    * List issues in a repository. GitHub returns pull requests here too; a row with `pull_request` set is one.
    *
@@ -22,15 +24,19 @@ export class Issues {
    *
    * @see https://docs.github.com/en/rest/issues/issues#list-repository-issues
    */
+  listPaged(request: list.ListPagedRequest, options?: CallOptions): PaginatedResponse<list.Issue, number>
   listPaged(request: list.ListPagedRequest, options?: CallOptions): PaginatedResponse<list.Issue, number> {
     return this.list_.listPaged(request, options)
   }
 
+  /** With `validate: false`: the parsed body as it came, typed `unknown`. */
+  list(request: list.Request, options: CallOptions & { validate: false }): Promise<unknown>
   /**
    * List issues in a repository. GitHub returns pull requests here too; a row with `pull_request` set is one.
    *
    * @see https://docs.github.com/en/rest/issues/issues#list-repository-issues
    */
+  list(request: list.Request, options?: CallOptions): Promise<list.Issues>
   list(request: list.Request, options?: CallOptions): Promise<list.Issues> {
     return this.list_.list(request, options)
   }

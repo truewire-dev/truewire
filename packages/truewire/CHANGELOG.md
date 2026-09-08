@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **`validate=False` is typed as the raw body it returns.** A generated method's return
+  type is the parsed record, which is only true when the reply was validated. Python:
+  every request/reply method and every `_paged` walker now carries two `@overload`
+  stubs -- `validate: Literal[False]` returns `Any` (`PaginatedResponse[Any, ...]`/
+  `AsyncIterator[Any]` for a walker), `validate: bool | None = None` returns the
+  declared type -- and the implementation keeps its header. TypeScript: two overload
+  signatures per method and per router delegate, `options: CallOptions & { validate:
+  false }` returning `unknown` first, then the declared one. Runtime behaviour is
+  unchanged; `Function` gains `overloads`, the Python emitter `validate_overloads`, the
+  TypeScript emitter `emit_signatures`/`raw_returns`. The `validate` docstring says what
+  `False` returns. Both examples regenerated; `examples/github/test/typing_usage.{py,ts}`
+  assert the types under pyright and `tsc`.
 - **`truewire generate typescript`** (`truewire.codegen.typescript`, `docs/typescript.md`):
   a second backend, reading the same plan as the Python one and writing an ESM package:
   one `interface` plus a `Codec<T>` value per type (built from `@truewire/core`'s

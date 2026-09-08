@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "truewire"
-version = "0.6.0"
+version = "0.7.0"
 authors = [
   {name = "Truewire contributors"}
 ]
@@ -31,7 +31,7 @@ dependencies = [
   "case-converter",
   "jinja2",
   "ruff",
-  "truewire-core>=0.2.0,<0.3",
+  "truewire-core>=0.2.1,<0.3",
 ]
 requires-python = ">=3.11"
 readme = {file = "README.md", content-type = "text/markdown"}

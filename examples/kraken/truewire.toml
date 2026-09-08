@@ -14,6 +14,11 @@ package = "kraken"
 src = "src"
 name = "Kraken"
 
+[typescript]
+package = "kraken"
+src = "src"
+name = "Kraken"
+
 [python.cores.root]
 base = "kraken.core.base:KrakenBase"
 children = { spot = "spot_client", streams = "private_client", trading_ws = "private_client" }

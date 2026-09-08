@@ -293,6 +293,7 @@ def generate(
     skip_router,
   )
   from truewire.codegen.meta import META_MODULE, meta_module
+  from truewire.plan.build import build_plan
   from truewire.codegen.python import (
     RouterChild,
     endpoint_transport,
@@ -396,6 +397,10 @@ def generate(
     # dead code for it), a loaded `PythonCodegenConfig` for a project generating through
     # the universal `Generator`.
     generator.codegen_config = loaded.config
+    # The plan (`truewire plan`): every per-endpoint decision, computed once here and read
+    # by `rpc_endpoint`/`stream_endpoint` instead of re-derived per call.
+    log(f'[{client}] building plan')
+    generator.plan = build_plan(loaded)
     log(f'[{client}] loading schemas')
     spec_root = loaded.spec_dir
     planned: dict[Path, str] = {}

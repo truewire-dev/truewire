@@ -32,6 +32,12 @@ from truewire.generation.schema import Operation, Reference, ResolutionError, Sc
 from truewire.generation.util import indent, snake_case
 
 from truewire.codegen.layout import class_name as router_class_name
+from truewire.plan.build import (
+  PlanBuilder, channel_direct_params, connect_channel_param, direct_channel_scalar,
+  driver_parameter,
+)
+from truewire.plan.model import EndpointPlan, PackagePlan
+from truewire.plan.types import Type as PlanType
 from truewire.project import Project
 from truewire.spec import (
   Endpoint, GrpcEndpointSpec, Pagination, RouterDoc, RpcEndpointSpec, RpcEnvelopeSpec,
@@ -333,33 +339,6 @@ def subtree_transport(
     return 'ws'
   return 'mixed'
 
-TYPE_CAST_ALIAS_RE = re.compile(r'^\w+\s*=\s*(Literal\[|Any\s*$)')
-
-def needs_type_cast(defn: str | None) -> bool:
-  """Whether a rendered type definition is a bare `Literal[...]`/`Any` alias -- not a
-  real class -- which pyright refuses to accept where a `type[T] | UnionType | None`
-  argument is expected: `type[Literal[...]]`/`type[Any]` matches neither `type[T]` nor
-  `UnionType` when the module only ever binds it to a plain module-level `{name} = ...`
-  assignment (rather than, say, a genuine class definition). A genuine union of real
-  classes/records (`A | B`) is unaffected -- the `UnionType` branch already accepts that
-  fine -- so this only fires for these two narrower alias shapes.
-
-  Confirmed live: a `Response = Literal['Success', 'Failure']` alias for the `Literal`
-  case, and a `Payload = Any` (an undocumented push payload) for the `Any` case -- both
-  hit this once `response_type=Response`/`response_type=Payload` is passed straight
-  through to `core.request()`/`core.subscribe()` (generated code passes bare types). The generated call wraps the value in `cast(type,
-  ...)` at the call site instead of a `# type: ignore` comment -- `group_lines` packs
-  multiple call arguments onto one physical line, and a trailing comment would silently
-  swallow whatever else shares that line.
-
-  Args:
-    defn: The rendered definition text for this type's own id (`types.definitions.get
-      (id)`), or `None` when it resolved externally (an already-rendered shared schema,
-      or a bare `$ref` response) -- never a bare-Literal/Any alias either way.
-  """
-  return defn is not None and bool(TYPE_CAST_ALIAS_RE.match(defn.strip()))
-
-
 def _fstring_literal(text: str) -> str:
   """Escape one literal (non-placeholder) segment of a `channel` template for splicing
   into a single-quoted f-string source (`Generator.channel_expr`'s default rendering) --
@@ -441,6 +420,45 @@ class Generator:
   `Generator` built outside the CLI loop (a unit test, say) or before the loop's first
   `schemas()` call -- the base implementation then falls back to root scope (`()`).
   """
+
+  plan: PackagePlan | None = None
+  """The whole package's plan (`truewire.plan.build.build_plan`), attached by the CLI once
+  per run. `rpc_endpoint`/`stream_endpoint` read their endpoint's decisions from it --
+  request fields, the returned type's nullability, whether a type is a bare alias, and
+  every pagination fact -- instead of re-deriving them from rendered strings. `None` for a
+  `Generator` built outside the CLI (a unit test, say): `endpoint_plan` then computes the
+  one endpoint's plan on demand from `project`."""
+
+  def endpoint_plan(self, endpoint: Endpoint, endpoint_dir: Path) -> EndpointPlan:
+    """This endpoint's plan: looked up on the attached `plan` by function path, or
+    computed on its own when none is attached (or the path is not on it, as when a
+    backend's `output_function` renames it).
+
+    Args:
+      endpoint: The endpoint being generated -- planned as given, so a caller passing a
+        modified copy gets a plan of that copy.
+      endpoint_dir: Its `spec/endpoints/` directory.
+
+    Raises:
+      ValueError: When the endpoint is a shape the plan does not cover (OpenAPI-shaped
+        or gRPC), which the callers here have already refused anyway.
+    """
+    assert self.project is not None, 'endpoint_plan needs project (set by the CLI)'
+    function = endpoint.resolved_function(endpoint_dir / 'endpoint.json', self.project.spec_dir)
+    if self.plan is not None:
+      found = self.plan.endpoint(function)
+      if found is not None:
+        return found
+    planned = PlanBuilder(self.project).endpoint(endpoint, endpoint_dir)
+    if planned is None:
+      raise ValueError(f'{function}: not a request/response-shaped endpoint; nothing to plan')
+    return planned
+
+  def plan_type_code(self, type: PlanType) -> str:
+    """Render one plan type tree to the Python type expression this backend writes for it
+    -- the same renderer every `Request`/`Response` field goes through, so a cursor's
+    seed type reads exactly as its parameter's annotation does."""
+    return self.type_generator().render.code(type).iden
 
   _cursor_render_id: str | None = None
   """Set for the duration of one `paged_overlap_seek` call, to the seek cursor's rendered
@@ -1101,14 +1119,7 @@ class Generator:
     Args:
       pagination: Declaration carried by the endpoint.
     """
-    if pagination.strategy == 'page':
-      return pagination.index.parameter
-    if pagination.strategy == 'token' or pagination.strategy == 'seek':
-      return pagination.cursor.parameter
-    if pagination.strategy == 'window':
-      bound = pagination.bound
-      return bound.end if pagination.order == 'descending' else bound.start
-    return pagination.offset.parameter
+    return driver_parameter(pagination)
 
   def pagination_driver_required(
     self, header: 'Function', pagination: Pagination,
@@ -4568,6 +4579,7 @@ class Generator:
     core_config = self._resolve_core(endpoint_dir, self.project.spec_dir, self.codegen_config)
     core_module, _, core_class = core_config.base.partition(':')
     meta_schema = self._resolve_meta_schema(endpoint_dir, self.project.spec_dir, self.codegen_config)
+    endpoint_plan = self.endpoint_plan(endpoint, endpoint_dir)
 
     type_generator = self.type_generator(references)
     # A response (or request) schema's own title can collide with `class_name` --
@@ -4757,18 +4769,19 @@ class Generator:
     call_args.append('validate=validate')
     if transport_param is not None:
       call_args.append('transport=transport')
-    # `cast(type, ...)` around a bare `Literal[...]` alias (`needs_type_cast`'s own
-    # docstring) -- never needed for a `$ref`-resolved external type, which is always a
-    # real class.
+    # `cast(type, ...)` around a bare `Literal[...]`/`Any` alias, which pyright refuses
+    # where a `type[T] | UnionType | None` is expected -- the plan decides it from the
+    # type tree (`RequestPlan.needs_cast`); a `$ref`-resolved external type is always a
+    # real class and never needs it.
     needs_cast = False
     if request_type is not None:
-      if needs_type_cast(types.definitions.get('$request')):
+      if endpoint_plan.request.needs_cast:
         call_args.append(f'request_type=cast(type, {request_type})')
         needs_cast = True
       else:
         call_args.append(f'request_type={request_type}')
     if response_type is not None:
-      if response_ref is None and needs_type_cast(types.definitions.get('$response')):
+      if endpoint_plan.response.needs_cast:
         call_args.append(f'response_type=cast(type, {response_type})')
         needs_cast = True
       else:
@@ -4878,36 +4891,22 @@ class Generator:
           types, pagination.done.rows or '', response_ref=response_ref, references=references,
           imports=rows_type_imports,
         )
-      # `paged_state_type` (a `get_transaction_log` may declare a genuinely
-      # `int`-typed cursor -- `continuation_token` --
-      # confirmed against a real generation failure) resolves the cursor's *real*
-      # rendered type instead of the hardcoded `'str'` this call site used before,
-      # falling back to `'str'` only when the driver parameter can't be resolved on
-      # `header` at all. `token` and plain (no-`overlap`) `seek` both need it: a `seek`
-      # cursor is read off a row rather than re-seeded per page, but
-      # `paged_response_seek`'s own `PaginatedResponse(seed, next)` still needs a real
-      # *initial* value for the very first call, and that seed is the same
-      # `_SCALAR_ZERO_VALUES` lookup `token` uses -- confirmed against a real generation
-      # failure (a `get_candles` whose seek cursor `toISO` is
-      # `TimestampIso`-typed, raised `ValueError` inside `paged_response_seek` itself
-      # rather than falling back the way `token`'s own non-scalar case already did,
-      # since this check only ever gated `token` before).
-      state_type = self.paged_state_type(header, pagination) if rows_type is not None else None
-      # Fix 3 (`docs/pagination.md`): a required, non-scalar cursor -- a `token` walk
-      # whose `end_timestamp` is required and `TimestampMillis`-typed, or a `seek` walk
-      # whose `start_timestamp` is required -- now also qualifies, seeding `PaginatedResponse.init`
-      # from the caller's own real argument instead of a `_SCALAR_ZERO_VALUES` lookup
-      # (`paged_response_seek`'s and `paged_response_method`'s own `driver_required`
-      # branches). Before this, none of the three reached here at all: `state_type`
-      # resolved to a real, non-scalar type name, `state_type in _SCALAR_ZERO_VALUES` was
-      # `False`, and the endpoint fell to the plain-generator `paged_method` fallback below
-      # -- correct only because `paged_response_method`/`paged_response_seek` had nothing
-      # better to offer yet.
-      seedable = (
-        pagination.strategy not in ('token', 'seek')
-        or state_type in _SCALAR_ZERO_VALUES
-        or self.pagination_driver_required(header, pagination)
+      # The cursor's own type and whether a `PaginatedResponse` can be seeded with it are
+      # plan decisions (`PaginationPlan.state_type`/`seedable`): the driver parameter's
+      # type without its `null` (a cursor is not always a string -- an `int`
+      # `continuation_token`, a `TimestampIso` `toISO`), rendered here through the same
+      # type renderer its parameter annotation came from; seedable when the strategy
+      # never needs a zero value (`page`/`offset`/`window`), the cursor type has one
+      # (`''`/`0`/`False`), or the cursor is required and the caller's own argument
+      # seeds the walk. `token` and plain (no-`overlap`) `seek` both need the seed:
+      # `paged_response_seek`'s `PaginatedResponse(seed, next)` still wants a real
+      # initial value even though later cursors are read off a row.
+      pagination_plan = endpoint_plan.pagination
+      assert pagination_plan is not None and pagination_plan.state_type is not None
+      state_type = (
+        self.plan_type_code(pagination_plan.state_type) if rows_type is not None else None
       )
+      seedable = pagination_plan.seedable
       # Fix 1 (`docs/pagination.md`): a `window`/`seek`+`overlap` walk (`paged_method`'s
       # own dispatch to `paged_window_overlap`/`paged_overlap_seek`) yields a flattened
       # `list[T]` of rows once `done.rows` is declared, never the enveloped type --
@@ -4927,27 +4926,11 @@ class Generator:
           types, pagination.done.rows, response_ref=response_ref, references=references,
           imports=overlap_rows_type_imports,
         )
-      # `response_type` itself is never useful for this -- a title-less top-level
-      # `$response` (a `get_closed_orders` pair, `anyOf`-wrapped with no wrapper
-      # title) resolves through the exact same path-derived-name fallback `$request`
-      # already forces onto `Request` (`schemas['$request']`'s own `update={'title':
-      # None}` comment above), so `response_type` is the fixed alias name `'Response'`
-      # regardless of nullability -- never the union expression itself. `types.
-      # definitions['$response']` is where the union actually appears (`'Response =
-      # HfClosedOrdersPage | None'`, this endpoint's own real rendered line), the same
-      # alias-assignment shape the `not rows_path` branch above already regex-matches
-      # (`^\w+\s*=\s*list\[...\]$`) for a bare-array response. A titled response (`$ref`,
-      # or an inline record with its own `title`) never renders this alias line at all --
-      # `response_type`/`identifiers['$response']` is the class/ref name directly, and
-      # `definitions['$response']` is that class's own body (or absent for a `$ref`),
-      # neither of which can end in `| None`, so this stays `False` for every
-      # already-migrated, non-nullable-response caller, unchanged.
-      response_definition = types.definitions.get('$response')
-      response_optional = (
-        response_ref is None
-        and isinstance(response_definition, str)
-        and response_definition.rstrip().endswith('| None')
-      )
+      # Whether the single-request method's return type is nullable (`Response =
+      # HfClosedOrdersPage | None`, an `anyOf`-wrapped response whose real branch carries
+      # the rows) is the plan's `ResponsePlan.optional`, read off the type tree; the
+      # walker then guards every read on the response.
+      response_optional = endpoint_plan.response.optional
       if rows_type is not None and seedable:
         paged_source = self.paged_response_method(
           endpoint, method_name=method_name, header=header,
@@ -5146,12 +5129,7 @@ class Generator:
     Args:
       prop: One `parameters` property's own schema (or a `$ref` into a shared one).
     """
-    if isinstance(prop, Reference):
-      return True
-    return (
-      not prop.properties and not prop.anyOf and not prop.prefixItems
-      and prop.type not in ('object', 'array')
-    )
+    return direct_channel_scalar(prop)
 
   def _channel_direct_params(self, parameters_schema: Schema | None, channel: str) -> bool:
     """Whether this stream endpoint's declared `parameters` are *exactly* `channel`'s
@@ -5184,16 +5162,7 @@ class Generator:
         for a parameterless subscription.
       channel: `endpoint.spec.channel`, the literal template string.
     """
-    if parameters_schema is None or parameters_schema.anyOf:
-      return False
-    properties = parameters_schema.properties or {}
-    required = set(parameters_schema.required or [])
-    names = set(properties.keys())
-    if names != required:
-      return False
-    if names != set(CHANNEL_PLACEHOLDER.findall(channel)):
-      return False
-    return all(self._direct_channel_scalar(prop) for prop in properties.values())
+    return channel_direct_params(parameters_schema, channel)
 
   def _direct_channel_prop_imports(self, prop: 'Reference | Schema', type_generator: TypeGenerator) -> Imports:
     """The bare import set one direct-channel `parameters` property's own rendered
@@ -5345,18 +5314,7 @@ class Generator:
       parameters_schema: `endpoint.spec.parameters` (or `.request`), parsed.
       channel: `endpoint.spec.channel`, the literal template string.
     """
-    if endpoint.push is None or endpoint.push.trigger != 'connect':
-      return None
-    if parameters_schema is None or parameters_schema.anyOf:
-      return None
-    properties = parameters_schema.properties or {}
-    required = set(parameters_schema.required or [])
-    if len(properties) != 1 or required != set(properties):
-      return None
-    (name,) = properties.keys()
-    if channel != f'{{{name}}}':
-      return None
-    return name
+    return connect_channel_param(endpoint.push, parameters_schema, channel)
 
   def stream_endpoint(
     self,
@@ -5464,6 +5422,7 @@ class Generator:
     core_config = self._resolve_core(endpoint_dir, self.project.spec_dir, self.codegen_config)
     core_module, _, core_class = core_config.base.partition(':')
     meta_schema = self._resolve_meta_schema(endpoint_dir, self.project.spec_dir, self.codegen_config)
+    endpoint_plan = self.endpoint_plan(endpoint, endpoint_dir)
 
     type_generator = self.type_generator(references)
     # A payload schema's own title can collide with `class_name` -- see `rpc_endpoint`'s
@@ -5611,17 +5570,19 @@ class Generator:
       meta_fields = ', '.join(f'{key!r}: {value!r}' for key, value in meta.items())
       call_args.append(f'meta={{{meta_fields}}}')
     call_args.append('validate=validate')
-    # `cast(type, ...)` around a bare `Literal[...]` alias -- see `needs_type_cast`'s own
-    # docstring (mirrors `rpc_endpoint`'s identical guard). Skipped entirely for the
-    # connect-only single-placeholder shape (`connect_param_name is not None`) and the
-    # direct-channel shape (`direct_channel`) -- neither ever emits a `Parameters`
-    # wrapper or a `request_type=` argument at all (see `connect_identifier`/
-    # `channel_expr` above), so there's nothing here to cast; `parameters_type` is
-    # already `None` on both paths (`$parameters` was never registered), but the
-    # explicit check keeps this guard readable on its own.
+    # `cast(type, ...)` around a bare `Literal[...]`/`Any` alias, decided by the plan
+    # from the type tree (`RequestPlan.needs_cast`/`ResponsePlan.needs_cast`, see
+    # `rpc_endpoint`'s identical guard). Skipped entirely for the connect-only
+    # single-placeholder shape (`connect_param_name is not None`) and the direct-channel
+    # shape (`direct_channel`) -- neither ever emits a `Parameters` wrapper or a
+    # `request_type=` argument at all (see `connect_identifier`/`channel_expr` above), so
+    # there's nothing here to cast; `parameters_type` is already `None` on both paths
+    # (`$parameters` was never registered), but the explicit check keeps this guard
+    # readable on its own. A `$ref`-resolved payload is always a real class and never
+    # needs one.
     needs_cast = False
     if connect_param_name is None and not direct_channel and parameters_type is not None:
-      if needs_type_cast(types.definitions.get('$parameters')):
+      if endpoint_plan.request.needs_cast:
         call_args.append(f'request_type=cast(type, {parameters_type})')
         needs_cast = True
       else:
@@ -5629,7 +5590,7 @@ class Generator:
     if payload_type is not None:
       # `payload_ref is None and ...` -- never needed for a `$ref`-resolved external
       # type, which is always a real class (see `rpc_endpoint`'s identical guard).
-      if payload_ref is None and needs_type_cast(types.definitions.get('$payload')):
+      if endpoint_plan.response.needs_cast:
         call_args.append(f'response_type=cast(type, {payload_type})')
         needs_cast = True
       else:

@@ -68,6 +68,7 @@ truewire mcp --project petstore --new base_url=https://petstore.example.com/v1
 | Checks | `truewire check` runs 19 lint rules over the spec (titles, enums, timestamp formats, positional rows, unions, descriptions, pagination references, envelope selectors, stream verbs). A response schema describes the wire body as recorded; `envelope.payload` selects what the generated method returns (ADR 0010). `truewire examples --require-verified` fails when an endpoint has neither a recorded example nor a stated reason. `truewire surface` fails when a spec'd endpoint has no reachable method. |
 | Examples and mock server | Recorded request/response pairs (`truewire capture` records a live call through your own client and core, so the pair carries the real headers, signing and envelope) and WebSocket captures, replayed by `truewire mock` over real HTTP and WS: subscribe/unsubscribe lifecycle, push-on-connect, push-after-RPC, correlation ids, declared redaction, and a 409 when two examples match one request. |
 | Python generator and `truewire-core` | `truewire generate python` emits async endpoint methods with typed `TypedDict` responses, `validate` and `transport` keywords, `_paged` walkers, and router classes with docstrings. Your hand-written core (transport, signing, envelope, errors) is declared, not introspected: `truewire.toml` says how routers compose it, `truewire_core.contract` says what it provides, and the generator never imports your package (ADR 0011). `truewire-core` is the small MIT runtime: HTTP, WebSocket streams and RPC, validation, paging, timestamp types, errors, the core contract. |
+| Plan | `truewire plan --json` prints the language-neutral plan the generators render from: types as a tree, request fields, the returned type, stream facts and every pagination decision, per endpoint ([docs/plan.md](docs/plan.md)). A second backend reads it instead of the spec. |
 | Standards | `truewire standards` runs the checks that guard a client's public surface: docstring shape, duplicate schemas, secret placeholders in examples, router coverage, no `__call__` classes. |
 | Docs | `truewire docs check` type-checks every code block in your README and docs against the generated package, so an example that no longer compiles fails CI. |
 | Examples | `examples/kraken`: 75 endpoints over REST and WebSocket, hand-written core, 63 replay tests. `examples/github`: the GitHub REST API captured live, page-walked, 14 tests. Both kept green in CI. |
@@ -110,6 +111,7 @@ Questions, bugs and spec corrections: open an issue, or write to hello@truewire.
 
 - [Concepts](docs/concepts.md): the five ideas behind the tool.
 - [Spec authoring](docs/spec/authoring.md): the rules `truewire check` enforces.
+- [The plan](docs/plan.md): what a backend renders from, and its JSON shape.
 - [Architecture decisions](docs/adr/README.md): why things are the way they are.
 - [Contributing](CONTRIBUTING.md): dev setup, adding a check, adding a pagination strategy.
 

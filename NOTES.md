@@ -26,9 +26,12 @@ generator needs. Each item names the exact gap; none is worked around in the cra
 
 3. **`decimal-string` precision.** The plan promises the digits verbatim; the TypeScript
    runtime keeps the string and Python's `decimal.Decimal` is arbitrary-precision.
-   `rust_decimal::Decimal` holds 96 bits of mantissa (28 significant digits), so a wire
-   value with more digits than that fails to parse rather than round silently. No API in
-   the examples sends one, and the failure is a `ValidationError` at the field's path.
+   `rust_decimal::Decimal` holds 96 bits of mantissa (28 significant digits). The crate
+   parses with `from_str_exact`, so a wire value with more digits than that is a
+   `ValidationError` at the field's path rather than a silently rounded value (`from_str`
+   would round `0.1234567890123456789012345678901234` to 28 places). No API in the
+   examples sends one. The scientific form (`1e-7`) goes through `from_scientific`, which
+   has the same limit.
 
 4. **Mixed-type `literal` values.** `literal{values: [true, 0]}` is expressible on the
    plan and the TypeScript codec accepts it as written; a Rust `enum` with `serde` renames

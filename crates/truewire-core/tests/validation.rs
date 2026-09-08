@@ -253,6 +253,20 @@ fn decimal_string_keeps_the_digits_the_wire_carried() {
 }
 
 #[test]
+fn decimal_string_with_more_digits_than_a_decimal_holds_fails_instead_of_rounding() {
+    let err = failure(decode::<DecimalString>(json!("0.1234567890123456789012345678901234")));
+    assert_eq!(err.path(), "");
+    assert!(err.message.starts_with("expected decimal string"), "{}", err.message);
+    assert!(decode::<DecimalString>(json!("12345678901234567890123456789012")).is_err());
+    assert_eq!(
+        decode::<DecimalString>(json!("0.1234567890123456789012345678"))
+            .expect("28 digits")
+            .to_string(),
+        "0.1234567890123456789012345678"
+    );
+}
+
+#[test]
 fn decimal_string_compares_by_value() {
     let d = |s: &str| s.parse::<DecimalString>().expect(s);
     assert_eq!(d("1.50"), d("1.5"));

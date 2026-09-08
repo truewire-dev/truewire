@@ -22,10 +22,12 @@ pub fn parse(value: &str) -> Result<Decimal> {
         return Err(Error::logic(format!("Not a decimal string: {value:?}")));
     }
     let text = normalize(trimmed);
+    // `from_str_exact`, not `from_str`: a value with more digits than a `Decimal` holds is
+    // an error, never a silently rounded price.
     let result = if text.contains(['e', 'E']) {
         Decimal::from_scientific(&text)
     } else {
-        Decimal::from_str(&text)
+        Decimal::from_str_exact(&text)
     };
     result.map_err(|e| Error::logic(format!("Not a decimal string: {value:?}")).with_source(e))
 }

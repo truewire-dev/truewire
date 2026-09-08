@@ -1,11 +1,11 @@
 //! Validation: `serde` over generated structs, with every failure a
-//! [`ValidationError`](crate::errors::ValidationError) naming the offending value by JSON
+//! [`ValidationError`] naming the offending value by JSON
 //! pointer.
 //!
 //! A generated package derives `Serialize`/`Deserialize` on one struct per wire shape,
 //! using the newtypes in [`crate::types`] for every narrowed scalar. The functions here are
 //! the two ends of a call: [`dump`] turns the typed request into the wire
-//! [`Value`](serde_json::Value) a core sends, and [`decode`] turns the wire value a core
+//! [`Value`] a core sends, and [`decode`] turns the wire value a core
 //! returns into the typed response. `validate: false` is [`decode`] never called: the
 //! core's `Value` is the raw body, handed back as it came.
 //!

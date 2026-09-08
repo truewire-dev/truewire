@@ -11,7 +11,7 @@
 //!
 //! The newtypes generated code uses for each spec format ([`crate::types`]) are built on
 //! the module-level instances [`TIMESTAMP_SECONDS`], [`TIMESTAMP_MILLIS`],
-//! [`TIMESTAMP_MICROS`], [`TIMESTAMP_NANOS`], [`TIMESTAMP_ISO`] and [`DATE_ISO`].
+//! [`TIMESTAMP_MICROS`], [`TIMESTAMP_NANOS`], [`TIMESTAMP_ISO`] and [`date_iso`].
 
 use chrono::{DateTime, NaiveDate, SecondsFormat, Utc};
 

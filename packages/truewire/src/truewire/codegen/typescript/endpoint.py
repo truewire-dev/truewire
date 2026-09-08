@@ -2,17 +2,18 @@
 `<method>Paged` walker when pagination is declared).
 
 The class takes its core as a constructor argument typed by the `@truewire/core` contract
-(`HttpEndpoint<Meta>` for HTTP, `CommandEndpoint<Meta>` for a WebSocket command) and calls
-exactly one verb on it. The request object is the wire object: the method's first
-parameter is the endpoint's `Request` interface, whose keys are the API's own names, and
-its second is the `CallOptions` object (`validate`, `signal`).
+(`HttpEndpoint<Meta>` for HTTP, `CommandEndpoint<Meta>` for a WebSocket command,
+`StreamEndpoint<Meta>` for a channel subscription) and calls exactly one verb on it. The
+request object is the wire object: the method's first parameter is the endpoint's
+`Request` (a stream's `Parameters`) interface, whose keys are the API's own names, and its
+second is the `CallOptions` object (`validate`, `signal`).
 """
 import re
 from dataclasses import dataclass, field
 
 from typing_extensions import Literal
 
-from truewire.plan.model import EndpointPlan, PackagePlan, PaginationPlan
+from truewire.plan.model import EndpointPlan, PackagePlan, PaginationPlan, RequestFieldPlan
 from truewire.plan.types import Type
 
 from .names import camel_case, is_binding, literal, member_access, pascal_case, property_key, string
@@ -54,7 +55,8 @@ class Method:
   name: str
   params: list[Param]
   returns: tuple[str, tuple[Token, ...]]
-  """`('promise', (T,))`, `('void', ())`, `('paginated', (row, state))` or `('generator', (T,))`."""
+  """`('promise', (T,))`, `('void', ())`, `('paginated', (row, state))`, `('generator', (T,))`
+  or `('subscription', (message,))`."""
   doc: list[str | None] = field(default_factory=list)
   tags: list[str] = field(default_factory=list)
   is_async: bool = True
@@ -66,7 +68,7 @@ class EndpointModule:
   file: str
   class_name: str
   core_type: str
-  """The core interface this class takes: `HttpEndpoint` or `CommandEndpoint`."""
+  """The core interface this class takes: `HttpEndpoint`, `CommandEndpoint` or `StreamEndpoint`."""
   meta_type: str | None
   """The `meta.ts` interface the core is parameterised by, or `None` for a core with no schema."""
   types: list[str]
@@ -85,7 +87,9 @@ def meta_type_name(core: str) -> str:
 
 
 def core_interface(endpoint: EndpointPlan) -> str:
-  """Which contract interface the endpoint's transport calls for."""
+  """Which contract interface the endpoint's kind and transport call for."""
+  if endpoint.kind == 'stream':
+    return 'StreamEndpoint'
   return 'HttpEndpoint' if 'http' in endpoint.transports else 'CommandEndpoint'
 
 
@@ -110,6 +114,9 @@ def render_return(module: Module, returns: tuple[str, tuple[Token, ...]]) -> str
   if shape == 'paginated':
     module.core('PaginatedResponse', type_only=True)
     return f'PaginatedResponse<{render_type(module, tokens[0])}, {render_type(module, tokens[1])}>'
+  if shape == 'subscription':
+    module.core('Subscription', type_only=True)
+    return f'Subscription<{render_type(module, tokens[0])}>'
   return f'AsyncGenerator<{render_type(module, tokens[0])}, void, undefined>'
 
 
@@ -122,11 +129,12 @@ def render_params(module: Module, params: list[Param]) -> str:
 
 def raw_returns(returns: tuple[str, tuple[Token, ...]]) -> tuple[str, tuple[Token, ...]] | None:
   """`returns` as a `validate: false` call leaves it: the value (a promise's, a walker's
-  rows, a generator's pages) is the body as the wire sent it, so `unknown` takes the
-  declared type's place while a walker's state type stays. `None` for a method that
-  returns nothing, which has no overload to make."""
+  rows, a generator's pages, a subscription's messages) is the body as the wire sent it,
+  so `unknown` takes the declared type's place while a walker's state type stays. `None`
+  for a method that returns nothing, or whose value is `unknown` already (a stream with no
+  declared message): there is no second overload to make."""
   shape, tokens = returns
-  if shape == 'void':
+  if shape == 'void' or tokens[0][0] == 'unknown':
     return None
   return shape, (('unknown', None), *tokens[1:])
 
@@ -196,13 +204,20 @@ def read_path(subject: str, path: str, *, optional: bool) -> str:
 # -- the module -------------------------------------------------------------------------
 
 
-def render_endpoint(plan: PackagePlan, endpoint: EndpointPlan, *, class_name: str) -> EndpointModule:
-  """Render one `rpc` endpoint's module."""
+@dataclass(frozen=True)
+class _Head:
+  """What every endpoint module opens with: its types defined, the contract interface
+  and `CallOptions` imported, and the constructor parameter's type."""
+  module: Module
+  core_type: str
+  meta_type: str | None
+  core_param: str
+
+
+def _open(plan: PackagePlan, endpoint: EndpointPlan) -> _Head:
   file = endpoint_file(endpoint.path)
   module = Module(plan, file, local=endpoint.types, visible=visible_scopes(plan, endpoint.path))
-  w = module.writer
   module.define_all(endpoint.types)
-
   core_type = core_interface(endpoint)
   core_plan = plan.cores.get(endpoint.core)
   meta_type = meta_type_name(endpoint.core) if core_plan is not None and core_plan.meta is not None else None
@@ -211,6 +226,15 @@ def render_endpoint(plan: PackagePlan, endpoint: EndpointPlan, *, class_name: st
   if meta_type is not None:
     module.imports.add(relative_specifier(file, META_FILE), meta_type, type_only=True)
   core_param = f'{core_type}<{meta_type}>' if meta_type is not None else core_type
+  return _Head(module, core_type, meta_type, core_param)
+
+
+def render_endpoint(plan: PackagePlan, endpoint: EndpointPlan, *, class_name: str) -> EndpointModule:
+  """Render one `rpc` endpoint's module."""
+  head = _open(plan, endpoint)
+  module, core_type, meta_type, core_param = head.module, head.core_type, head.meta_type, head.core_param
+  file = module.file
+  w = module.writer
 
   method = camel_case(endpoint.path[-1])
   request = endpoint.request
@@ -297,6 +321,118 @@ def render_endpoint(plan: PackagePlan, endpoint: EndpointPlan, *, class_name: st
   return EndpointModule(
     file=file, class_name=class_name, core_type=core_type, meta_type=meta_type,
     types=defined, methods=methods, source=module.render(BANNER),
+  )
+
+
+# -- streams ----------------------------------------------------------------------------
+
+_CHANNEL_PLACEHOLDER = re.compile(r'\{([^{}]+)\}')
+
+
+def channel_expr(channel: str, subject: str) -> str:
+  """The expression a direct-channel or connect-only stream subscribes with: the channel
+  template with every `{name}` read off `subject`, as a template literal -- or the bare
+  member access when the whole template is one placeholder (a listenKey-style stream,
+  where the value *is* the channel)."""
+  if _CHANNEL_PLACEHOLDER.fullmatch(channel):
+    return member_access(subject, channel[1:-1], optional=False)
+  parts: list[str] = []
+  last = 0
+  for m in _CHANNEL_PLACEHOLDER.finditer(channel):
+    parts.append(_template_text(channel[last:m.start()]))
+    parts.append('${' + member_access(subject, m.group(1), optional=False) + '}')
+    last = m.end()
+  parts.append(_template_text(channel[last:]))
+  return '`' + ''.join(parts) + '`'
+
+
+def _template_text(text: str) -> str:
+  return text.replace('\\', '\\\\').replace('`', '\\`').replace('${', '\\${')
+
+
+def _declare_parameters(
+  module: Module, fields: list[RequestFieldPlan], *, class_name: str, method: str, channel: str,
+) -> str:
+  """The parameters interface of a stream whose values only fill the channel template
+  (`directChannel`, `connectOnly`): the plan registers no `Parameters` record and no
+  codec, since nothing is sent as a subscribe frame, so the method's parameter type is
+  declared here from the fields alone."""
+  w = module.writer
+  name = 'Parameters' if 'Parameters' not in module.names else f'{class_name}Parameters'
+  w.jsdoc(f'`{method}`\'s parameters: the placeholders of `{channel}`, which the method fills in.')
+  with w.block(f'export interface {name} {{'):
+    for f in fields:
+      w.jsdoc(f.description)
+      w.line(f'{property_key(f.wire)}{"" if f.required else "?"}: {module.type_expr(f.type)}')
+  module.declare(name)
+  w.blank()
+  return name
+
+
+def render_stream(plan: PackagePlan, endpoint: EndpointPlan, *, class_name: str) -> EndpointModule:
+  """Render one `stream` endpoint's module: the parameters, the pushed message, and a
+  class whose one method returns the core's `Subscription` for the channel.
+
+  What the Python backend passes to `self.subscribe(...)` is passed here to
+  `core.subscribe({...})`: the channel template and the parameters object with its codec
+  for the general shape; the channel filled from the parameters and no object for a
+  direct-channel or connect-only stream (`docs/plan.md`); the message codec, the declared
+  `meta`, and the call options.
+  """
+  head = _open(plan, endpoint)
+  module, meta_type, core_param = head.module, head.meta_type, head.core_param
+  w = module.writer
+  stream = endpoint.stream
+  assert stream is not None and endpoint.wire.channel is not None
+  channel = endpoint.wire.channel
+  method = camel_case(endpoint.path[-1])
+  request = endpoint.request
+  parameters_type = request.type
+  fills_channel = parameters_type is None and bool(request.fields)
+  if fills_channel:
+    parameters_type = _declare_parameters(
+      module, request.fields, class_name=class_name, method=method, channel=channel,
+    )
+  parameters_optional = not fills_channel and request.shape == 'fields' and not any(
+    f.required for f in request.fields
+  )
+  message = endpoint.response.payload
+
+  params: list[Param] = []
+  if parameters_type is not None:
+    params.append(Param('parameters', ('local', parameters_type), optional=parameters_optional))
+  params.append(Param('options', ('core', 'CallOptions'), optional=True))
+  doc, tags = method_docs(endpoint)
+  main = Method(
+    method, params, ('subscription', ((('local', message),) if message is not None else (('unknown', None),))),
+    doc=doc, tags=tags, is_async=False,
+  )
+
+  w.jsdoc(endpoint.docs.description)
+  with w.block(f'export class {class_name} {{'):
+    w.line(f'constructor(readonly core: {core_param}) {{}}')
+    w.blank()
+    emit_signatures(module, main)
+    signature = f'{main.name}({render_params(module, main.params)}): {render_return(module, main.returns)}'
+    with w.block(f'{signature} {{'):
+      with w.block('return this.core.subscribe({', '})'):
+        w.line(f'channel: {channel_expr(channel, "parameters") if fills_channel else string(channel)},')
+        if parameters_type is None or fills_channel:
+          w.line('parameters: undefined,')
+          w.line('parametersCodec: undefined,')
+        else:
+          w.line('parameters: parameters ?? {},' if parameters_optional else 'parameters,')
+          w.line(f'parametersCodec: {module.ref(parameters_type)},')
+        w.line(f'messageCodec: {module.ref(message) if message is not None else "undefined"},')
+        w.line(f'meta: {literal(endpoint.meta) if meta_type is not None else "{}"},')
+        w.line('...options,')
+
+  defined = list(endpoint.types)
+  if fills_channel and parameters_type is not None:
+    defined.append(parameters_type)
+  return EndpointModule(
+    file=module.file, class_name=class_name, core_type=head.core_type, meta_type=meta_type,
+    types=defined, methods=[main], source=module.render(BANNER),
   )
 
 
@@ -554,6 +690,7 @@ def _total_done(done: dict, state: str, start: int, size: str | None, size_unkno
 
 __all__ = [
   'META_FILE', 'RAW_DOC', 'RAW_OPTIONS', 'EndpointModule', 'Method', 'Param', 'Token',
-  'core_interface', 'emit_signatures', 'endpoint_file', 'meta_type_name', 'raw_returns',
-  'render_endpoint', 'render_params', 'render_return', 'render_type',
+  'channel_expr', 'core_interface', 'emit_signatures', 'endpoint_file', 'meta_type_name',
+  'raw_returns', 'render_endpoint', 'render_params', 'render_return', 'render_stream',
+  'render_type',
 ]

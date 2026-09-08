@@ -394,6 +394,37 @@ def test_check_reports_an_owned_file_whose_content_differs_from_the_plan(
   assert stale.read_text().endswith('HAND_EDIT = True\n')  # check never writes
 
 
+def test_check_without_a_manifest_takes_the_plan_as_the_owned_files(
+  tmp_path: Path, monkeypatch, capsys,
+):
+  """A fresh clone has no `.truewire/` (gitignored); `--check` still verifies existence
+  and content, saying the plan stood in, and never writes the manifest itself."""
+  client_root = write_backend_project(tmp_path)
+  output_root = client_root / 'pkg' / 'src' / 'venue'
+  monkeypatch.setattr(codegen_module, 'format_generated_files', lambda *a, **k: None)
+  monkeypatch.setattr(codegen_module, 'typecheck_project', lambda project: None)
+  codegen_module.generate('python', project=str(client_root), verbose=0)
+  manifest = resolve(client_root).manifest_path('python')
+  manifest.unlink()
+
+  codegen_module.generate('python', project=str(client_root), verbose=0, check=True)
+  out = capsys.readouterr().out
+  assert 'Generated files match the plan for venue (3 files).' in out
+  assert 'No manifest at .truewire/python-files.json; the plan stood in for it' in out
+  assert not manifest.exists()
+
+  (output_root / 'market' / 'time.py').write_text('class Time:\n  edited = True\n')
+  (output_root / 'main.py').unlink()
+  with pytest.raises(codegen_module.typer.Exit) as raised:
+    codegen_module.generate('python', project=str(client_root), verbose=0, check=True)
+  assert raised.value.exit_code == 1
+  err = capsys.readouterr().err
+  assert '- owned file is missing: main.py' in err
+  assert '- out of date: market/time.py' in err
+  assert 'no longer planned' not in err
+  assert not manifest.exists()
+
+
 def test_check_renders_the_plan_the_way_generate_writes_it(tmp_path: Path, monkeypatch):
   """With the real formatter: what `generate` wrote (banner, Ruff-formatted) is exactly
   what `--check` expects, so a clean tree passes and only a hand edit is reported."""

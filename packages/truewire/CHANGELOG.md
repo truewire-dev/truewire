@@ -18,6 +18,13 @@
   empty directory named `<name>` (a `.git` or `.venv` there does not count). Anywhere else
   `truewire init <name>` still creates `./<name>`. An existing `.gitignore` gains the
   lines `init` writes instead of being replaced.
+- **`generate --check` works without a manifest.** `.truewire/` is gitignored, so on a
+  fresh clone `--check` failed with `missing manifest` and CI could never run it. Both
+  backends now take the plan as the owned file list when `.truewire/<language>-files.json`
+  is absent -- the plan names every file `generate` would write -- and check existence
+  and content the same way, saying that the plan stood in; the one difference only a
+  manifest can show (a file an earlier plan owned and this one does not) waits for the
+  next `generate`. CI runs `truewire generate python --check` on both examples.
 
 ## 0.6.0 (2026-09-08)
 

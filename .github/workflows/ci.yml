@@ -43,6 +43,11 @@ jobs:
       - name: Standards
         working-directory: examples/${{ matrix.example }}
         run: ../../.venv/bin/truewire standards
+      - name: Generated code is current
+        # A fresh checkout has no .truewire/ manifest; --check takes the plan as the owned
+        # file list and compares each file's content with what the plan renders.
+        working-directory: examples/${{ matrix.example }}
+        run: ../../.venv/bin/truewire generate python --check
       - name: Test
         working-directory: examples/${{ matrix.example }}
         run: PYTHONPATH=src ../../.venv/bin/python -m pytest -q

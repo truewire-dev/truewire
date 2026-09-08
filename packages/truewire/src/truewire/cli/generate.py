@@ -197,18 +197,19 @@ def check_generated_output(
 
   Reports a planned file the manifest does not record, an owned file the plan no longer
   emits, an owned file missing from the tree, and an owned file whose content is not what
-  the plan renders (`expected`, by relative path).
+  the plan renders (`expected`, by relative path). Without a manifest -- a fresh clone,
+  `.truewire/` being gitignored -- the plan is the owned file list: it already names
+  every file `generate` would write, so the check is the same, less the one difference
+  only a manifest can show (a file an earlier plan owned and this one does not; the next
+  `generate` deletes it).
 
   Raises:
-    CodegenError: The manifest is missing or malformed.
+    CodegenError: The manifest is malformed.
     typer.Exit: With code 1 and the list of differences on stderr.
   """
-  if not manifest_path.exists():
-    raise CodegenError(
-      f'Cannot check generated files: missing manifest {manifest_path.relative_to(root)}'
-    )
   planned = set(expected)
-  owned = load_generated_manifest(manifest_path)
+  from_manifest = manifest_path.exists()
+  owned = load_generated_manifest(manifest_path) if from_manifest else planned
   issues = check_generated_manifest(output_root, owned, planned)
   for relative in sorted(planned):
     destination = generated_destination(output_root, relative)
@@ -220,6 +221,11 @@ def check_generated_output(
       typer.echo(f'- {issue}', err=True)
     raise typer.Exit(code=1)
   typer.echo(f'Generated files match the plan for {client} ({len(planned)} files).')
+  if not from_manifest:
+    typer.echo(
+      f'No manifest at {manifest_path.relative_to(root)}; the plan stood in for it, so a '
+      f'file an earlier plan owned could not be checked.'
+    )
 
 
 def add_planned_file(planned: dict[Path, str], *, path: str, content: str):
@@ -313,7 +319,7 @@ def generate_typescript(
 
   Raises:
     CodegenError: The project declares no `[typescript]` section, or the manifest is
-      missing where `--delete`/`--check` need it, or the plan cannot be built.
+      missing where `--delete` needs it, or the plan cannot be built.
   """
   from truewire.codegen.typescript import render_package
   from truewire.plan.build import build_plan
@@ -357,22 +363,8 @@ def generate_typescript(
     typer.echo(f'skipped {note}', err=True)
 
   if check:
-    if not manifest_path.exists():
-      raise CodegenError(
-        f'Cannot check generated files: missing manifest {manifest_path.relative_to(root)}'
-      )
-    owned = load_generated_manifest(manifest_path)
-    issues = check_generated_manifest(output_root, owned, set(planned))
-    for relative in sorted(planned):
-      destination = generated_destination(output_root, relative)
-      if destination.is_file() and destination.read_text() != planned[relative]:
-        issues.append(f'out of date: {relative}')
-    if issues:
-      typer.echo(f'Codegen manifest mismatch for {client}:', err=True)
-      for issue in issues:
-        typer.echo(f'- {issue}', err=True)
-      raise typer.Exit(code=1)
-    typer.echo(f'Codegen manifest matches {client} ({len(planned)} files).')
+    # No banner and no formatter on this side: the tree holds the plan verbatim.
+    check_generated_output(root, output_root, manifest_path, planned, client=client)
     return
 
   bootstrapping = not manifest_path.is_file()

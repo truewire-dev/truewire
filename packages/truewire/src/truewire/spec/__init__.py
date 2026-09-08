@@ -56,6 +56,7 @@ from .endpoint import (
   last_row_field,
   path_segments,
   read_dotted_path,
+  rpc_selector,
   select_schema,
   write_dotted_path,
 )

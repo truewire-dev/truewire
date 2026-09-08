@@ -259,10 +259,15 @@ impl HttpClient {
     /// Record every exchange this client makes until the recording is stopped or dropped,
     /// in order. Recordings may overlap.
     ///
+    /// Everything the client sent is in here, in order, not just the call's own request:
+    /// a token mint, a refresh, a retry. Pick the exchange you mean by its request, never
+    /// by position -- the last one may be another endpoint's, and its body a credential.
+    ///
     /// ```ignore
     /// let rec = client.http.recording();
     /// let pet = client.pets.get_pet(request).await?;
-    /// let status = rec.last().unwrap().response.status;
+    /// let mine = rec.exchanges().into_iter().filter(|x| x.request.url.path().ends_with("/pets/42"));
+    /// let status = mine.last().unwrap().response.status;
     /// ```
     pub fn recording(&self) -> Recording {
         let exchanges: Arc<Mutex<Vec<Exchange>>> = Arc::new(Mutex::new(Vec::new()));

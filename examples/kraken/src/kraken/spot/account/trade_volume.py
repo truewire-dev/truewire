@@ -206,16 +206,6 @@ class TradeVolumeEndpoint(RpcEndpoint):
     fee_info: str | bool | float | None = None,
     fee_schedule: bool | None = None,
     rebase_multiplier: Literal['rebased', 'base'] | None = None,
-    validate: Literal[True] | None = None,
-  ) -> TradeVolume: ...
-  @overload
-  async def trade_volume(
-    self,
-    pair: str | list[TradeVolumePairClass] | None = None,
-    *,
-    fee_info: str | bool | float | None = None,
-    fee_schedule: bool | None = None,
-    rebase_multiplier: Literal['rebased', 'base'] | None = None,
     validate: bool | None = None,
   ) -> TradeVolume: ...
   async def trade_volume(

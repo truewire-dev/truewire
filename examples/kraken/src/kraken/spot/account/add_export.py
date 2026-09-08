@@ -52,18 +52,6 @@ class AddExport(RpcEndpoint):
     fields: str | None = None,
     starttm: int | None = None,
     endtm: int | None = None,
-    validate: Literal[True] | None = None,
-  ) -> AddExportResult: ...
-  @overload
-  async def add_export(
-    self,
-    report: Literal['trades', 'ledgers'],
-    *,
-    format: Literal['CSV', 'TSV'] | None = None,
-    description: str,
-    fields: str | None = None,
-    starttm: int | None = None,
-    endtm: int | None = None,
     validate: bool | None = None,
   ) -> AddExportResult: ...
   async def add_export(

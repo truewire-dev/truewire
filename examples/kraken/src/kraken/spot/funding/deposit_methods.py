@@ -63,15 +63,6 @@ class DepositMethods(RpcEndpoint):
     *,
     aclass: Literal['currency', 'tokenized_asset'] | None = None,
     rebase_multiplier: Literal['rebased', 'base'] | None = None,
-    validate: Literal[True] | None = None,
-  ) -> Response: ...
-  @overload
-  async def deposit_methods(
-    self,
-    asset: str,
-    *,
-    aclass: Literal['currency', 'tokenized_asset'] | None = None,
-    rebase_multiplier: Literal['rebased', 'base'] | None = None,
     validate: bool | None = None,
   ) -> Response: ...
   async def deposit_methods(

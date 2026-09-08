@@ -78,16 +78,6 @@ class PostTrade(RpcEndpoint):
     from_ts: TimestampIso | None = None,
     to_ts: TimestampIso | None = None,
     count: int | None = None,
-    validate: Literal[True] | None = None,
-  ) -> PostTradeResult: ...
-  @overload
-  async def post_trade(
-    self,
-    symbol: str | None = None,
-    *,
-    from_ts: TimestampIso | None = None,
-    to_ts: TimestampIso | None = None,
-    count: int | None = None,
     validate: bool | None = None,
   ) -> PostTradeResult: ...
   async def post_trade(

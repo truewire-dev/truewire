@@ -49,14 +49,6 @@ class BatchCancel(SocketEndpoint):
     *,
     orders: list[str],
     cl_ord_id: list[str] | None = None,
-    validate: Literal[True] | None = None,
-  ) -> BatchCancelReply: ...
-  @overload
-  async def batch_cancel(
-    self,
-    *,
-    orders: list[str],
-    cl_ord_id: list[str] | None = None,
     validate: bool | None = None,
   ) -> BatchCancelReply: ...
   async def batch_cancel(

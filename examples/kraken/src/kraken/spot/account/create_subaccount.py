@@ -32,14 +32,6 @@ class CreateSubaccount(RpcEndpoint):
     *,
     username: str,
     email: str,
-    validate: Literal[True] | None = None,
-  ) -> Response: ...
-  @overload
-  async def create_subaccount(
-    self,
-    *,
-    username: str,
-    email: str,
     validate: bool | None = None,
   ) -> Response: ...
   async def create_subaccount(

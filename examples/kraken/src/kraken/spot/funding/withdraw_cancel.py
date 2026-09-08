@@ -30,14 +30,6 @@ class WithdrawCancel(RpcEndpoint):
     *,
     asset: str,
     refid: str,
-    validate: Literal[True] | None = None,
-  ) -> Response: ...
-  @overload
-  async def withdraw_cancel(
-    self,
-    *,
-    asset: str,
-    refid: str,
     validate: bool | None = None,
   ) -> Response: ...
   async def withdraw_cancel(

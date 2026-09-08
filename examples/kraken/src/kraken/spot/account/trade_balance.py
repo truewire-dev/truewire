@@ -56,14 +56,6 @@ class TradeBalanceEndpoint(RpcEndpoint):
     asset: str | None = None,
     *,
     rebase_multiplier: Literal['rebased', 'base'] | None = None,
-    validate: Literal[True] | None = None,
-  ) -> TradeBalance: ...
-  @overload
-  async def trade_balance(
-    self,
-    asset: str | None = None,
-    *,
-    rebase_multiplier: Literal['rebased', 'base'] | None = None,
     validate: bool | None = None,
   ) -> TradeBalance: ...
   async def trade_balance(

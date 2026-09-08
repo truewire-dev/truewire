@@ -35,13 +35,6 @@ class CancelAllOrdersAfter(SocketEndpoint):
     self,
     timeout: int,
     *,
-    validate: Literal[True] | None = None,
-  ) -> CancelAllOrdersAfterResult: ...
-  @overload
-  async def cancel_all_orders_after(
-    self,
-    timeout: int,
-    *,
     validate: bool | None = None,
   ) -> CancelAllOrdersAfterResult: ...
   async def cancel_all_orders_after(

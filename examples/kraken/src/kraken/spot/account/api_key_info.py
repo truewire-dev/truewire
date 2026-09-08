@@ -75,13 +75,6 @@ class ApiKeyInfoEndpoint(RpcEndpoint):
     self,
     otp: str | None = None,
     *,
-    validate: Literal[True] | None = None,
-  ) -> ApiKeyInfo: ...
-  @overload
-  async def api_key_info(
-    self,
-    otp: str | None = None,
-    *,
     validate: bool | None = None,
   ) -> ApiKeyInfo: ...
   async def api_key_info(

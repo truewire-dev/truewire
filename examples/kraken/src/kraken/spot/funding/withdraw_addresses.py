@@ -59,17 +59,6 @@ class WithdrawAddresses(RpcEndpoint):
     method: str | None = None,
     key: str | None = None,
     verified: bool | None = None,
-    validate: Literal[True] | None = None,
-  ) -> Response: ...
-  @overload
-  async def withdraw_addresses(
-    self,
-    *,
-    asset: str | None = None,
-    aclass: Literal['currency', 'tokenized_asset'] | None = None,
-    method: str | None = None,
-    key: str | None = None,
-    verified: bool | None = None,
     validate: bool | None = None,
   ) -> Response: ...
   async def withdraw_addresses(

@@ -129,16 +129,6 @@ class OpenOrdersEndpoint(RpcEndpoint):
     userref: int | None = None,
     cl_ord_id: str | None = None,
     rebase_multiplier: Literal['rebased', 'base'] | None = None,
-    validate: Literal[True] | None = None,
-  ) -> OpenOrders: ...
-  @overload
-  async def open_orders(
-    self,
-    trades: bool | None = None,
-    *,
-    userref: int | None = None,
-    cl_ord_id: str | None = None,
-    rebase_multiplier: Literal['rebased', 'base'] | None = None,
     validate: bool | None = None,
   ) -> OpenOrders: ...
   async def open_orders(

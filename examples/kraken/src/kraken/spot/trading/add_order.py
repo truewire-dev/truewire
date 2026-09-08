@@ -499,13 +499,6 @@ class AddOrder(RpcEndpoint):
     self,
     order_request: Request,
     *,
-    validate: Literal[True] | None = None,
-  ) -> OrderAdded: ...
-  @overload
-  async def add_order(
-    self,
-    order_request: Request,
-    *,
     validate: bool | None = None,
   ) -> OrderAdded: ...
   async def add_order(

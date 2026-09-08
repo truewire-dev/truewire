@@ -61,20 +61,6 @@ class ListCommits(Endpoint):
     since: TimestampIso | None = None,
     until: TimestampIso | None = None,
     per_page: int | None = None,
-    validate: Literal[True] | None = None,
-  ) -> PaginatedResponse[Commit, int]: ...
-  @overload
-  def list_commits_paged(
-    self,
-    *,
-    owner: str,
-    repo: str,
-    sha: str | None = None,
-    path: str | None = None,
-    author: str | None = None,
-    since: TimestampIso | None = None,
-    until: TimestampIso | None = None,
-    per_page: int | None = None,
     validate: bool | None = None,
   ) -> PaginatedResponse[Commit, int]: ...
   def list_commits_paged(
@@ -145,21 +131,6 @@ class ListCommits(Endpoint):
     page: int | None = None,
     validate: Literal[False],
   ) -> Any: ...
-  @overload
-  async def list_commits(
-    self,
-    *,
-    owner: str,
-    repo: str,
-    sha: str | None = None,
-    path: str | None = None,
-    author: str | None = None,
-    since: TimestampIso | None = None,
-    until: TimestampIso | None = None,
-    per_page: int | None = None,
-    page: int | None = None,
-    validate: Literal[True] | None = None,
-  ) -> Commits: ...
   @overload
   async def list_commits(
     self,

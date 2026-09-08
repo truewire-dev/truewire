@@ -64,14 +64,6 @@ class OrderAmendsEndpoint(RpcEndpoint):
     order_id: str,
     *,
     rebase_multiplier: Literal['rebased', 'base'] | None = None,
-    validate: Literal[True] | None = None,
-  ) -> OrderAmends: ...
-  @overload
-  async def order_amends(
-    self,
-    order_id: str,
-    *,
-    rebase_multiplier: Literal['rebased', 'base'] | None = None,
     validate: bool | None = None,
   ) -> OrderAmends: ...
   async def order_amends(

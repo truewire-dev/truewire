@@ -23,12 +23,6 @@ class GetWebsocketsToken(RpcEndpoint):
   async def get_websockets_token(
     self,
     *,
-    validate: Literal[True] | None = None,
-  ) -> WebSocketsToken: ...
-  @overload
-  async def get_websockets_token(
-    self,
-    *,
     validate: bool | None = None,
   ) -> WebSocketsToken: ...
   async def get_websockets_token(

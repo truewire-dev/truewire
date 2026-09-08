@@ -57,15 +57,6 @@ class Assets(RpcEndpoint):
     *,
     aclass: Literal['currency', 'tokenized_asset'] | None = None,
     asset_version: Literal[1] | None = None,
-    validate: Literal[True] | None = None,
-  ) -> Response: ...
-  @overload
-  async def assets(
-    self,
-    asset: str | None = None,
-    *,
-    aclass: Literal['currency', 'tokenized_asset'] | None = None,
-    asset_version: Literal[1] | None = None,
     validate: bool | None = None,
   ) -> Response: ...
   async def assets(

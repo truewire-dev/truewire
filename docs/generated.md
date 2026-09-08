@@ -72,20 +72,6 @@ class ListCommits(Endpoint):
     since: TimestampIso | None = None,
     until: TimestampIso | None = None,
     per_page: int | None = None,
-    validate: Literal[True] | None = None,
-  ) -> PaginatedResponse[Commit, int]: ...
-  @overload
-  def list_commits_paged(
-    self,
-    *,
-    owner: str,
-    repo: str,
-    sha: str | None = None,
-    path: str | None = None,
-    author: str | None = None,
-    since: TimestampIso | None = None,
-    until: TimestampIso | None = None,
-    per_page: int | None = None,
     validate: bool | None = None,
   ) -> PaginatedResponse[Commit, int]: ...
   def list_commits_paged(
@@ -169,21 +155,6 @@ class ListCommits(Endpoint):
     until: TimestampIso | None = None,
     per_page: int | None = None,
     page: int | None = None,
-    validate: Literal[True] | None = None,
-  ) -> Commits: ...
-  @overload
-  async def list_commits(
-    self,
-    *,
-    owner: str,
-    repo: str,
-    sha: str | None = None,
-    path: str | None = None,
-    author: str | None = None,
-    since: TimestampIso | None = None,
-    until: TimestampIso | None = None,
-    per_page: int | None = None,
-    page: int | None = None,
     validate: bool | None = None,
   ) -> Commits: ...
   async def list_commits(
@@ -245,7 +216,7 @@ class ListCommits(Endpoint):
 
 `Request` is the spec's request schema as a `TypedDict`: required fields are plain, optional ones are `NotRequired`, and every field keeps the description the spec gave it. `Commits` is the response type, a list of the shared `Commit` record. The `since` and `until` fields are `TimestampIso`, the runtime's alias for an aware `datetime` that dumps to the wire as an ISO string.
 
-`list_commits` takes keyword arguments only, builds the request from the arguments that were passed, and hands one call to `self.request`: the method, the path template with its `{owner}` and `{repo}` placeholders, the endpoint's declared `meta`, and the two types. The response comes back as `Commits` and is validated against that type by default; `validate=False` on a call, or `validate=False` on the client, returns the parsed JSON as it came. The three `@overload` stubs above the method are what make the annotation honest about that: see [`validate=False` returns the raw body](#validatefalse-returns-the-raw-body) below.
+`list_commits` takes keyword arguments only, builds the request from the arguments that were passed, and hands one call to `self.request`: the method, the path template with its `{owner}` and `{repo}` placeholders, the endpoint's declared `meta`, and the two types. The response comes back as `Commits` and is validated against that type by default; `validate=False` on a call, or `validate=False` on the client, returns the parsed JSON as it came. The two `@overload` stubs above the method are what make the annotation honest about that: see [`validate=False` returns the raw body](#validatefalse-returns-the-raw-body) below.
 
 `list_commits_paged` exists because `endpoint.json` declares a `pagination` block: strategy `page`, index parameter `page` starting at 1, size parameter `per_page`, done on a short page. The generator renders that declaration as a `next(page)` closure that calls the plain method and returns the rows plus the next index, or `None` when the page came back shorter than `per_page` (30 when omitted, the spec's default). `PaginatedResponse(1, next)` is the runtime's walker. Awaited, it flattens every page into one list. Iterated with `async for`, it yields one page at a time. `next` depends on nothing but its `page` argument, so a page can be retried and a walk resumed.
 
@@ -356,7 +327,7 @@ The class takes its core as a constructor argument typed `HttpEndpoint<DefaultMe
 
 A generated method returns the parsed record: `datetime`s, `Decimal`s, literal unions, in both languages. That is true only when the reply was validated. `validate=False` on a call skips validation and returns the body as the wire sent it, so a single annotation of `-> Commits` would lie for that call. The generator says so instead, with one overload per outcome, and the runtime is unchanged.
 
-In Python, every request/reply method and every `_paged` walker carries three `@overload` stubs above its implementation. `validate: Literal[False]` returns `Any` (a walker returns `PaginatedResponse[Any, int]` or `AsyncIterator[Any]`, its state type kept). `validate: Literal[True] | None = None`, the default, returns the declared type. `validate: bool | None = None` also returns the declared type: a flag decided elsewhere is the caller's own decision, like `None`, which defers to the client, and the walkers forward exactly such a flag. The implementation keeps `validate: bool | None = None`.
+In Python, every request/reply method and every `_paged` walker carries two `@overload` stubs above its implementation. `validate: Literal[False]` returns `Any` (a walker returns `PaginatedResponse[Any, int]` or `AsyncIterator[Any]`, its state type kept). `validate: bool | None = None`, the default, returns the declared type: `None` defers to the client, and a flag decided elsewhere is the caller's own decision, which is also what lets the walkers forward one. The implementation keeps the same header.
 
 ```python
 repo = await client.repos.get(owner='truewire-dev', repo='truewire')                  # Repository

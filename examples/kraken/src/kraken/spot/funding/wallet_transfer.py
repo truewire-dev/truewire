@@ -46,16 +46,6 @@ class WalletTransfer(RpcEndpoint):
     from_: Literal['Spot Wallet'] = 'Spot Wallet',
     to: Literal['Futures Wallet'] = 'Futures Wallet',
     amount: str,
-    validate: Literal[True] | None = None,
-  ) -> WalletTransferReceipt: ...
-  @overload
-  async def wallet_transfer(
-    self,
-    *,
-    asset: str,
-    from_: Literal['Spot Wallet'] = 'Spot Wallet',
-    to: Literal['Futures Wallet'] = 'Futures Wallet',
-    amount: str,
     validate: bool | None = None,
   ) -> WalletTransferReceipt: ...
   async def wallet_transfer(

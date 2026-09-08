@@ -79,23 +79,6 @@ class AmendOrder(SocketEndpoint):
     trigger_price_type: Literal['static', 'pct', 'quote'] | None = None,
     deadline: TimestampIso | None = None,
     symbol: str | None = None,
-    validate: Literal[True] | None = None,
-  ) -> AmendOrderResult: ...
-  @overload
-  async def amend_order(
-    self,
-    *,
-    order_id: str | None = None,
-    cl_ord_id: str | None = None,
-    order_qty: float | None = None,
-    display_qty: float | None = None,
-    limit_price: float | None = None,
-    limit_price_type: Literal['static', 'pct', 'quote'] | None = None,
-    post_only: bool | None = None,
-    trigger_price: float | None = None,
-    trigger_price_type: Literal['static', 'pct', 'quote'] | None = None,
-    deadline: TimestampIso | None = None,
-    symbol: str | None = None,
     validate: bool | None = None,
   ) -> AmendOrderResult: ...
   async def amend_order(

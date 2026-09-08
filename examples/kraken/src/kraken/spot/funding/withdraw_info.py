@@ -44,15 +44,6 @@ class WithdrawInfo(RpcEndpoint):
     asset: str,
     key: str,
     amount: str,
-    validate: Literal[True] | None = None,
-  ) -> WithdrawalInfo: ...
-  @overload
-  async def withdraw_info(
-    self,
-    *,
-    asset: str,
-    key: str,
-    amount: str,
     validate: bool | None = None,
   ) -> WithdrawalInfo: ...
   async def withdraw_info(

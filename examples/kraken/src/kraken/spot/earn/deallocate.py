@@ -43,14 +43,6 @@ class Deallocate(RpcEndpoint):
     *,
     amount: str,
     strategy_id: str,
-    validate: Literal[True] | None = None,
-  ) -> Response: ...
-  @overload
-  async def deallocate(
-    self,
-    *,
-    amount: str,
-    strategy_id: str,
     validate: bool | None = None,
   ) -> Response: ...
   async def deallocate(

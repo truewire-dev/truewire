@@ -400,11 +400,11 @@ def _validate_signatures(code: str, name: str) -> list[tuple[str, str | None, st
 
 
 def test_rpc_endpoint_overloads_validate_false_to_any():
-  """A method's return type is honest about `validate` (`validate_overloads`): three
+  """A method's return type is honest about `validate` (`validate_overloads`): two
   `@overload` stubs ahead of the implementation -- `Literal[False]` returns `Any`, the
-  default `Literal[True] | None` and a forwarded `bool | None` return the declared type
-  -- while the implementation keeps `validate: bool | None = None` and its body, so the
-  runtime is untouched. The stubs' imports come with them."""
+  default or a forwarded `bool | None` returns the declared type -- while the
+  implementation keeps `validate: bool | None = None` and its body, so the runtime is
+  untouched. The stubs' imports come with them."""
   root = FIXTURE_ROOT / 'spec' / 'endpoints' / 'market' / 'orderbook'
   endpoint = load_endpoint(root / 'endpoint.json')
   code = _generator().rpc_endpoint(
@@ -412,11 +412,10 @@ def test_rpc_endpoint_overloads_validate_false_to_any():
   )
   assert _validate_signatures(code, 'orderbook') == [
     ('Literal[False]', None, 'Any'),
-    ('Literal[True] | None', 'None', 'OrderbookResponse'),
     ('bool | None', 'None', 'OrderbookResponse'),
     ('bool | None', 'None', 'OrderbookResponse'),
   ]
-  assert code.count('@overload') == 3
+  assert code.count('@overload') == 2
   assert '@overload\n  async def orderbook(self, symbol: str, *, validate: Literal[False]) -> Any: ...' in code
   assert code.count('validate=validate') == 1
   assert 'from typing_extensions import Any, Literal, NotRequired, TypedDict, overload' in code
@@ -425,9 +424,9 @@ def test_rpc_endpoint_overloads_validate_false_to_any():
 
 def test_rpc_endpoint_paged_walker_overloads_validate_false_too():
   """The `_paged` walker forwards `validate` to the method it drives, so it carries the
-  same three stubs: `validate=False` yields raw rows, `PaginatedResponse[Any, str]`,
+  same two stubs: `validate=False` yields raw rows, `PaginatedResponse[Any, str]`,
   with the cursor's own type kept. Its implementation forwards a `bool | None`, which
-  the third stub is there to accept."""
+  the second stub is there to accept."""
   root = FIXTURE_ROOT / 'spec' / 'endpoints' / 'market' / 'order_list'
   endpoint = load_endpoint(root / 'endpoint.json')
   code = _generator().rpc_endpoint(
@@ -435,12 +434,11 @@ def test_rpc_endpoint_paged_walker_overloads_validate_false_too():
   )
   assert _validate_signatures(code, 'order_list_paged') == [
     ('Literal[False]', None, 'PaginatedResponse[Any, str]'),
-    ('Literal[True] | None', 'None', 'PaginatedResponse[OrderListItem, str]'),
     ('bool | None', 'None', 'PaginatedResponse[OrderListItem, str]'),
     ('bool | None', 'None', 'PaginatedResponse[OrderListItem, str]'),
   ]
   assert _validate_signatures(code, 'order_list')[0] == ('Literal[False]', None, 'Any')
-  assert code.count('@overload') == 6
+  assert code.count('@overload') == 4
 
 
 def test_rpc_endpoint_deprecated_endpoint_renders_decorator():

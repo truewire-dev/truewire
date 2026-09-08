@@ -158,22 +158,6 @@ class ClosedOrdersEndpoint(RpcEndpoint):
     consolidate_taker: bool | None = None,
     without_count: bool | None = None,
     rebase_multiplier: Literal['rebased', 'base'] | None = None,
-    validate: Literal[True] | None = None,
-  ) -> ClosedOrders: ...
-  @overload
-  async def closed_orders(
-    self,
-    *,
-    trades: bool | None = None,
-    userref: int | None = None,
-    cl_ord_id: str | None = None,
-    start: int | None = None,
-    end: int | None = None,
-    ofs: int | None = None,
-    closetime: Literal['open', 'close', 'both'] | None = None,
-    consolidate_taker: bool | None = None,
-    without_count: bool | None = None,
-    rebase_multiplier: Literal['rebased', 'base'] | None = None,
     validate: bool | None = None,
   ) -> ClosedOrders: ...
   async def closed_orders(

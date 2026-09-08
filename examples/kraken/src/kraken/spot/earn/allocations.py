@@ -224,15 +224,6 @@ class Allocations(RpcEndpoint):
     ascending: bool | None = None,
     converted_asset: str | None = None,
     hide_zero_allocations: bool | None = None,
-    validate: Literal[True] | None = None,
-  ) -> EarnAllocationsResult: ...
-  @overload
-  async def allocations(
-    self,
-    *,
-    ascending: bool | None = None,
-    converted_asset: str | None = None,
-    hide_zero_allocations: bool | None = None,
     validate: bool | None = None,
   ) -> EarnAllocationsResult: ...
   async def allocations(

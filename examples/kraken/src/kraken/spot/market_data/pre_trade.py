@@ -86,13 +86,6 @@ class PreTrade(RpcEndpoint):
     self,
     symbol: str,
     *,
-    validate: Literal[True] | None = None,
-  ) -> PreTradeBook: ...
-  @overload
-  async def pre_trade(
-    self,
-    symbol: str,
-    *,
     validate: bool | None = None,
   ) -> PreTradeBook: ...
   async def pre_trade(

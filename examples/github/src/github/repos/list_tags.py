@@ -54,15 +54,6 @@ class ListTags(Endpoint):
     owner: str,
     repo: str,
     per_page: int | None = None,
-    validate: Literal[True] | None = None,
-  ) -> PaginatedResponse[Tag, int]: ...
-  @overload
-  def list_tags_paged(
-    self,
-    *,
-    owner: str,
-    repo: str,
-    per_page: int | None = None,
     validate: bool | None = None,
   ) -> PaginatedResponse[Tag, int]: ...
   def list_tags_paged(
@@ -109,16 +100,6 @@ class ListTags(Endpoint):
     page: int | None = None,
     validate: Literal[False],
   ) -> Any: ...
-  @overload
-  async def list_tags(
-    self,
-    *,
-    owner: str,
-    repo: str,
-    per_page: int | None = None,
-    page: int | None = None,
-    validate: Literal[True] | None = None,
-  ) -> Tags: ...
   @overload
   async def list_tags(
     self,

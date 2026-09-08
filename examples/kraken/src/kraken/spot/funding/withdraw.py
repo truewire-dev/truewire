@@ -54,19 +54,6 @@ class Withdraw(RpcEndpoint):
     amount: str,
     max_fee: str | None = None,
     rebase_multiplier: Literal['rebased', 'base'] | None = None,
-    validate: Literal[True] | None = None,
-  ) -> WithdrawReceipt: ...
-  @overload
-  async def withdraw(
-    self,
-    *,
-    asset: str,
-    aclass: Literal['currency', 'tokenized_asset'] | None = None,
-    key: str,
-    address: str | None = None,
-    amount: str,
-    max_fee: str | None = None,
-    rebase_multiplier: Literal['rebased', 'base'] | None = None,
     validate: bool | None = None,
   ) -> WithdrawReceipt: ...
   async def withdraw(

@@ -1841,11 +1841,10 @@ class TestValidateOverloads:
       response_type='Orders',
     ) or ''
     stubs = [line for line in source.splitlines() if line.startswith(('def ', 'async def'))]
-    assert stubs == ['def orders_paged(', 'def orders_paged(', 'def orders_paged(', 'async def orders_paged(']
+    assert stubs == ['def orders_paged(', 'def orders_paged(', 'async def orders_paged(']
     assert '  validate: Literal[False],\n) -> AsyncIterator[Any]: ...' in source
-    assert '  validate: Literal[True] | None = None,\n) -> AsyncIterator[Orders]: ...' in source
     assert '  validate: bool | None = None,\n) -> AsyncIterator[Orders]: ...' in source
-    assert source.count('@overload') == 3
+    assert source.count('@overload') == 2
 
   def test_a_header_without_validate_or_a_return_type_gets_none(self):
     """A gRPC call or a reply-less command renders exactly as before."""
@@ -1859,16 +1858,16 @@ class TestValidateOverloads:
     assert validate_overloads(header, raw_return_type='Any') == []
     header.return_type = 'Orders'
     stubs = validate_overloads(header, raw_return_type='Any')
-    assert [stub.return_type for stub in stubs] == ['Any', 'Orders', 'Orders']
+    assert [stub.return_type for stub in stubs] == ['Any', 'Orders']
     assert all(stub.decorators == ['@overload'] and stub.asyn for stub in stubs)
     assert [stub.kwargs[-1].code() for stub in stubs] == [
-      'validate: Literal[False]', 'validate: Literal[True] | None = None', 'validate: bool | None = None',
+      'validate: Literal[False]', 'validate: bool | None = None',
     ]
     assert not any(validate_overloads(header, raw_return_type='Any', generator=True)[0].asyn for _ in [0])
     # The implementation's own header is never touched.
     assert header.kwargs[-1].code() == 'validate: bool | None = None'
     header.overloads = stubs
-    assert header.code().count(': ...\n') == 3
+    assert header.code().count(': ...\n') == 2
     assert header.code().endswith('validate: bool | None = None) -> Orders:')
 
 

@@ -44,15 +44,6 @@ class CancelOrder(SocketEndpoint):
     order_id: list[str] | None = None,
     cl_ord_id: list[str] | None = None,
     order_userref: list[int] | None = None,
-    validate: Literal[True] | None = None,
-  ) -> CancelOrderResult: ...
-  @overload
-  async def cancel_order(
-    self,
-    *,
-    order_id: list[str] | None = None,
-    cl_ord_id: list[str] | None = None,
-    order_userref: list[int] | None = None,
     validate: bool | None = None,
   ) -> CancelOrderResult: ...
   async def cancel_order(

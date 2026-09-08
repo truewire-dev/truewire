@@ -48,16 +48,6 @@ class Depth(RpcEndpoint):
     asset_version: Literal[1] | None = None,
     count: int | None = None,
     asset_class: Literal['tokenized_asset'] | None = None,
-    validate: Literal[True] | None = None,
-  ) -> Response: ...
-  @overload
-  async def depth(
-    self,
-    pair: str,
-    *,
-    asset_version: Literal[1] | None = None,
-    count: int | None = None,
-    asset_class: Literal['tokenized_asset'] | None = None,
     validate: bool | None = None,
   ) -> Response: ...
   async def depth(

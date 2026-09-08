@@ -106,15 +106,6 @@ class QueryTrades(RpcEndpoint):
     *,
     trades: bool | None = None,
     rebase_multiplier: Literal['rebased', 'base'] | None = None,
-    validate: Literal[True] | None = None,
-  ) -> QueriedTrades: ...
-  @overload
-  async def query_trades(
-    self,
-    txid: str,
-    *,
-    trades: bool | None = None,
-    rebase_multiplier: Literal['rebased', 'base'] | None = None,
     validate: bool | None = None,
   ) -> QueriedTrades: ...
   async def query_trades(

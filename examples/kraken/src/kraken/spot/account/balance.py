@@ -31,13 +31,6 @@ class Balance(RpcEndpoint):
     self,
     rebase_multiplier: Literal['rebased', 'base'] | None = None,
     *,
-    validate: Literal[True] | None = None,
-  ) -> AccountBalance: ...
-  @overload
-  async def balance(
-    self,
-    rebase_multiplier: Literal['rebased', 'base'] | None = None,
-    *,
     validate: bool | None = None,
   ) -> AccountBalance: ...
   async def balance(

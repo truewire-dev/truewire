@@ -47,17 +47,6 @@ class Trades(RpcEndpoint):
     since: TimestampNanos | None = None,
     count: int | None = None,
     asset_class: Literal['tokenized_asset'] | None = None,
-    validate: Literal[True] | None = None,
-  ) -> TradesResult: ...
-  @overload
-  async def trades(
-    self,
-    pair: str,
-    *,
-    asset_version: Literal[1] | None = None,
-    since: TimestampNanos | None = None,
-    count: int | None = None,
-    asset_class: Literal['tokenized_asset'] | None = None,
     validate: bool | None = None,
   ) -> TradesResult: ...
   async def trades(

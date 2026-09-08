@@ -40,14 +40,6 @@ class CancelOrder(RpcEndpoint):
     txid: str | int | None = None,
     *,
     cl_ord_id: str | None = None,
-    validate: Literal[True] | None = None,
-  ) -> OrderCancelled: ...
-  @overload
-  async def cancel_order(
-    self,
-    txid: str | int | None = None,
-    *,
-    cl_ord_id: str | None = None,
     validate: bool | None = None,
   ) -> OrderCancelled: ...
   async def cancel_order(

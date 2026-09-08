@@ -105,24 +105,6 @@ class EditOrder(RpcEndpoint):
     deadline: TimestampIso | None = None,
     cancel_response: bool | None = None,
     validate_: bool | None = None,
-    validate: Literal[True] | None = None,
-  ) -> OrderEdited: ...
-  @overload
-  async def edit_order(
-    self,
-    userref: int | None = None,
-    *,
-    txid: str | int,
-    volume: str | None = None,
-    displayvol: str | None = None,
-    pair: str,
-    asset_class: Literal['tokenized_asset'] | None = None,
-    price: str | None = None,
-    price2: str | None = None,
-    oflags: str | None = None,
-    deadline: TimestampIso | None = None,
-    cancel_response: bool | None = None,
-    validate_: bool | None = None,
     validate: bool | None = None,
   ) -> OrderEdited: ...
   async def edit_order(

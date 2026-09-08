@@ -68,13 +68,6 @@ class CreditLines(RpcEndpoint):
     self,
     rebase_multiplier: Literal['rebased', 'base'] | None = None,
     *,
-    validate: Literal[True] | None = None,
-  ) -> CreditLinesResponse: ...
-  @overload
-  async def credit_lines(
-    self,
-    rebase_multiplier: Literal['rebased', 'base'] | None = None,
-    *,
     validate: bool | None = None,
   ) -> CreditLinesResponse: ...
   async def credit_lines(

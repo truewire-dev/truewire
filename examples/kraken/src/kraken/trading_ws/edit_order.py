@@ -107,28 +107,6 @@ class EditOrder(SocketEndpoint):
     price: float | None = None,
     trigger: str | None = None,
     stop_price: float | None = None,
-    validate: Literal[True] | None = None,
-  ) -> EditOrderResult: ...
-  @overload
-  async def edit_order(
-    self,
-    *,
-    order_id: str,
-    symbol: str,
-    order_qty: float | None = None,
-    display_qty: float | None = None,
-    limit_price: float | None = None,
-    fee_preference: Literal['base', 'quote'] | None = None,
-    no_mpp: bool | None = None,
-    order_userref: int | None = None,
-    post_only: bool | None = None,
-    reduce_only: bool | None = None,
-    triggers: EditOrderTriggers | None = None,
-    validate_: bool | None = None,
-    deadline: TimestampIso | None = None,
-    price: float | None = None,
-    trigger: str | None = None,
-    stop_price: float | None = None,
     validate: bool | None = None,
   ) -> EditOrderResult: ...
   async def edit_order(

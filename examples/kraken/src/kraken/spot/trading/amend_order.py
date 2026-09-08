@@ -67,21 +67,6 @@ class AmendOrder(RpcEndpoint):
     pair: str | None = None,
     post_only: bool | None = None,
     deadline: TimestampIso | None = None,
-    validate: Literal[True] | None = None,
-  ) -> OrderAmended: ...
-  @overload
-  async def amend_order(
-    self,
-    *,
-    txid: str | None = None,
-    cl_ord_id: str | None = None,
-    order_qty: str | None = None,
-    display_qty: str | None = None,
-    limit_price: str | None = None,
-    trigger_price: str | None = None,
-    pair: str | None = None,
-    post_only: bool | None = None,
-    deadline: TimestampIso | None = None,
     validate: bool | None = None,
   ) -> OrderAmended: ...
   async def amend_order(

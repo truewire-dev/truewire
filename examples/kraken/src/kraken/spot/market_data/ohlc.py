@@ -47,17 +47,6 @@ class Ohlc(RpcEndpoint):
     interval: Literal[1, 5, 15, 30, 60, 240, 1440, 10080, 21600] | None = None,
     since: TimestampSeconds | None = None,
     asset_class: Literal['tokenized_asset'] | None = None,
-    validate: Literal[True] | None = None,
-  ) -> OhlcResult: ...
-  @overload
-  async def ohlc(
-    self,
-    pair: str,
-    *,
-    asset_version: Literal[1] | None = None,
-    interval: Literal[1, 5, 15, 30, 60, 240, 1440, 10080, 21600] | None = None,
-    since: TimestampSeconds | None = None,
-    asset_class: Literal['tokenized_asset'] | None = None,
     validate: bool | None = None,
   ) -> OhlcResult: ...
   async def ohlc(

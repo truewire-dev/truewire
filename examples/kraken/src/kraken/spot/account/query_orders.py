@@ -216,17 +216,6 @@ class QueryOrders(RpcEndpoint):
     userref: int | None = None,
     consolidate_taker: bool | None = None,
     rebase_multiplier: Literal['rebased', 'base'] | None = None,
-    validate: Literal[True] | None = None,
-  ) -> QueriedOrders: ...
-  @overload
-  async def query_orders(
-    self,
-    txid: str,
-    *,
-    trades: bool | None = None,
-    userref: int | None = None,
-    consolidate_taker: bool | None = None,
-    rebase_multiplier: Literal['rebased', 'base'] | None = None,
     validate: bool | None = None,
   ) -> QueriedOrders: ...
   async def query_orders(

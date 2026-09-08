@@ -43,13 +43,6 @@ class DeallocateStatus(RpcEndpoint):
     self,
     strategy_id: str,
     *,
-    validate: Literal[True] | None = None,
-  ) -> Response: ...
-  @overload
-  async def deallocate_status(
-    self,
-    strategy_id: str,
-    *,
     validate: bool | None = None,
   ) -> Response: ...
   async def deallocate_status(

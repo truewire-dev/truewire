@@ -38,14 +38,6 @@ class RemoveExport(RpcEndpoint):
     id: str,
     *,
     type: Literal['cancel', 'delete'],
-    validate: Literal[True] | None = None,
-  ) -> RemoveExportResult: ...
-  @overload
-  async def remove_export(
-    self,
-    id: str,
-    *,
-    type: Literal['cancel', 'delete'],
     validate: bool | None = None,
   ) -> RemoveExportResult: ...
   async def remove_export(

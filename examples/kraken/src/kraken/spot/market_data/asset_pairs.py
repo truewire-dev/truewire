@@ -106,18 +106,6 @@ class AssetPairs(RpcEndpoint):
     info: Literal['info', 'leverage', 'fees', 'margin'] | None = None,
     country_code: str | None = None,
     execution_venue: Literal['international', 'bitnomial_exchange'] | None = None,
-    validate: Literal[True] | None = None,
-  ) -> Response: ...
-  @overload
-  async def asset_pairs(
-    self,
-    asset_version: Literal[1] | None = None,
-    *,
-    pair: str | None = None,
-    aclass_base: Literal['currency', 'tokenized_asset'] | None = None,
-    info: Literal['info', 'leverage', 'fees', 'margin'] | None = None,
-    country_code: str | None = None,
-    execution_venue: Literal['international', 'bitnomial_exchange'] | None = None,
     validate: bool | None = None,
   ) -> Response: ...
   async def asset_pairs(

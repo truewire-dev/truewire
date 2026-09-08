@@ -69,15 +69,6 @@ class ListReleases(Endpoint):
     owner: str,
     repo: str,
     per_page: int | None = None,
-    validate: Literal[True] | None = None,
-  ) -> PaginatedResponse[Release, int]: ...
-  @overload
-  def list_releases_paged(
-    self,
-    *,
-    owner: str,
-    repo: str,
-    per_page: int | None = None,
     validate: bool | None = None,
   ) -> PaginatedResponse[Release, int]: ...
   def list_releases_paged(
@@ -124,16 +115,6 @@ class ListReleases(Endpoint):
     page: int | None = None,
     validate: Literal[False],
   ) -> Any: ...
-  @overload
-  async def list_releases(
-    self,
-    *,
-    owner: str,
-    repo: str,
-    per_page: int | None = None,
-    page: int | None = None,
-    validate: Literal[True] | None = None,
-  ) -> Releases: ...
   @overload
   async def list_releases(
     self,

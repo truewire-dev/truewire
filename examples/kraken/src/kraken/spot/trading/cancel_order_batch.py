@@ -38,14 +38,6 @@ class CancelOrderBatch(RpcEndpoint):
     orders: list[str | int] | None = None,
     *,
     cl_ord_ids: list[str] | None = None,
-    validate: Literal[True] | None = None,
-  ) -> OrderCancelled: ...
-  @overload
-  async def cancel_order_batch(
-    self,
-    orders: list[str | int] | None = None,
-    *,
-    cl_ord_ids: list[str] | None = None,
     validate: bool | None = None,
   ) -> OrderCancelled: ...
   async def cancel_order_batch(

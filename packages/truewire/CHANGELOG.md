@@ -4,11 +4,10 @@
 
 - **`validate=False` is typed as the raw body it returns.** A generated method's return
   type is the parsed record, which is only true when the reply was validated. Python:
-  every request/reply method and every `_paged` walker now carries three `@overload`
+  every request/reply method and every `_paged` walker now carries two `@overload`
   stubs -- `validate: Literal[False]` returns `Any` (`PaginatedResponse[Any, ...]`/
-  `AsyncIterator[Any]` for a walker), `validate: Literal[True] | None = None` and a
-  forwarded `validate: bool | None = None` return the declared type -- and the
-  implementation keeps `validate: bool | None = None`. TypeScript: two overload
+  `AsyncIterator[Any]` for a walker), `validate: bool | None = None` returns the
+  declared type -- and the implementation keeps its header. TypeScript: two overload
   signatures per method and per router delegate, `options: CallOptions & { validate:
   false }` returning `unknown` first, then the declared one. Runtime behaviour is
   unchanged; `Function` gains `overloads`, the Python emitter `validate_overloads`, the

@@ -44,13 +44,6 @@ class BalanceEx(RpcEndpoint):
     self,
     rebase_multiplier: Literal['rebased', 'base'] | None = None,
     *,
-    validate: Literal[True] | None = None,
-  ) -> ExtendedBalances: ...
-  @overload
-  async def balance_ex(
-    self,
-    rebase_multiplier: Literal['rebased', 'base'] | None = None,
-    *,
     validate: bool | None = None,
   ) -> ExtendedBalances: ...
   async def balance_ex(

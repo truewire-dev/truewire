@@ -83,13 +83,6 @@ class ExportStatus(RpcEndpoint):
     self,
     report: Literal['trades', 'ledgers'],
     *,
-    validate: Literal[True] | None = None,
-  ) -> ExportReports: ...
-  @overload
-  async def export_status(
-    self,
-    report: Literal['trades', 'ledgers'],
-    *,
     validate: bool | None = None,
   ) -> ExportReports: ...
   async def export_status(

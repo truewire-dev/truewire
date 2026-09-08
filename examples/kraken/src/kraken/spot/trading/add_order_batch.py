@@ -457,29 +457,6 @@ class AddOrderBatch(RpcEndpoint):
     deadline: TimestampIso | None = None,
     validate_: bool | None = None,
     broker: str | None = None,
-    validate: Literal[True] | None = None,
-  ) -> OrderBatchAdded: ...
-  @overload
-  async def add_order_batch(
-    self,
-    orders: list[
-      BatchOrderMarket
-      | BatchOrderLimit
-      | BatchOrderIceberg
-      | BatchOrderStopLoss
-      | BatchOrderTakeProfit
-      | BatchOrderStopLossLimit
-      | BatchOrderTakeProfitLimit
-      | BatchOrderTrailingStop
-      | BatchOrderTrailingStopLimit
-      | BatchOrderSettlePosition
-    ],
-    *,
-    pair: str,
-    asset_class: Literal['tokenized_asset'] | None = None,
-    deadline: TimestampIso | None = None,
-    validate_: bool | None = None,
-    broker: str | None = None,
     validate: bool | None = None,
   ) -> OrderBatchAdded: ...
   async def add_order_batch(

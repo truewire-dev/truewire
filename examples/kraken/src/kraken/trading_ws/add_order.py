@@ -529,13 +529,6 @@ class AddOrder(SocketEndpoint):
     self,
     order_request: Request,
     *,
-    validate: Literal[True] | None = None,
-  ) -> AddOrderResult: ...
-  @overload
-  async def add_order(
-    self,
-    order_request: Request,
-    *,
     validate: bool | None = None,
   ) -> AddOrderResult: ...
   async def add_order(

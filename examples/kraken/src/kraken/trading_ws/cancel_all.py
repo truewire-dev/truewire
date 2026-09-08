@@ -22,12 +22,6 @@ class CancelAll(SocketEndpoint):
   @overload
   async def cancel_all(self, *, validate: Literal[False]) -> Any: ...
   @overload
-  async def cancel_all(
-    self,
-    *,
-    validate: Literal[True] | None = None,
-  ) -> CancelAllResult: ...
-  @overload
   async def cancel_all(self, *, validate: bool | None = None) -> CancelAllResult: ...
   async def cancel_all(self, *, validate: bool | None = None) -> CancelAllResult:
     """Cancels all open orders on the account, including untriggered orders and orders resting in the book. The details of each individual cancelled order are also streamed on the `executions` channel.

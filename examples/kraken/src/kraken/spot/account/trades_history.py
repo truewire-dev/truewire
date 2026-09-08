@@ -175,30 +175,6 @@ class TradesHistory(RpcEndpoint):
     pair: str | None = None,
     limit: int | None = None,
     max_pages: int | None = None,
-    validate: Literal[True] | None = None,
-  ) -> AsyncIterator[TradeHistory]: ...
-  @overload
-  def trades_history_paged(
-    self,
-    type: Literal[
-      'all', 'any position', 'closed position', 'closing position', 'no position'
-    ]
-    | None = None,
-    *,
-    trades: bool | None = None,
-    start: int | None = None,
-    end: int | None = None,
-    without_count: bool | None = None,
-    consolidate_taker: bool | None = None,
-    ledgers: bool | None = None,
-    rebase_multiplier: Literal['rebased', 'base'] | None = None,
-    aclass: Literal[
-      'forex', 'equity_pair', 'futures_contract', 'synthetic_pair', 'external_pair'
-    ]
-    | None = None,
-    pair: str | None = None,
-    limit: int | None = None,
-    max_pages: int | None = None,
     validate: bool | None = None,
   ) -> AsyncIterator[TradeHistory]: ...
   async def trades_history_paged(
@@ -308,30 +284,6 @@ class TradesHistory(RpcEndpoint):
     limit: int | None = None,
     validate: Literal[False],
   ) -> Any: ...
-  @overload
-  async def trades_history(
-    self,
-    type: Literal[
-      'all', 'any position', 'closed position', 'closing position', 'no position'
-    ]
-    | None = None,
-    *,
-    trades: bool | None = None,
-    start: int | None = None,
-    end: int | None = None,
-    ofs: int | None = None,
-    without_count: bool | None = None,
-    consolidate_taker: bool | None = None,
-    ledgers: bool | None = None,
-    rebase_multiplier: Literal['rebased', 'base'] | None = None,
-    aclass: Literal[
-      'forex', 'equity_pair', 'futures_contract', 'synthetic_pair', 'external_pair'
-    ]
-    | None = None,
-    pair: str | None = None,
-    limit: int | None = None,
-    validate: Literal[True] | None = None,
-  ) -> TradeHistory: ...
   @overload
   async def trades_history(
     self,

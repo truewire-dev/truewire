@@ -62,15 +62,6 @@ class GroupedBook(RpcEndpoint):
     *,
     depth: Literal[10, 25, 100, 250, 1000] | None = None,
     grouping: Literal[1, 5, 10, 25, 50, 100, 250, 500, 1000] | None = None,
-    validate: Literal[True] | None = None,
-  ) -> GroupedOrderBook: ...
-  @overload
-  async def grouped_book(
-    self,
-    pair: str,
-    *,
-    depth: Literal[10, 25, 100, 250, 1000] | None = None,
-    grouping: Literal[1, 5, 10, 25, 50, 100, 250, 500, 1000] | None = None,
     validate: bool | None = None,
   ) -> GroupedOrderBook: ...
   async def grouped_book(

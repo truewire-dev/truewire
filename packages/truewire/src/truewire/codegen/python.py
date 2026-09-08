@@ -113,19 +113,21 @@ def validate_overloads(
   A generated method returns the parsed record -- `datetime`s, `Decimal`s, `Literal`s --
   only when the reply was validated; `validate=False` hands back the body as the wire
   sent it, and the single annotation `-> Commits` lies for that call. The cheapest honest
-  typing is one overload per outcome: `validate: Literal[False]` returns
-  `raw_return_type` (`Any`, or `PaginatedResponse[Any, ...]`/`AsyncIterator[Any]` for a
-  walker), and `validate: Literal[True] | None = None` -- the default, which leaves the
-  decision to the client -- returns the declared type. The implementation keeps
-  `validate: bool | None = None`, and the runtime is untouched.
+  typing is two stubs: `validate: Literal[False]` returns `raw_return_type` (`Any`, or
+  `PaginatedResponse[Any, ...]`/`AsyncIterator[Any]` for a walker), and
+  `validate: bool | None = None` -- the default `None` leaves the decision to the client
+  -- returns the declared type. The implementation keeps the same header, and the
+  runtime is untouched.
 
-  A third stub, `validate: bool | None = None` returning the declared type, catches a
-  caller forwarding a `bool` variable -- the generated walkers do exactly that
-  (`validate=validate`). Pyright expands a `bool` argument over `Literal[True]`/
-  `Literal[False]` only within a budget it spends left to right, so a signature with a
-  few `Literal[...] | None` parameters ahead of `validate` runs out before it gets there,
-  and mypy never expands `bool` at all. Only a literal `False` at the call site is
-  knowably raw; a flag decided elsewhere is the caller's own decision, like `None`.
+  The second stub is deliberately `bool | None`, not `Literal[True] | None`: a caller
+  forwarding a `bool` variable -- the generated walkers do exactly that
+  (`validate=validate`) -- gets the declared type. Only a literal `False` at the call
+  site is knowably raw; a flag decided elsewhere is the caller's own decision, like
+  `None`. (Pyright would otherwise expand such a `bool` over `Literal[True]`/
+  `Literal[False]` within a budget it spends left to right, which a few
+  `Literal[...] | None` parameters ahead of `validate` exhaust; mypy never expands it.)
+  Two stubs is also the least a signature can be repeated, which matters in generated
+  code people read.
 
   Args:
     header: The implementation's header, its `kwargs` final. Returned empty when it has
@@ -159,7 +161,6 @@ def validate_overloads(
 
   return [
     variant('Literal[False]', default=None, return_type=raw_return_type),
-    variant('Literal[True] | None', default='None', return_type=header.return_type),
     variant('bool | None', default='None', return_type=header.return_type),
   ]
 

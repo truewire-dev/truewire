@@ -98,16 +98,6 @@ class OpenPositions(RpcEndpoint):
     docalcs: bool | None = None,
     consolidation: Literal['market'] | None = None,
     rebase_multiplier: Literal['rebased', 'base'] | None = None,
-    validate: Literal[True] | None = None,
-  ) -> OpenPositionsResponse: ...
-  @overload
-  async def open_positions(
-    self,
-    txid: str | None = None,
-    *,
-    docalcs: bool | None = None,
-    consolidation: Literal['market'] | None = None,
-    rebase_multiplier: Literal['rebased', 'base'] | None = None,
     validate: bool | None = None,
   ) -> OpenPositionsResponse: ...
   async def open_positions(

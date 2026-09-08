@@ -57,15 +57,6 @@ class Ticker(RpcEndpoint):
     *,
     asset_version: Literal[1] | None = None,
     asset_class: Literal['tokenized_asset', 'forex'] | None = None,
-    validate: Literal[True] | None = None,
-  ) -> Response: ...
-  @overload
-  async def ticker(
-    self,
-    pair: str | None = None,
-    *,
-    asset_version: Literal[1] | None = None,
-    asset_class: Literal['tokenized_asset', 'forex'] | None = None,
     validate: bool | None = None,
   ) -> Response: ...
   async def ticker(

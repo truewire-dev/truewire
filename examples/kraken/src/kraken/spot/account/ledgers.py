@@ -161,36 +161,6 @@ class Ledgers(RpcEndpoint):
     ofs: int | None = None,
     without_count: bool | None = None,
     rebase_multiplier: Literal['rebased', 'base'] | None = None,
-    validate: Literal[True] | None = None,
-  ) -> LedgersInfo: ...
-  @overload
-  async def ledgers(
-    self,
-    *,
-    asset: str | None = None,
-    aclass: str | None = None,
-    type: Literal[
-      'all',
-      'trade',
-      'deposit',
-      'withdrawal',
-      'transfer',
-      'margin',
-      'adjustment',
-      'rollover',
-      'credit',
-      'settled',
-      'staking',
-      'dividend',
-      'sale',
-      'nft_rebate',
-    ]
-    | None = None,
-    start: int | None = None,
-    end: int | None = None,
-    ofs: int | None = None,
-    without_count: bool | None = None,
-    rebase_multiplier: Literal['rebased', 'base'] | None = None,
     validate: bool | None = None,
   ) -> LedgersInfo: ...
   async def ledgers(

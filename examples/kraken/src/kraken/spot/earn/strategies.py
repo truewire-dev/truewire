@@ -197,17 +197,6 @@ class Strategies(RpcEndpoint):
     cursor: str | None = None,
     limit: int | None = None,
     lock_type: list[Literal['flex', 'bonded', 'timed', 'instant']] | None = None,
-    validate: Literal[True] | None = None,
-  ) -> EarnStrategiesResult: ...
-  @overload
-  async def strategies(
-    self,
-    ascending: bool | None = None,
-    *,
-    asset: str | None = None,
-    cursor: str | None = None,
-    limit: int | None = None,
-    lock_type: list[Literal['flex', 'bonded', 'timed', 'instant']] | None = None,
     validate: bool | None = None,
   ) -> EarnStrategiesResult: ...
   async def strategies(

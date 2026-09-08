@@ -85,15 +85,6 @@ class QueryLedgers(RpcEndpoint):
     *,
     trades: bool | None = None,
     rebase_multiplier: Literal['rebased', 'base'] | None = None,
-    validate: Literal[True] | None = None,
-  ) -> QueriedLedgers: ...
-  @overload
-  async def query_ledgers(
-    self,
-    id: str,
-    *,
-    trades: bool | None = None,
-    rebase_multiplier: Literal['rebased', 'base'] | None = None,
     validate: bool | None = None,
   ) -> QueriedLedgers: ...
   async def query_ledgers(

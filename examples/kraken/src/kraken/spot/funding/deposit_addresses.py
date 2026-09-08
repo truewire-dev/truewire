@@ -57,17 +57,6 @@ class DepositAddresses(RpcEndpoint):
     method: str,
     new: bool | None = None,
     amount: str | int | float | None = None,
-    validate: Literal[True] | None = None,
-  ) -> Response: ...
-  @overload
-  async def deposit_addresses(
-    self,
-    *,
-    asset: str,
-    aclass: Literal['currency', 'tokenized_asset'] | None = None,
-    method: str,
-    new: bool | None = None,
-    amount: str | int | float | None = None,
     validate: bool | None = None,
   ) -> Response: ...
   async def deposit_addresses(

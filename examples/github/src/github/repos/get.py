@@ -79,14 +79,6 @@ class Get(Endpoint):
     *,
     owner: str,
     repo: str,
-    validate: Literal[True] | None = None,
-  ) -> Repository: ...
-  @overload
-  async def get(
-    self,
-    *,
-    owner: str,
-    repo: str,
     validate: bool | None = None,
   ) -> Repository: ...
   async def get(

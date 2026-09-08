@@ -89,15 +89,6 @@ class GetCommit(Endpoint):
     owner: str,
     repo: str,
     ref: str,
-    validate: Literal[True] | None = None,
-  ) -> CommitDetail: ...
-  @overload
-  async def get_commit(
-    self,
-    *,
-    owner: str,
-    repo: str,
-    ref: str,
     validate: bool | None = None,
   ) -> CommitDetail: ...
   async def get_commit(

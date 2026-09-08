@@ -94,16 +94,6 @@ class WithdrawMethods(RpcEndpoint):
     aclass: Literal['currency', 'tokenized_asset'] | None = None,
     network: str | None = None,
     rebase_multiplier: Literal['rebased', 'base'] | None = None,
-    validate: Literal[True] | None = None,
-  ) -> Response: ...
-  @overload
-  async def withdraw_methods(
-    self,
-    *,
-    asset: str | None = None,
-    aclass: Literal['currency', 'tokenized_asset'] | None = None,
-    network: str | None = None,
-    rebase_multiplier: Literal['rebased', 'base'] | None = None,
     validate: bool | None = None,
   ) -> Response: ...
   async def withdraw_methods(

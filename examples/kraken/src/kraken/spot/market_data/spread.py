@@ -43,16 +43,6 @@ class Spread(RpcEndpoint):
     asset_version: Literal[1] | None = None,
     since: TimestampSeconds | None = None,
     asset_class: Literal['tokenized_asset'] | None = None,
-    validate: Literal[True] | None = None,
-  ) -> SpreadResult: ...
-  @overload
-  async def spread(
-    self,
-    pair: str,
-    *,
-    asset_version: Literal[1] | None = None,
-    since: TimestampSeconds | None = None,
-    asset_class: Literal['tokenized_asset'] | None = None,
     validate: bool | None = None,
   ) -> SpreadResult: ...
   async def spread(

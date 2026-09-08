@@ -45,13 +45,6 @@ class AllocateStatus(RpcEndpoint):
     self,
     strategy_id: str,
     *,
-    validate: Literal[True] | None = None,
-  ) -> Response: ...
-  @overload
-  async def allocate_status(
-    self,
-    strategy_id: str,
-    *,
     validate: bool | None = None,
   ) -> Response: ...
   async def allocate_status(

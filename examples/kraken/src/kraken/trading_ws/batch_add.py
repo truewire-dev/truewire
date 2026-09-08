@@ -510,27 +510,6 @@ class BatchAdd(SocketEndpoint):
       | WsBatchOrderTrailingStopLimit
       | WsBatchOrderSettlePosition
     ],
-    validate: Literal[True] | None = None,
-  ) -> BatchAddResult: ...
-  @overload
-  async def batch_add(
-    self,
-    deadline: TimestampIso | None = None,
-    *,
-    symbol: str,
-    validate_: bool | None = None,
-    orders: list[
-      WsBatchOrderMarket
-      | WsBatchOrderLimit
-      | WsBatchOrderIceberg
-      | WsBatchOrderStopLoss
-      | WsBatchOrderStopLossLimit
-      | WsBatchOrderTakeProfit
-      | WsBatchOrderTakeProfitLimit
-      | WsBatchOrderTrailingStop
-      | WsBatchOrderTrailingStopLimit
-      | WsBatchOrderSettlePosition
-    ],
     validate: bool | None = None,
   ) -> BatchAddResult: ...
   async def batch_add(

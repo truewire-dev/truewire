@@ -37,13 +37,6 @@ class CancelAllOrdersAfter(RpcEndpoint):
     self,
     timeout: int,
     *,
-    validate: Literal[True] | None = None,
-  ) -> DeadMansSwitchStatus: ...
-  @overload
-  async def cancel_all_orders_after(
-    self,
-    timeout: int,
-    *,
     validate: bool | None = None,
   ) -> DeadMansSwitchStatus: ...
   async def cancel_all_orders_after(

@@ -54,17 +54,6 @@ class AccountTransfer(RpcEndpoint):
     amount: str,
     from_: str,
     to: str,
-    validate: Literal[True] | None = None,
-  ) -> AccountTransferResult: ...
-  @overload
-  async def account_transfer(
-    self,
-    *,
-    asset: str,
-    asset_class: Literal['currency', 'tokenized_asset'] | None = None,
-    amount: str,
-    from_: str,
-    to: str,
     validate: bool | None = None,
   ) -> AccountTransferResult: ...
   async def account_transfer(

@@ -19,12 +19,6 @@ class SystemStatusEndpoint(RpcEndpoint):
   @overload
   async def system_status(self, *, validate: Literal[False]) -> Any: ...
   @overload
-  async def system_status(
-    self,
-    *,
-    validate: Literal[True] | None = None,
-  ) -> SystemStatus: ...
-  @overload
   async def system_status(self, *, validate: bool | None = None) -> SystemStatus: ...
   async def system_status(self, *, validate: bool | None = None) -> SystemStatus:
     """Get the current system status or trading mode.

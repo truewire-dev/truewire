@@ -20,12 +20,6 @@ class CancelAll(RpcEndpoint):
   @overload
   async def cancel_all(self, *, validate: Literal[False]) -> Any: ...
   @overload
-  async def cancel_all(
-    self,
-    *,
-    validate: Literal[True] | None = None,
-  ) -> OrderCancelled: ...
-  @overload
   async def cancel_all(self, *, validate: bool | None = None) -> OrderCancelled: ...
   async def cancel_all(self, *, validate: bool | None = None) -> OrderCancelled:
     """Cancel every open order for the account.

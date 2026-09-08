@@ -123,20 +123,6 @@ class List(Endpoint):
     direction: Literal['asc', 'desc'] | None = None,
     since: TimestampIso | None = None,
     per_page: int | None = None,
-    validate: Literal[True] | None = None,
-  ) -> PaginatedResponse[Issue, int]: ...
-  @overload
-  def list_paged(
-    self,
-    *,
-    owner: str,
-    repo: str,
-    state: Literal['open', 'closed', 'all'] | None = None,
-    labels: str | None = None,
-    sort: Literal['created', 'updated', 'comments'] | None = None,
-    direction: Literal['asc', 'desc'] | None = None,
-    since: TimestampIso | None = None,
-    per_page: int | None = None,
     validate: bool | None = None,
   ) -> PaginatedResponse[Issue, int]: ...
   def list_paged(
@@ -207,21 +193,6 @@ class List(Endpoint):
     page: int | None = None,
     validate: Literal[False],
   ) -> Any: ...
-  @overload
-  async def list(
-    self,
-    *,
-    owner: str,
-    repo: str,
-    state: Literal['open', 'closed', 'all'] | None = None,
-    labels: str | None = None,
-    sort: Literal['created', 'updated', 'comments'] | None = None,
-    direction: Literal['asc', 'desc'] | None = None,
-    since: TimestampIso | None = None,
-    per_page: int | None = None,
-    page: int | None = None,
-    validate: Literal[True] | None = None,
-  ) -> Issues: ...
   @overload
   async def list(
     self,

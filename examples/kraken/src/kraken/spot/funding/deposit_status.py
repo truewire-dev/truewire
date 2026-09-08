@@ -139,20 +139,6 @@ class DepositStatus(RpcEndpoint):
     cursor: bool | str | None = None,
     limit: int | None = None,
     rebase_multiplier: Literal['rebased', 'base'] | None = None,
-    validate: Literal[True] | None = None,
-  ) -> Response: ...
-  @overload
-  async def deposit_status(
-    self,
-    *,
-    asset: str | None = None,
-    aclass: Literal['currency', 'tokenized_asset'] | None = None,
-    method: str | None = None,
-    start: str | None = None,
-    end: str | None = None,
-    cursor: bool | str | None = None,
-    limit: int | None = None,
-    rebase_multiplier: Literal['rebased', 'base'] | None = None,
     validate: bool | None = None,
   ) -> Response: ...
   async def deposit_status(

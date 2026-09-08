@@ -313,6 +313,39 @@ PLANNED_BACKENDS = ('typescript', 'rust')
 """Backends that render the plan (`docs/plan.md`) rather than the spec tree directly."""
 
 
+def refuse_name_collisions(project: Project, *, language: str):
+  """Refuse a spec whose router groups claim a class name that is already taken
+  (`docs/spec/authoring.md` rule 18), before a single file is written.
+
+  `truewire check` reports the same condition as an `error` violation, but the gate can
+  be skipped, and every backend renders the collision into something that does not
+  build (Rust) or silently resolves to the wrong class (Python). One predicate --
+  `truewire.spec.authoring.check_router_names` -- answers for all three, narrowed here
+  to the backend being generated so a project whose `[rust].name` collides is still free
+  to `generate python`.
+
+  Args:
+    project: The loaded project.
+    language: The backend being generated, one of `BACKEND_SECTIONS`.
+
+  Raises:
+    CodegenError: One or more groups collide.
+  """
+  from truewire.spec.authoring import check_router_names
+
+  violations = check_router_names(project, language=language)
+  if not violations:
+    return
+  detail = '\n'.join(
+    f'  {violation["location"]}: {violation["message"]}' for violation in violations
+  )
+  raise CodegenError(
+    f'{project.name}: {len(violations)} generated class name '
+    f'{"collision" if len(violations) == 1 else "collisions"} '
+    f'(docs/spec/authoring.md rule 18); nothing generated.\n{detail}'
+  )
+
+
 def generate_typescript(
   project: Project, *, delete: bool = False, check: bool = False,
   log: Callable[[str], None] = lambda message: None,
@@ -382,6 +415,7 @@ def generate_planned(
     )
     return
 
+  refuse_name_collisions(project, language=language)
   log(f'[{client}] building plan')
   try:
     plan = build_plan(project)
@@ -557,6 +591,7 @@ def generate(
       )
       return
 
+    refuse_name_collisions(loaded, language=language)
     log(f'[{client}] loading generator: {language}')
     try:
       generator = load_generator(loaded, language)

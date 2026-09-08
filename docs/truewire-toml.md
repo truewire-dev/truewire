@@ -1,7 +1,9 @@
 # `truewire.toml` reference
 
 A Truewire project is a directory holding a `truewire.toml`. Every command finds the
-nearest one above the working directory, or takes `--project PATH`.
+nearest one above the working directory, or takes `--project PATH`. `truewire init` writes
+the file with the `[cores.*]` and `[python.cores.*]` tables its `--template` needs; see
+[docs/cores.md](cores.md) for what each template wires.
 
 ```toml
 [project]

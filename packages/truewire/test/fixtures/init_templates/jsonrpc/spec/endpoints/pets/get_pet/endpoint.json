@@ -1,0 +1,43 @@
+{
+  "docs": "https://petstore.example/docs/rpc/pets_get",
+  "meta": {},
+  "notes": [
+    "Fixture for `truewire init --template jsonrpc`: `path` is the JSON-RPC method name, the response schema is the whole frame and `envelope.payload` selects `result`."
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": ["http"],
+    "path": "pets_get",
+    "method": "POST",
+    "description": "Fetch one pet by id.",
+    "request": {
+      "title": "GetPetRequest",
+      "type": "object",
+      "required": ["petId"],
+      "properties": {
+        "petId": {"type": "integer", "description": "Pet id."}
+      }
+    },
+    "response": {
+      "title": "GetPetFrame",
+      "type": "object",
+      "description": "Wire frame.",
+      "required": ["jsonrpc", "id", "result"],
+      "properties": {
+        "jsonrpc": {"type": "string", "description": "Wire envelope field; see the core."},
+        "id": {"type": "integer", "description": "Wire envelope field; see the core."},
+        "result": {
+          "title": "Pet",
+          "type": "object",
+          "description": "The pet.",
+          "required": ["id", "name"],
+          "properties": {
+            "id": {"type": "integer", "description": "Pet id."},
+            "name": {"type": "string", "description": "Pet name."}
+          }
+        }
+      }
+    }
+  },
+  "envelope": {"payload": "result", "correlate": "id"}
+}

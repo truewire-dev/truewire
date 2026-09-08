@@ -1,0 +1,5 @@
+{
+  "description": "Pets, over JSON-RPC.",
+  "upstream": "https://petstore.example/docs/rpc",
+  "core": "default"
+}

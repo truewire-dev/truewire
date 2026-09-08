@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.8.0 (2026-09-08)
 
 - **`truewire generate rust`.** The third backend, reading the plan into the modules of
   a crate over `truewire-core`: one `serde` struct per record (`snake_case` fields with

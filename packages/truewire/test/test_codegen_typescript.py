@@ -17,7 +17,9 @@ from typer.testing import CliRunner
 
 from truewire.cli import app
 from truewire.codegen.typescript import render_package, root_class_name
-from truewire.codegen.typescript.endpoint import read_path
+from truewire.codegen.typescript.endpoint import (
+  RAW_OPTIONS, Method, Param, emit_signatures, raw_returns, read_path,
+)
 from truewire.codegen.typescript.meta import meta_module, meta_type
 from truewire.codegen.typescript.names import binding, camel_case, literal, property_key, string
 from truewire.codegen.typescript.printer import BANNER, Writer, relative_specifier
@@ -215,6 +217,56 @@ def test_fixture_walkers_render_every_resumable_shape(fixture_rendered):
   assert 'let totalSeen: number | null = null' in total
   assert 'throw new LogicError(' in total
   assert 'return new PaginatedResponse(1, next)' in total
+
+
+def test_methods_overload_validate_false_to_unknown(fixture_rendered):
+  """Every method that returns a value carries two overload signatures ahead of its
+  implementation: `validate: false` first (declaration order decides, and `CallOptions`
+  would otherwise match it), returning `unknown` where the declared type was -- a
+  walker keeps its state type -- then the declared signature. The implementation is
+  unchanged, and a router delegates both, qualified."""
+  files = fixture_rendered.files
+  endpoint = files['market/order_list.ts']
+  raw = f'  orderList(request: Request, options: {RAW_OPTIONS}): Promise<unknown>\n'
+  typed = '  orderList(request: Request, options?: CallOptions): Promise<OrderListResponse>\n'
+  implementation = '  async orderList(request: Request, options?: CallOptions): Promise<OrderListResponse> {\n'
+  assert endpoint.index(raw) < endpoint.index(typed) < endpoint.index(implementation)
+  assert (
+    f'  orderListPaged(request: OrderListPagedRequest, options: {RAW_OPTIONS}): '
+    'PaginatedResponse<unknown, string>\n'
+  ) in endpoint
+  assert endpoint.count('orderListPaged(request: OrderListPagedRequest, options?: CallOptions): PaginatedResponse<OrderListItem, string>') == 2
+  router = files['market/index.ts']
+  assert f'  orderList(request: orderList.Request, options: {RAW_OPTIONS}): Promise<unknown>\n' in router
+  assert '  orderList(request: orderList.Request, options?: CallOptions): Promise<orderList.OrderListResponse>\n' in router
+
+
+def test_emit_signatures_for_a_generator_walker_and_a_reply_less_method():
+  """A generator walker's overloads are ordinary method signatures ahead of the
+  `async *` implementation, with `unknown` as the yielded type; the raw one's request is
+  required since its options object is required and follows it. A method returning
+  nothing has nothing to overload and gets its JSDoc alone."""
+  m = _module({'Req': {}, 'Res': {}})
+  request = Param('request', ('local', 'Req'), optional=True)
+  options = Param('options', ('core', 'CallOptions'), optional=True)
+  generator = Method(
+    'listPaged', [request, options], ('generator', (('local', 'Res'),)), doc=['Pages.'],
+    generator=True,
+  )
+  emit_signatures(m, generator)
+  assert m.writer.render().splitlines() == [
+    '/** With `validate: false`: the parsed body as it came, typed `unknown`. */',
+    f'listPaged(request: Req, options: {RAW_OPTIONS}): AsyncGenerator<unknown, void, undefined>',
+    '/** Pages. */',
+    'listPaged(request?: Req, options?: CallOptions): AsyncGenerator<Res, void, undefined>',
+  ]
+  m = _module({})
+  emit_signatures(m, Method('ping', [options], ('void', ()), doc=['Ping.']))
+  assert m.writer.render().splitlines() == ['/** Ping. */']
+  assert raw_returns(('void', ())) is None
+  assert raw_returns(('paginated', (('local', 'Row'), ('plan', {'type': 'scalar', 'base': 'integer'})))) == (
+    'paginated', (('unknown', None), ('plan', {'type': 'scalar', 'base': 'integer'})),
+  )
 
 
 def test_fixture_routers_delegate_with_qualified_types(fixture_rendered):

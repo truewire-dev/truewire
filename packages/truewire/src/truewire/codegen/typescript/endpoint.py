@@ -29,10 +29,16 @@ _WALK_LOCALS = frozenset(
 )
 """Names the walker binds itself; a driver parameter by one of these is walked as `state`."""
 
-Token = tuple[Literal['local', 'plan', 'core'], object]
+Token = tuple[Literal['local', 'plan', 'core', 'unknown'], object]
 """A type in a method signature, kept symbolic so a router can render it qualified: a
 name defined in the endpoint module (`('local', 'Request')`), a plan type
-(`('plan', Type)`), or a `@truewire/core` type (`('core', 'CallOptions')`)."""
+(`('plan', Type)`), a `@truewire/core` type (`('core', 'CallOptions')`), or `unknown`
+(`('unknown', None)`, what a `validate: false` call returns)."""
+
+RAW_OPTIONS = 'CallOptions & { validate: false }'
+"""The options type of the overload that returns the reply as the wire sent it."""
+RAW_DOC = 'With `validate: false`: the parsed body as it came, typed `unknown`.'
+"""JSDoc of that overload; the declared one carries the endpoint's own description."""
 
 
 @dataclass(frozen=True)
@@ -85,6 +91,8 @@ def core_interface(endpoint: EndpointPlan) -> str:
 
 def render_type(module: Module, token: Token) -> str:
   kind, value = token
+  if kind == 'unknown':
+    return 'unknown'
   if kind == 'local':
     return module.ref(str(value), type_only=True)
   if kind == 'plan':
@@ -110,6 +118,49 @@ def render_params(module: Module, params: list[Param]) -> str:
     f'{param.name}{"?" if param.optional else ""}: {render_type(module, param.type)}'
     for param in params
   )
+
+
+def raw_returns(returns: tuple[str, tuple[Token, ...]]) -> tuple[str, tuple[Token, ...]] | None:
+  """`returns` as a `validate: false` call leaves it: the value (a promise's, a walker's
+  rows, a generator's pages) is the body as the wire sent it, so `unknown` takes the
+  declared type's place while a walker's state type stays. `None` for a method that
+  returns nothing, which has no overload to make."""
+  shape, tokens = returns
+  if shape == 'void':
+    return None
+  return shape, (('unknown', None), *tokens[1:])
+
+
+def emit_signatures(module: Module, method: Method):
+  """Write `method`'s JSDoc and, when it returns a value, the two overload signatures
+  its implementation follows.
+
+  A generated method returns the parsed value -- `Date`s, `Decimal`s, literal unions --
+  only when the reply was validated; `validate: false` hands back the body as the wire
+  sent it, and one `Promise<Commits>` lies for that call. The honest typing is an
+  overload per outcome, `validate: false` first (declaration order decides, and
+  `CallOptions` would otherwise match it): `options: CallOptions & { validate: false }`
+  returns `unknown` in the declared type's place, and `options?: CallOptions` returns
+  the declared type. Any other `validate` -- `true`, omitted, a `boolean` variable --
+  resolves to the declared one; only a literal `false` at the call site is knowably raw.
+  The implementation signature and body are unchanged, so the runtime is too.
+
+  The raw overload's request parameter is required even when the declared one's is not
+  (`request?: X`): its options object is required and follows it.
+  """
+  w = module.writer
+  raw = raw_returns(method.returns)
+  if raw is None:
+    w.jsdoc(*method.doc, tags=method.tags)
+    return
+  name = property_key(method.name)
+  request = [Param(p.name, p.type, optional=False) for p in method.params if p.name != 'options']
+  head = render_params(module, request)
+  module.core('CallOptions', type_only=True)
+  w.jsdoc(RAW_DOC)
+  w.line(f'{name}({head + ", " if head else ""}options: {RAW_OPTIONS}): {render_return(module, raw)}')
+  w.jsdoc(*method.doc, tags=method.tags)
+  w.line(f'{name}({render_params(module, method.params)}): {render_return(module, method.returns)}')
 
 
 def method_docs(endpoint: EndpointPlan) -> tuple[list[str | None], list[str]]:
@@ -214,7 +265,7 @@ def render_endpoint(plan: PackagePlan, endpoint: EndpointPlan, *, class_name: st
       w.blank()
       _emit_paged(module, endpoint, pagination, paged, main=main, request_type=args_type)  # type: ignore[arg-type]
     w.blank()
-    w.jsdoc(*main.doc, tags=main.tags)
+    emit_signatures(module, main)
     signature = f'async {main.name}({render_params(module, main.params)}): {render_return(module, main.returns)}'
     with w.block(f'{signature} {{'):
       if fixed:
@@ -342,7 +393,7 @@ def _emit_paged(
   main: Method, request_type: str,
 ):
   w = module.writer
-  w.jsdoc(*paged.doc, tags=paged.tags)
+  emit_signatures(module, paged)
   request_param, options_param = paged.params
   request_text = f'request: {render_type(module, request_param.type)}'
   if request_param.optional:
@@ -502,6 +553,7 @@ def _total_done(done: dict, state: str, start: int, size: str | None, size_unkno
 
 
 __all__ = [
-  'META_FILE', 'EndpointModule', 'Method', 'Param', 'Token', 'core_interface', 'endpoint_file',
-  'meta_type_name', 'render_endpoint', 'render_params', 'render_return', 'render_type',
+  'META_FILE', 'RAW_DOC', 'RAW_OPTIONS', 'EndpointModule', 'Method', 'Param', 'Token',
+  'core_interface', 'emit_signatures', 'endpoint_file', 'meta_type_name', 'raw_returns',
+  'render_endpoint', 'render_params', 'render_return', 'render_type',
 ]

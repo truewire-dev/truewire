@@ -58,6 +58,12 @@ PAGED_TRUNCATION_IMPORTS: Mapping[str, set[str]] = {'truewire_core.exceptions': 
 `seek` walk carries `pagination.overlap`'s order-stability/full-page raises."""
 PAGED_TRUNCATION_PARAM = 'allow_truncation'
 """Keyword that lets a caller keep a window walk running past rows the API withheld."""
+VALIDATE_PARAM = 'validate'
+"""Keyword every request/reply method takes to override the client's response validation."""
+VALIDATE_OVERLOAD_IMPORTS: Mapping[str, set[str]] = {
+  'typing_extensions': {'Any', 'Literal', 'overload'},
+}
+"""Imports a generated module needs once a method carries `validate_overloads`."""
 PAGED_DOC_WIDTH = 84
 """Wrap width for a page iterator's docstring, leaving room for a method's indentation."""
 WS_REPLY_CODE = 'reply'
@@ -97,6 +103,65 @@ treats a zero `key`/`limit` as "start"/"use the default", so substituting one wh
 loop-local is `None` is not a guessed value -- it is the declared zero value standing in
 for its own absence, the same relationship `key: bytes = b''` already has in the
 hand-written `page_request()` helper this replaces."""
+
+
+def validate_overloads(
+  header: Function, *, raw_return_type: str, generator: bool = False,
+) -> list[Function]:
+  """The `@overload` stubs that make a method's return type honest about `validate`.
+
+  A generated method returns the parsed record -- `datetime`s, `Decimal`s, `Literal`s --
+  only when the reply was validated; `validate=False` hands back the body as the wire
+  sent it, and the single annotation `-> Commits` lies for that call. The cheapest honest
+  typing is one overload per outcome: `validate: Literal[False]` returns
+  `raw_return_type` (`Any`, or `PaginatedResponse[Any, ...]`/`AsyncIterator[Any]` for a
+  walker), and `validate: Literal[True] | None = None` -- the default, which leaves the
+  decision to the client -- returns the declared type. The implementation keeps
+  `validate: bool | None = None`, and the runtime is untouched.
+
+  A third stub, `validate: bool | None = None` returning the declared type, catches a
+  caller forwarding a `bool` variable -- the generated walkers do exactly that
+  (`validate=validate`). Pyright expands a `bool` argument over `Literal[True]`/
+  `Literal[False]` only within a budget it spends left to right, so a signature with a
+  few `Literal[...] | None` parameters ahead of `validate` runs out before it gets there,
+  and mypy never expands `bool` at all. Only a literal `False` at the call site is
+  knowably raw; a flag decided elsewhere is the caller's own decision, like `None`.
+
+  Args:
+    header: The implementation's header, its `kwargs` final. Returned empty when it has
+      no `validate` keyword or no return type, so a method that never validates (a gRPC
+      call, a reply-less command) renders exactly as before.
+    raw_return_type: The annotation of the `validate=False` overload.
+    generator: Whether the implementation is an async generator (`async def` yielding,
+      annotated `AsyncIterator[...]`). Its stubs are plain `def`s: a stub has no `yield`
+      to mark it a generator, so an `async def` stub would read as a coroutine *returning*
+      the iterator, which is not what calling the implementation gives.
+
+  Returns:
+    The stubs, in the order they must be declared: `Literal[False]` first, since a
+    checker picks the first match and the wider stubs would otherwise shadow it.
+  """
+  validate = next((param for param in header.kwargs if param.name == VALIDATE_PARAM), None)
+  if validate is None or header.return_type is None:
+    return []
+
+  def variant(validate_type: str, *, default: str | None, return_type: str) -> Function:
+    kwargs = [
+      Function.Param(name=param.name, type=validate_type, required=True, default=default)
+      if param.name == VALIDATE_PARAM else param
+      for param in header.kwargs
+    ]
+    return Function(
+      name=header.name, asyn=header.asyn and not generator, method=header.method,
+      args=list(header.args), kwargs=kwargs, return_type=return_type,
+      decorators=['@overload'],
+    )
+
+  return [
+    variant('Literal[False]', default=None, return_type=raw_return_type),
+    variant('Literal[True] | None', default='None', return_type=header.return_type),
+    variant('bool | None', default='None', return_type=header.return_type),
+  ]
 
 
 def _nested_pagination_ref(parameter: str) -> tuple[str, str] | None:
@@ -2468,6 +2533,9 @@ class Generator:
       f'rest of that value is unreachable and advancing would drop it.'
     )
     advance = f'{cursor} += 1' if unit is None else f'{cursor} += timedelta({unit}=1)'
+    paged.overloads = validate_overloads(
+      paged, raw_return_type='AsyncIterator[Any]', generator=True,
+    )
     lines = [
       paged.code(),
       *(f'  {line}' if line else '' for line in docstring_code.splitlines()),
@@ -2762,6 +2830,9 @@ class Generator:
     narrower = f'{largest} < {pos}' if descending else f'{largest} > {pos}'
     extremum = 'min' if descending else 'max'
 
+    paged.overloads = validate_overloads(
+      paged, raw_return_type='AsyncIterator[Any]', generator=True,
+    )
     lines = [
       paged.code(),
       *(f'  {line}' if line else '' for line in docstring_code.splitlines()),
@@ -3080,6 +3151,9 @@ class Generator:
       method_name=method_name, size=size.name if size is not None else None, step=step,
       truncation=guards_truncation,
       docstring=docstring, outer=paged, extra_params=extra_params,
+    )
+    paged.overloads = validate_overloads(
+      paged, raw_return_type='AsyncIterator[Any]', generator=True,
     )
     lines = [
       paged.code(),
@@ -3567,6 +3641,9 @@ class Generator:
     )
     if validate is not None:
       outer.kwargs.append(validate)
+    outer.overloads = validate_overloads(
+      outer, raw_return_type=f'PaginatedResponse[Any, {state_type}]',
+    )
     outer_doc = self.paged_summary(
       method_name,
       body='Awaitable (flattens every page) or async-iterable (one page at a time).',
@@ -3752,6 +3829,9 @@ class Generator:
     )
     if validate is not None:
       outer.kwargs.append(validate)
+    outer.overloads = validate_overloads(
+      outer, raw_return_type='PaginatedResponse[Any, int]',
+    )
     outer_doc = self.paged_summary(
       method_name,
       body='Awaitable (flattens every page) or async-iterable (one page at a time).',
@@ -3886,6 +3966,9 @@ class Generator:
     )
     if validate is not None:
       outer.kwargs.append(validate)
+    outer.overloads = validate_overloads(
+      outer, raw_return_type='PaginatedResponse[Any, int]',
+    )
     outer_doc = self.paged_summary(
       method_name,
       body='Awaitable (flattens every page) or async-iterable (one page at a time).',
@@ -4075,6 +4158,9 @@ class Generator:
     )
     if validate is not None:
       outer.kwargs.append(validate)
+    outer.overloads = validate_overloads(
+      outer, raw_return_type=f'PaginatedResponse[Any, {base}]',
+    )
     outer_doc = self.paged_summary(
       method_name,
       body='Awaitable (flattens every page) or async-iterable (one page at a time).',
@@ -4712,7 +4798,7 @@ class Generator:
           name='validate', required=False,
           docstring=(
             "Override this call's response validation; falls back to the client-level "
-            'default when omitted.'
+            'default when omitted. `False` returns the parsed body as it came, typed `Any`.'
           ),
         ),
         *(
@@ -4790,6 +4876,7 @@ class Generator:
     return_line = 'return await self.request(\n' + '\n'.join(call_lines) + '\n)'
     body = '\n'.join([*request_decl_lines, return_line])
 
+    header.overloads = validate_overloads(header, raw_return_type='Any')
     method_lines = [header.code()]
     doc_code = docstring.code()
     if doc_code:
@@ -5003,6 +5090,7 @@ class Generator:
       dict(types.imports), {core_module: {core_class}}, response_import,
       paged_imports if paged_source is not None else {}, deprecated_imports, transport_imports,
       {'typing_extensions': {'cast'}} if needs_cast else {},
+      VALIDATE_OVERLOAD_IMPORTS if header.overloads else {},
     ])
     imports_code = ImportsRenderer(
       imports=merged_imports, pkg_name=core_module.split('.')[0],

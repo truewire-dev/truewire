@@ -24,7 +24,7 @@ sniffing parameter names, and bybit did not, so it shipped none. Its tests execu
 source they generate, because a loop that reads correctly and never terminates is exactly
 the defect this replaces.
 """
-from typing_extensions import Any, AsyncIterator, cast
+from typing_extensions import Any, AsyncIterator, Literal, cast, overload
 import asyncio
 from datetime import datetime, timedelta, timezone
 
@@ -35,8 +35,19 @@ from truewire.generation.schema import Schema
 from truewire_core import PaginatedResponse
 from truewire_core.exceptions import LogicError
 
-from truewire.codegen.python import Generator, endpoint_transport, subtree_transport
+from truewire.codegen.python import Generator, endpoint_transport, subtree_transport, validate_overloads
 from truewire.spec import Endpoint
+
+OVERLOAD_NAMESPACE: dict[str, Any] = {'overload': overload, 'Literal': Literal, 'Any': Any}
+"""What a generated walker's `validate` overload stubs (`validate_overloads`) name."""
+
+
+def _implementation(source: str) -> str:
+  """`source` past its `@overload` stubs (`validate_overloads`): the implementation a
+  walker's header assertions read, since the stubs now come first."""
+  lines = source.splitlines()
+  last_stub = max((i for i, line in enumerate(lines) if line.endswith(': ...')), default=-1)
+  return '\n'.join(lines[last_stub + 1:])
 
 def endpoint(function: str, response: dict[str, Any], *, title: str | None = None) -> Endpoint:
   """Build a one-response HTTP endpoint record around a raw response schema."""
@@ -547,7 +558,7 @@ def walk(
     IndexError: When the walk asks for more pages than were recorded.
   """
   namespace: dict[str, Any] = {
-    'AsyncIterator': AsyncIterator, 'Orders': dict, 'LogicError': LogicError,
+    'AsyncIterator': AsyncIterator, 'Orders': dict, 'LogicError': LogicError, **OVERLOAD_NAMESPACE,
     'datetime': datetime, 'timedelta': timedelta, 'TimestampIso': datetime,
     **(extra_namespace or {}),
   }
@@ -588,7 +599,7 @@ def walk_partial(
     AssertionError: When the walk does not raise at all.
   """
   namespace: dict[str, Any] = {
-    'AsyncIterator': AsyncIterator, 'Orders': dict, 'LogicError': LogicError,
+    'AsyncIterator': AsyncIterator, 'Orders': dict, 'LogicError': LogicError, **OVERLOAD_NAMESPACE,
     'datetime': datetime, 'timedelta': timedelta, 'TimestampIso': datetime,
     **(extra_namespace or {}),
   }
@@ -638,7 +649,7 @@ def walk_response(
     call: Arguments passed to the outer method.
   """
   namespace: dict[str, Any] = {
-    'PaginatedResponse': PaginatedResponse, 'LogicError': LogicError,
+    'PaginatedResponse': PaginatedResponse, 'LogicError': LogicError, **OVERLOAD_NAMESPACE,
     **(extra_namespace or {}),
   }
   code = '\n'.join([
@@ -667,7 +678,7 @@ def walk_response_partial(
   """Like `walk_response`, but for a walk expected to raise partway through -- see
   `walk_partial`'s identical reasoning for the plain async-generator shape."""
   namespace: dict[str, Any] = {
-    'PaginatedResponse': PaginatedResponse, 'LogicError': LogicError,
+    'PaginatedResponse': PaginatedResponse, 'LogicError': LogicError, **OVERLOAD_NAMESPACE,
     **(extra_namespace or {}),
   }
   code = '\n'.join([
@@ -789,7 +800,7 @@ class TestPagedMethod:
       response_type='Orders',
     )
     assert source is not None
-    assert source.startswith('async def orders_paged(')
+    assert _implementation(source).startswith('async def orders_paged(')
     assert '-> AsyncIterator[Orders]:' in source
 
   def test_driver_parameter_leaves_the_signature(self, generator: Generator):
@@ -1781,11 +1792,11 @@ def test_a_callable_endpoints_iterator_is_reachable():
     method_name='__call__', header=paged_header(kwargs=['offset', 'limit']),
     response_type='Orders',
   ) or ''
-  assert source.startswith('async def paged(')
+  assert _implementation(source).startswith('async def paged(')
   assert '__call___paged' not in source
   assert 'Yield successive pages of this endpoint.' in source
 
-  namespace: dict[str, Any] = {'AsyncIterator': AsyncIterator, 'Orders': dict}
+  namespace: dict[str, Any] = {'AsyncIterator': AsyncIterator, 'Orders': dict, **OVERLOAD_NAMESPACE}
   code = '\n'.join([
     'class Walk:',
     '  """Stub endpoint reached by calling it, the way a router field is."""',
@@ -1813,8 +1824,52 @@ def test_a_named_methods_iterator_keeps_the_suffix():
     method_name='orders', header=paged_header(kwargs=['offset', 'limit']),
     response_type='Orders',
   ) or ''
-  assert source.startswith('async def orders_paged(')
+  assert _implementation(source).startswith('async def orders_paged(')
   assert 'Yield successive pages of `orders`.' in source
+
+
+class TestValidateOverloads:
+  """`validate_overloads`: the stubs that make a method honest about `validate=False`."""
+
+  def test_a_generator_walker_gets_plain_def_stubs(self):
+    """An `async def` walker that yields is an async generator, and a stub has no `yield`
+    to say so: its stubs are plain `def`s returning `AsyncIterator[...]`, the raw one
+    `AsyncIterator[Any]`, or a checker reads them as coroutines returning the iterator."""
+    source = Generator().paged_method(
+      paged_endpoint(OFFSET_EMPTY),
+      method_name='orders', header=paged_header(kwargs=['offset', 'limit']),
+      response_type='Orders',
+    ) or ''
+    stubs = [line for line in source.splitlines() if line.startswith(('def ', 'async def'))]
+    assert stubs == ['def orders_paged(', 'def orders_paged(', 'def orders_paged(', 'async def orders_paged(']
+    assert '  validate: Literal[False],\n) -> AsyncIterator[Any]: ...' in source
+    assert '  validate: Literal[True] | None = None,\n) -> AsyncIterator[Orders]: ...' in source
+    assert '  validate: bool | None = None,\n) -> AsyncIterator[Orders]: ...' in source
+    assert source.count('@overload') == 3
+
+  def test_a_header_without_validate_or_a_return_type_gets_none(self):
+    """A gRPC call or a reply-less command renders exactly as before."""
+    header = Function(
+      name='orders', asyn=True, method=True,
+      kwargs=[Function.Param(name='limit', type='int', required=False)], return_type='Orders',
+    )
+    assert validate_overloads(header, raw_return_type='Any') == []
+    header.kwargs.append(Function.Param(name='validate', type='bool', required=False))
+    header.return_type = None
+    assert validate_overloads(header, raw_return_type='Any') == []
+    header.return_type = 'Orders'
+    stubs = validate_overloads(header, raw_return_type='Any')
+    assert [stub.return_type for stub in stubs] == ['Any', 'Orders', 'Orders']
+    assert all(stub.decorators == ['@overload'] and stub.asyn for stub in stubs)
+    assert [stub.kwargs[-1].code() for stub in stubs] == [
+      'validate: Literal[False]', 'validate: Literal[True] | None = None', 'validate: bool | None = None',
+    ]
+    assert not any(validate_overloads(header, raw_return_type='Any', generator=True)[0].asyn for _ in [0])
+    # The implementation's own header is never touched.
+    assert header.kwargs[-1].code() == 'validate: bool | None = None'
+    header.overloads = stubs
+    assert header.code().count(': ...\n') == 3
+    assert header.code().endswith('validate: bool | None = None) -> Orders:')
 
 
 def test_a_datetime_window_steps_by_a_timedelta():
@@ -1979,7 +2034,7 @@ class TestPagedResponseMethodTokenRequiredCursor:
       method_name='orders', header=required_timestamp_token_header(),
       rows_type='dict', state_type='TimestampMillis', zero_value_is_wire_absent=False,
     ) or ''
-    assert source.startswith('def orders_paged(')
+    assert _implementation(source).startswith('def orders_paged(')
     assert '-> PaginatedResponse[dict, TimestampMillis]:' in source
 
   def test_keeps_the_cursor_required_on_the_outer_signature(self, generator: Generator):
@@ -2035,7 +2090,7 @@ class TestPagedResponsePageTotal:
       method_name='orders', header=paged_header(kwargs=['page', 'page_size']),
       rows_type='dict',
     ) or ''
-    assert source.startswith('def orders_paged(')
+    assert _implementation(source).startswith('def orders_paged(')
     assert '-> PaginatedResponse[dict, int]:' in source
     assert 'page:' not in source.split('"""')[0]
 
@@ -2211,7 +2266,7 @@ class TestPagedResponsePageExhausted:
       method_name='orders', header=paged_header(kwargs=['page', 'page_size']),
       rows_type='dict',
     ) or ''
-    assert source.startswith('def orders_paged(')
+    assert _implementation(source).startswith('def orders_paged(')
     assert '-> PaginatedResponse[dict, int]:' in source
     assert 'page:' not in source.split('"""')[0]
 
@@ -2296,7 +2351,7 @@ class TestPagedResponseSeek:
       method_name='orders', header=paged_header(kwargs=['from_id', 'limit']),
       rows_type='dict',
     ) or ''
-    assert source.startswith('def orders_paged(')
+    assert _implementation(source).startswith('def orders_paged(')
     assert '-> PaginatedResponse[dict, int]:' in source
     assert 'from_id:' not in source.split('"""')[0]
 
@@ -2443,7 +2498,7 @@ class TestPagedResponseSeekRequiredCursor:
       paged_endpoint(SEEK_REQUIRED_TIMESTAMP),
       method_name='orders', header=timestamp_millis_header(), rows_type='dict',
     ) or ''
-    assert source.startswith('def orders_paged(')
+    assert _implementation(source).startswith('def orders_paged(')
     assert '-> PaginatedResponse[dict, TimestampMillis]:' in source
 
   def test_keeps_the_cursor_required_on_the_outer_signature(self, generator: Generator):
@@ -2920,7 +2975,7 @@ class TestPagedWindowOverlap:
       paged_endpoint(WINDOW_OVERLAP, size_default=3),
       method_name='orders', header=window_overlap_header(), response_type='list[dict]',
     ) or ''
-    assert source.startswith('async def orders_paged(')
+    assert _implementation(source).startswith('async def orders_paged(')
     assert 'overlap' in source
 
   def test_narrows_and_retries_a_full_chunk_with_real_variety(self, generator: Generator):
@@ -3065,7 +3120,7 @@ def walk_window_overlap(
     call: Arguments passed to the iterator.
   """
   namespace: dict[str, Any] = {
-    'AsyncIterator': AsyncIterator, 'LogicError': LogicError,
+    'AsyncIterator': AsyncIterator, 'LogicError': LogicError, **OVERLOAD_NAMESPACE,
     'datetime': datetime, 'timedelta': timedelta,
     **(extra_namespace or {}),
   }

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 (2026-09-08)
 
 - `truewire_core.types`: the timestamp and date aliases generated code imports by name
   (`TimestampSeconds`, `TimestampMillis`, `TimestampMicros`, `TimestampNanos`,

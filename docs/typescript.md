@@ -5,8 +5,11 @@ TypeScript package with the same guarantees as the Python one: typed requests an
 responses, runtime validation on by default with a per-call override, and generated
 pagination walkers. The runtime it depends on is `@truewire/core` (`packages/core-ts`).
 
-Status: in the repository, not on npm. `@truewire/core` is linked with a relative `file:`
-dependency until it is published. HTTP `rpc` endpoints are generated; stream endpoints
+Status: `@truewire/core` publishes to npm from `packages/core-ts` (a merged
+`release/core-ts` pull request, see [Releasing](../CONTRIBUTING.md#releasing)); a generated
+project depends on it as an ordinary `package.json` dependency. `examples/github` in this
+repository links it with a relative `file:` dependency instead, so the example always
+tests the runtime at the same commit. HTTP `rpc` endpoints are generated; stream endpoints
 (WebSocket subscriptions, `examples/kraken`) are not yet, and neither are composite cores
 (`forward`/`params`/`children` in `truewire.toml`). See the end of this page for the list.
 
@@ -177,4 +180,11 @@ After a change to `packages/core-ts`, rebuild it (`yarn build`) and reinstall th
   method is generated with a note; no walker.
 - A `rpc` endpoint with both `http` and `ws` transports is generated for HTTP only.
 - `truewire docs check` for ```ts blocks, and `truewire surface` for the camelCase rule.
-- Publishing `@truewire/core` (and a `@truewire/testing` with the replay helpers) to npm.
+- A `@truewire/testing` package with the replay helpers (`examples/github/test` is
+  hand-written for now).
+
+`@truewire/core` itself is published: merging a `release/core-ts` pull request into `main`
+runs `.github/workflows/release-core-ts.yml`, which tests and builds `packages/core-ts`,
+runs `npm publish --provenance`, tags `core-ts-v<version>` and creates the GitHub release.
+Generated code depends on the published package as a normal dependency; only this
+repository's own example links it by path.

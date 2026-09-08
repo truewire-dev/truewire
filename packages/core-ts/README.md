@@ -18,7 +18,10 @@ npm install @truewire/core
 ```
 
 ESM only, Node 22+ (global `fetch` and `WebSocket`) or any modern browser. No runtime
-dependencies.
+dependencies. The generator that emits the clients is the `truewire` CLI (Python, on PyPI);
+[truewire.dev](https://truewire.dev) and
+[docs/typescript.md](https://github.com/truewire-dev/truewire/blob/main/docs/typescript.md)
+describe the spec format, the generated code and the core contract.
 
 ## What it provides
 
@@ -30,6 +33,7 @@ dependencies.
 | `@truewire/core/ws` | WebSocket base classes: `Socket`, `Streams`, `Rpc`, `StreamsRpc`, `SerialReplies`; `Stream`, `Subscription` |
 | `@truewire/core/times` | `EpochConverter`, `IsoConverter`, `DateConverter`, the `Timestamp*` aliases and `DateIso` |
 | `@truewire/core/paging` | `PaginatedResponse` and `Page` |
+| `@truewire/core/contract` | `HttpEndpoint<Meta>`, `CommandEndpoint<Meta>`, `StreamEndpoint<Meta>` and `CallOptions`: what a generated client asks of its hand-written core |
 | `@truewire/core` | everything above; the codec combinators as the `t` namespace, the socket classes as `ws` |
 
 ### Codecs
@@ -141,6 +145,11 @@ for await (const tick of stream) ...
 
 ## Development
 
+The source lives in `packages/core-ts` of
+[truewire-dev/truewire](https://github.com/truewire-dev/truewire); the
+[CHANGELOG](https://github.com/truewire-dev/truewire/blob/main/packages/core-ts/CHANGELOG.md)
+lists what each version changed.
+
 ```bash
 yarn install
 yarn test        # vitest
@@ -150,4 +159,4 @@ yarn build       # tsc to dist/
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](https://github.com/truewire-dev/truewire/blob/main/packages/core-ts/LICENSE).

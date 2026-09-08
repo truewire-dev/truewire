@@ -103,3 +103,20 @@ Each package releases from its own pull request, merged into `main`:
    skipped, so re-merging is safe.
 
 `truewire` depends on `truewire-core`, so when both change, release core first.
+
+`@truewire/core` (`packages/core-ts`) releases to npm the same way:
+
+1. Branch `release/core-ts` off `main`.
+2. Bump `version` in `packages/core-ts/package.json` and turn the `## <version> (unreleased)`
+   heading in `packages/core-ts/CHANGELOG.md` into the released one.
+3. Open the pull request titled `Release @truewire/core <version>`; its body becomes the top
+   of the GitHub release notes.
+4. Merge. `release-core-ts.yml` runs `yarn typecheck`, `yarn test` and `yarn build`, checks
+   that every entry point in `package.json` is in the tarball, runs `npm publish --access
+   public --provenance`, pushes the `core-ts-v<version>` tag and creates the GitHub release.
+   A version already on npm is skipped, so re-merging is safe.
+
+npm has no trusted publisher here: the workflow authenticates with the `NPM_TOKEN` repository
+secret, a granular access token for the `@truewire` org with publish rights on
+`@truewire/core` (bypassing 2FA, since the workflow cannot answer a prompt). Without the
+secret the publish step fails and nothing is tagged.

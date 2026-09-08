@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.8.1 (2026-09-08)
 
 - **A router group may no longer claim a class name that is already taken**
   (`docs/spec/authoring.md` rule 18). A client whose declared `name` matches one of its

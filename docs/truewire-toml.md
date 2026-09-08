@@ -82,9 +82,15 @@ name = "Petstore"            # root class name; default: [python].name, else Pas
 - **`[typescript]`**: where `truewire generate typescript` writes the TypeScript package
   (`<src>/<package>/`) and what its root class is called. There is no per-core table: a
   generated class takes its core as a constructor argument typed by the `@truewire/core`
-  contract (`HttpEndpoint<Meta>`), and the hand-written `<package>/core/index.ts`
-  satisfies it by shape, so nothing is imported or resolved at generation. See
-  [docs/typescript.md](typescript.md).
+  contract (`HttpEndpoint<Meta>`, `CommandEndpoint<Meta>`, `StreamEndpoint<Meta>`), and
+  the hand-written `<package>/core/index.ts` satisfies it by shape, so nothing is imported
+  or resolved at generation. The composition keys are read from `[python.cores.<name>]`,
+  the one declaration serving both languages: a core declaring `children` or `forward`
+  makes its router take a *fields object* -- one property per field the declarations
+  name, exported as the `<Class>Core` interface -- and hand each child the field its
+  `children` entry maps it to (`client` when unmapped), or the whole object to a child
+  that is itself composite. `params` needs nothing: the hand-written core takes its
+  parameters when it is built. See [docs/typescript.md](typescript.md#composite-cores).
 
 ## Generated state
 

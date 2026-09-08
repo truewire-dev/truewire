@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+- **`truewire generate typescript`** (`truewire.codegen.typescript`, `docs/typescript.md`):
+  a second backend, reading the same plan as the Python one and writing an ESM package:
+  one `interface` plus a `Codec<T>` value per type (built from `@truewire/core`'s
+  combinators, so `tsc` proves the two agree), one class per `rpc` endpoint with the method
+  and a `<method>Paged` walker (`PaginatedResponse` for `walker: paginated`, an async
+  generator otherwise), router classes that delegate, a root class taking the hand-written
+  core, `meta.ts` and `index.ts`. Output is printed deterministically; no formatter runs.
+  The generated code imports nothing from the project's core: it is typed by the
+  `@truewire/core` contract (`HttpEndpoint<Meta>`) and the core satisfies it by shape.
+- `truewire.toml` gains a `[typescript]` section (`package`, `src`, `name`). The manifest
+  discipline is the Python one (`.truewire/typescript-files.json`, `--check`, `--delete`);
+  `--check` also reports an owned file whose content differs from the plan.
+- Stream endpoints, composite cores (`forward`/`params`/`children`), `window` walks and
+  `seek`+`overlap` walks are reported as skipped by the TypeScript backend, not rendered.
+- `examples/github` carries a TypeScript package beside its Python one: a hand-written
+  `core/index.ts`, the generated code, and a vitest suite (replay of every recorded example,
+  the two paging walks, codec round-trips) against `truewire mock`, run in CI.
+
 ## 0.5.0 (2026-09-08)
 
 - **The plan** (`truewire.plan`, `docs/plan.md`): a frozen, JSON-serialisable model of

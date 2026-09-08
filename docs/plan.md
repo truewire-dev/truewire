@@ -134,6 +134,9 @@ called from both sides.
 
 ## How a second backend consumes it
 
+`truewire.codegen.typescript` is that backend (`docs/typescript.md`); it reads the plan as
+described here and needed nothing added to it.
+
 Walk `endpoints`. For each: define the entries of `types` (and `wireTypes` when present)
 in its own language, rendering `scalar` by base and format; build the method's parameters
 from `request.fields` (or one parameter of `request.type` for a `union`/`array`); return

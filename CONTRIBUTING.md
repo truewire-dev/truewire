@@ -25,6 +25,8 @@ uv run pytest                                  # everything
 uv run pytest packages/truewire/test           # toolchain only
 uv run pytest packages/core-python/test        # runtime only
 uv run pytest -k pagination                    # by keyword
+(cd packages/core-ts && yarn test)             # the TypeScript runtime
+(cd examples/github && yarn test)              # the TypeScript example, against truewire mock
 ```
 
 Lint and format with ruff, using the config in the repository root:

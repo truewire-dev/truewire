@@ -47,6 +47,36 @@ jobs:
         working-directory: examples/${{ matrix.example }}
         run: PYTHONPATH=src ../../.venv/bin/python -m pytest -q
 
+  examples-ts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install the toolchain
+        run: |
+          uv venv --python 3.12 .venv
+          uv pip install --python .venv/bin/python -e packages/core-python[dev] -e 'packages/truewire[dev]'
+      - name: Build @truewire/core
+        working-directory: packages/core-ts
+        run: |
+          yarn install --frozen-lockfile
+          yarn build
+      - name: Install the example
+        working-directory: examples/github
+        run: yarn install --frozen-lockfile
+      - name: Generated code is current
+        working-directory: examples/github
+        run: ../../.venv/bin/truewire generate typescript --check
+      - name: Type-check
+        working-directory: examples/github
+        run: yarn typecheck
+      - name: Test
+        working-directory: examples/github
+        run: yarn test
+
   runtime-ts:
     runs-on: ubuntu-latest
     defaults:

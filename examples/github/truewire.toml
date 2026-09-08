@@ -12,6 +12,11 @@ package = "github"
 src = "src"
 name = "GitHub"
 
+[typescript]
+package = "github"
+src = "src"
+name = "GitHub"
+
 [python.cores.root]
 base = "github.core:ClientBase"
 

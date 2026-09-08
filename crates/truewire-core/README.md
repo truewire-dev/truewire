@@ -16,4 +16,5 @@ generated package depends on, and the contract a hand-written core satisfies.
 - `errors`: the one `Error` enum every function here returns.
 
 See [docs/rust.md](https://github.com/truewire-dev/truewire/blob/main/docs/rust.md) for
-what a core must implement and what is not built yet (the generator).
+what `truewire generate rust` renders against this crate, what a core must implement, and
+what is not generated yet.

@@ -135,7 +135,9 @@ called from both sides.
 ## How a second backend consumes it
 
 `truewire.codegen.typescript` is that backend (`docs/typescript.md`); it reads the plan as
-described here and needed nothing added to it.
+described here and needed nothing added to it. `truewire.codegen.rust` (`docs/rust.md`) is
+the third consumer, and needed nothing added either, though it found the gap on inline
+types recorded below.
 
 Walk `endpoints`. For each: define the entries of `types` (and `wireTypes` when present)
 in its own language, rendering `scalar` by base and format; build the method's parameters
@@ -180,3 +182,9 @@ The tests in `packages/truewire/test/test_plan.py` pin the GitHub example's plan
   at the union's own path. An OpenAPI `discriminator` is dropped by `truewire import
   openapi` and has no node here; with one, a backend could render a tagged union and give
   an exact error. Found while writing the Rust runtime.
+- **Inline literals and unions have no name.** A `literal` or `union` node inside a
+  field carries no `id`; TypeScript and Python spell it inline (`'open' | 'closed'`), but
+  Rust needs a named `enum` for it, so the Rust backend invents one from the position
+  (`Issue.state_reason` becomes `IssueStateReason`). A name on the plan, chosen once from
+  the schema's `title` or its position, would let every backend that needs one agree on
+  it. Found while writing the Rust generator.

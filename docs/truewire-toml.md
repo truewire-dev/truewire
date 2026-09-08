@@ -42,6 +42,11 @@ children = { market_data = "market_client", private = "private_client" }
 package = "petstore"         # default: [project].name; the package lives at <src>/<package>
 src = "src"                  # default "src"
 name = "Petstore"            # root class name; default: [python].name, else PascalCase of [project].name
+
+[rust]
+package = "petstore"         # default: [project].name; the modules live at <src>/<package>, lib.rs at their top
+src = "src"                  # default "src"
+name = "Petstore"            # root struct name; default: [python].name, else PascalCase of [project].name
 ```
 
 ## Sections
@@ -91,6 +96,13 @@ name = "Petstore"            # root class name; default: [python].name, else Pas
   `children` entry maps it to (`client` when unmapped), or the whole object to a child
   that is itself composite. `params` needs nothing: the hand-written core takes its
   parameters when it is built. See [docs/typescript.md](typescript.md#composite-cores).
+- **`[rust]`**: where `truewire generate rust` writes the Rust modules (`<src>/<package>/`,
+  whose `lib.rs` the project's `Cargo.toml` names as its library path) and what its root
+  struct is called. As for TypeScript there is no per-core table: a generated struct holds
+  its core as an `Arc<dyn HttpEndpoint<Meta>>` from `truewire-core`, and the hand-written
+  `<package>/core` module, which the generated `lib.rs` declares, implements the trait, so
+  nothing is imported or resolved at generation. A core declaring `children` or `forward`
+  is not rendered yet; see [docs/rust.md](rust.md#not-generated-yet).
 
 ## Generated state
 
@@ -101,10 +113,11 @@ import it before the first `generate`.
 
 `generate typescript` writes `<src>/<package>/meta.ts`, one interface per core with a `meta`
 schema (`DefaultMeta` for `default`), which the hand-written core names as the `Meta`
-parameter of `HttpEndpoint`.
+parameter of `HttpEndpoint`. `generate rust` writes `<src>/<package>/meta.rs`, one struct
+per such core, which the hand-written core implements `HttpEndpoint<DefaultMeta>` for.
 
 `generate` writes `.truewire/<language>-files.json` (`python-files.json`,
-`typescript-files.json`), the manifest of files it owns. Files not in the manifest are
+`typescript-files.json`, `rust-files.json`), the manifest of files it owns. Files not in the manifest are
 never deleted; `generate --check` compares the plan to it and each owned file's content
 to what the plan renders (formatted the way `generate` writes it), and `generate --delete`
 removes only what it owns. Add `.truewire/` to `.gitignore` (`truewire init` does): the

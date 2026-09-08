@@ -1,0 +1,2435 @@
+{
+  "name": "github",
+  "rootClass": "GitHub",
+  "cores": {
+    "default": {
+      "meta": {
+        "type": "object",
+        "properties": {
+          "public": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "root": {}
+  },
+  "schemas": {
+    "": {
+      "CommitRef": {
+        "type": "record",
+        "id": "CommitRef",
+        "fields": {
+          "sha": {
+            "type": {
+              "type": "scalar",
+              "base": "string"
+            },
+            "required": true,
+            "docstring": "Commit sha."
+          },
+          "url": {
+            "type": {
+              "type": "scalar",
+              "base": "string"
+            },
+            "required": true,
+            "docstring": "API URL of the commit."
+          }
+        },
+        "docstring": "A reference to a commit by sha."
+      },
+      "GitActor": {
+        "type": "record",
+        "id": "GitActor",
+        "fields": {
+          "name": {
+            "type": {
+              "type": "scalar",
+              "base": "string"
+            },
+            "required": true,
+            "docstring": "Name recorded in the commit."
+          },
+          "email": {
+            "type": {
+              "type": "scalar",
+              "base": "string"
+            },
+            "required": true,
+            "docstring": "Email recorded in the commit."
+          },
+          "date": {
+            "type": {
+              "type": "scalar",
+              "base": "string",
+              "format": "date-time"
+            },
+            "required": true,
+            "docstring": "When the commit was authored or committed."
+          }
+        },
+        "docstring": "The author or committer recorded in the git object."
+      },
+      "Label": {
+        "type": "record",
+        "id": "Label",
+        "fields": {
+          "id": {
+            "type": {
+              "type": "scalar",
+              "base": "integer"
+            },
+            "required": true,
+            "docstring": "Label id."
+          },
+          "name": {
+            "type": {
+              "type": "scalar",
+              "base": "string"
+            },
+            "required": true,
+            "docstring": "Label name."
+          },
+          "color": {
+            "type": {
+              "type": "scalar",
+              "base": "string"
+            },
+            "required": true,
+            "docstring": "Six-character hex color, without `#`."
+          },
+          "description": {
+            "type": {
+              "type": "union",
+              "variants": [
+                {
+                  "type": {
+                    "type": "scalar",
+                    "base": "string"
+                  },
+                  "docstring": "Label description, when set."
+                },
+                {
+                  "type": {
+                    "type": "scalar",
+                    "base": "null"
+                  }
+                }
+              ]
+            },
+            "required": false,
+            "docstring": "Label description, when set."
+          }
+        },
+        "docstring": "An issue label."
+      },
+      "License": {
+        "type": "record",
+        "id": "License",
+        "fields": {
+          "key": {
+            "type": {
+              "type": "scalar",
+              "base": "string"
+            },
+            "required": true,
+            "docstring": "License key, such as `apache-2.0`."
+          },
+          "name": {
+            "type": {
+              "type": "scalar",
+              "base": "string"
+            },
+            "required": true,
+            "docstring": "License display name."
+          },
+          "spdx_id": {
+            "type": {
+              "type": "union",
+              "variants": [
+                {
+                  "type": {
+                    "type": "scalar",
+                    "base": "string"
+                  },
+                  "docstring": "SPDX identifier, when one exists."
+                },
+                {
+                  "type": {
+                    "type": "scalar",
+                    "base": "null"
+                  }
+                }
+              ]
+            },
+            "required": false,
+            "docstring": "SPDX identifier, when one exists."
+          },
+          "url": {
+            "type": {
+              "type": "union",
+              "variants": [
+                {
+                  "type": {
+                    "type": "scalar",
+                    "base": "string"
+                  },
+                  "docstring": "API URL of the license, when one exists."
+                },
+                {
+                  "type": {
+                    "type": "scalar",
+                    "base": "null"
+                  }
+                }
+              ]
+            },
+            "required": false,
+            "docstring": "API URL of the license, when one exists."
+          }
+        },
+        "docstring": "A repository license."
+      },
+      "SimpleUser": {
+        "type": "record",
+        "id": "SimpleUser",
+        "fields": {
+          "login": {
+            "type": {
+              "type": "scalar",
+              "base": "string"
+            },
+            "required": true,
+            "docstring": "Account login."
+          },
+          "id": {
+            "type": {
+              "type": "scalar",
+              "base": "integer"
+            },
+            "required": true,
+            "docstring": "Account id."
+          },
+          "node_id": {
+            "type": {
+              "type": "scalar",
+              "base": "string"
+            },
+            "required": false,
+            "docstring": "GraphQL node id."
+          },
+          "avatar_url": {
+            "type": {
+              "type": "scalar",
+              "base": "string"
+            },
+            "required": false,
+            "docstring": "Avatar image URL."
+          },
+          "html_url": {
+            "type": {
+              "type": "scalar",
+              "base": "string"
+            },
+            "required": false,
+            "docstring": "Profile page URL."
+          },
+          "type": {
+            "type": {
+              "type": "literal",
+              "values": [
+                "User",
+                "Organization",
+                "Bot"
+              ]
+            },
+            "required": true,
+            "docstring": "Account kind."
+          },
+          "site_admin": {
+            "type": {
+              "type": "scalar",
+              "base": "boolean"
+            },
+            "required": false,
+            "docstring": "Whether the account is a GitHub staff member."
+          }
+        },
+        "docstring": "A GitHub user or organization, as embedded in other resources."
+      },
+      "GitCommit": {
+        "type": "record",
+        "id": "GitCommit",
+        "fields": {
+          "author": {
+            "type": {
+              "type": "ref",
+              "id": "GitActor"
+            },
+            "required": true
+          },
+          "committer": {
+            "type": {
+              "type": "ref",
+              "id": "GitActor"
+            },
+            "required": true
+          },
+          "message": {
+            "type": {
+              "type": "scalar",
+              "base": "string"
+            },
+            "required": true,
+            "docstring": "Full commit message."
+          },
+          "comment_count": {
+            "type": {
+              "type": "scalar",
+              "base": "integer"
+            },
+            "required": false,
+            "docstring": "Number of comments on the commit."
+          },
+          "tree": {
+            "type": {
+              "type": "ref",
+              "id": "CommitRef"
+            },
+            "required": true
+          },
+          "url": {
+            "type": {
+              "type": "scalar",
+              "base": "string"
+            },
+            "required": false,
+            "docstring": "API URL of the git commit object."
+          }
+        },
+        "docstring": "The git commit object behind a repository commit."
+      },
+      "Commit": {
+        "type": "record",
+        "id": "Commit",
+        "fields": {
+          "sha": {
+            "type": {
+              "type": "scalar",
+              "base": "string"
+            },
+            "required": true,
+            "docstring": "Commit sha."
+          },
+          "node_id": {
+            "type": {
+              "type": "scalar",
+              "base": "string"
+            },
+            "required": false,
+            "docstring": "GraphQL node id."
+          },
+          "html_url": {
+            "type": {
+              "type": "scalar",
+              "base": "string"
+            },
+            "required": false,
+            "docstring": "Web page of the commit."
+          },
+          "commit": {
+            "type": {
+              "type": "ref",
+              "id": "GitCommit"
+            },
+            "required": true
+          },
+          "author": {
+            "type": {
+              "type": "union",
+              "variants": [
+                {
+                  "type": {
+                    "type": "ref",
+                    "id": "SimpleUser"
+                  }
+                },
+                {
+                  "type": {
+                    "type": "scalar",
+                    "base": "null"
+                  }
+                }
+              ]
+            },
+            "required": false,
+            "docstring": "GitHub account matched to the author, when known."
+          },
+          "committer": {
+            "type": {
+              "type": "union",
+              "variants": [
+                {
+                  "type": {
+                    "type": "ref",
+                    "id": "SimpleUser"
+                  }
+                },
+                {
+                  "type": {
+                    "type": "scalar",
+                    "base": "null"
+                  }
+                }
+              ]
+            },
+            "required": false,
+            "docstring": "GitHub account matched to the committer, when known."
+          },
+          "parents": {
+            "type": {
+              "type": "list",
+              "item": {
+                "type": "ref",
+                "id": "CommitRef"
+              }
+            },
+            "required": true,
+            "docstring": "Parent commits."
+          }
+        },
+        "docstring": "A commit on the repository, as listed."
+      }
+    }
+  },
+  "routers": [
+    {
+      "path": [],
+      "core": "root",
+      "doc": {
+        "description": "GitHub REST API, repository-scoped endpoints: repositories, commits, tags, releases and issues. Every recorded example is a live capture from api.github.com against truewire-dev/truewire.",
+        "upstream": "https://docs.github.com/en/rest"
+      },
+      "children": [
+        {
+          "name": "issues",
+          "kind": "router",
+          "class": "Issues"
+        },
+        {
+          "name": "repos",
+          "kind": "router",
+          "class": "Repos"
+        }
+      ]
+    },
+    {
+      "path": [
+        "issues"
+      ],
+      "core": "default",
+      "doc": {
+        "description": "Issues and, through the same list, pull requests.",
+        "upstream": "https://docs.github.com/en/rest/issues"
+      },
+      "children": [
+        {
+          "name": "list",
+          "kind": "endpoint",
+          "class": "List"
+        }
+      ]
+    },
+    {
+      "path": [
+        "repos"
+      ],
+      "core": "default",
+      "doc": {
+        "description": "Repositories: metadata, commits, tags and releases.",
+        "upstream": "https://docs.github.com/en/rest/repos"
+      },
+      "children": [
+        {
+          "name": "get",
+          "kind": "endpoint",
+          "class": "Get"
+        },
+        {
+          "name": "get_commit",
+          "kind": "endpoint",
+          "class": "GetCommit"
+        },
+        {
+          "name": "list_commits",
+          "kind": "endpoint",
+          "class": "ListCommits"
+        },
+        {
+          "name": "list_releases",
+          "kind": "endpoint",
+          "class": "ListReleases"
+        },
+        {
+          "name": "list_tags",
+          "kind": "endpoint",
+          "class": "ListTags"
+        }
+      ]
+    }
+  ],
+  "endpoints": [
+    {
+      "path": [
+        "issues",
+        "list"
+      ],
+      "kind": "rpc",
+      "transports": [
+        "http"
+      ],
+      "wire": {
+        "path": "/repos/{owner}/{repo}/issues",
+        "method": "GET",
+        "placeholders": [
+          "owner",
+          "repo"
+        ]
+      },
+      "core": "default",
+      "meta": {
+        "public": true
+      },
+      "deprecated": false,
+      "request": {
+        "shape": "fields",
+        "type": "Request",
+        "fields": [
+          {
+            "wire": "owner",
+            "required": true,
+            "type": {
+              "type": "scalar",
+              "base": "string"
+            },
+            "description": "Account owner of the repository, case-insensitive."
+          },
+          {
+            "wire": "repo",
+            "required": true,
+            "type": {
+              "type": "scalar",
+              "base": "string"
+            },
+            "description": "Repository name without the `.git` extension, case-insensitive."
+          },
+          {
+            "wire": "state",
+            "required": false,
+            "type": {
+              "type": "literal",
+              "values": [
+                "open",
+                "closed",
+                "all"
+              ]
+            },
+            "description": "Issue state to include.",
+            "default": "open"
+          },
+          {
+            "wire": "labels",
+            "required": false,
+            "type": {
+              "type": "scalar",
+              "base": "string"
+            },
+            "description": "Comma-separated label names; every one must match."
+          },
+          {
+            "wire": "sort",
+            "required": false,
+            "type": {
+              "type": "literal",
+              "values": [
+                "created",
+                "updated",
+                "comments"
+              ]
+            },
+            "description": "Sort key.",
+            "default": "created"
+          },
+          {
+            "wire": "direction",
+            "required": false,
+            "type": {
+              "type": "literal",
+              "values": [
+                "asc",
+                "desc"
+              ]
+            },
+            "description": "Sort direction.",
+            "default": "desc"
+          },
+          {
+            "wire": "since",
+            "required": false,
+            "type": {
+              "type": "scalar",
+              "base": "string",
+              "format": "date-time"
+            },
+            "description": "Only issues updated at or after this instant."
+          },
+          {
+            "wire": "per_page",
+            "required": false,
+            "type": {
+              "type": "scalar",
+              "base": "integer"
+            },
+            "description": "Results per page, at most 100.",
+            "default": 30
+          },
+          {
+            "wire": "page",
+            "required": false,
+            "type": {
+              "type": "scalar",
+              "base": "integer"
+            },
+            "description": "Page number of the results to fetch, starting at 1.",
+            "default": 1
+          }
+        ],
+        "needsCast": false
+      },
+      "response": {
+        "wire": "Issues",
+        "payload": "Issues",
+        "selector": "",
+        "optional": false,
+        "needsCast": false
+      },
+      "pagination": {
+        "strategy": "page",
+        "driver": "page",
+        "driverRequired": false,
+        "size": "per_page",
+        "sizeDefault": 30,
+        "start": 1,
+        "done": {
+          "kind": "short_page"
+        },
+        "rowType": {
+          "type": "ref",
+          "id": "Issue"
+        },
+        "stateType": {
+          "type": "scalar",
+          "base": "integer"
+        },
+        "seedable": true,
+        "walker": "paginated"
+      },
+      "types": {
+        "IssuePullRequest": {
+          "type": "record",
+          "id": "IssuePullRequest",
+          "fields": {
+            "url": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": true,
+              "docstring": "API URL of the pull request."
+            },
+            "html_url": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": true,
+              "docstring": "Web page of the pull request."
+            },
+            "merged_at": {
+              "type": {
+                "type": "union",
+                "variants": [
+                  {
+                    "type": {
+                      "type": "scalar",
+                      "base": "string",
+                      "format": "date-time"
+                    },
+                    "docstring": "When the pull request was merged; null if not merged."
+                  },
+                  {
+                    "type": {
+                      "type": "scalar",
+                      "base": "null"
+                    }
+                  }
+                ]
+              },
+              "required": false,
+              "docstring": "When the pull request was merged; null if not merged."
+            }
+          },
+          "docstring": "Present when the row is a pull request."
+        },
+        "Request": {
+          "type": "record",
+          "id": "Request",
+          "fields": {
+            "owner": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": true,
+              "docstring": "Account owner of the repository, case-insensitive."
+            },
+            "repo": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": true,
+              "docstring": "Repository name without the `.git` extension, case-insensitive."
+            },
+            "state": {
+              "type": {
+                "type": "literal",
+                "values": [
+                  "open",
+                  "closed",
+                  "all"
+                ]
+              },
+              "required": false,
+              "docstring": "Issue state to include."
+            },
+            "labels": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": false,
+              "docstring": "Comma-separated label names; every one must match."
+            },
+            "sort": {
+              "type": {
+                "type": "literal",
+                "values": [
+                  "created",
+                  "updated",
+                  "comments"
+                ]
+              },
+              "required": false,
+              "docstring": "Sort key."
+            },
+            "direction": {
+              "type": {
+                "type": "literal",
+                "values": [
+                  "asc",
+                  "desc"
+                ]
+              },
+              "required": false,
+              "docstring": "Sort direction."
+            },
+            "since": {
+              "type": {
+                "type": "scalar",
+                "base": "string",
+                "format": "date-time"
+              },
+              "required": false,
+              "docstring": "Only issues updated at or after this instant."
+            },
+            "per_page": {
+              "type": {
+                "type": "scalar",
+                "base": "integer"
+              },
+              "required": false,
+              "docstring": "Results per page, at most 100."
+            },
+            "page": {
+              "type": {
+                "type": "scalar",
+                "base": "integer"
+              },
+              "required": false,
+              "docstring": "Page number of the results to fetch, starting at 1."
+            }
+          },
+          "docstring": "Which repository, which issues, and which page."
+        },
+        "Issue": {
+          "type": "record",
+          "id": "Issue",
+          "fields": {
+            "id": {
+              "type": {
+                "type": "scalar",
+                "base": "integer"
+              },
+              "required": true,
+              "docstring": "Issue id."
+            },
+            "node_id": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": false,
+              "docstring": "GraphQL node id."
+            },
+            "number": {
+              "type": {
+                "type": "scalar",
+                "base": "integer"
+              },
+              "required": true,
+              "docstring": "Issue number within the repository."
+            },
+            "title": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": true,
+              "docstring": "Title."
+            },
+            "state": {
+              "type": {
+                "type": "literal",
+                "values": [
+                  "open",
+                  "closed"
+                ]
+              },
+              "required": true,
+              "docstring": "Open or closed."
+            },
+            "state_reason": {
+              "type": {
+                "type": "union",
+                "variants": [
+                  {
+                    "type": {
+                      "type": "literal",
+                      "values": [
+                        "completed",
+                        "not_planned",
+                        "reopened",
+                        "duplicate"
+                      ]
+                    },
+                    "docstring": "Why the issue is in its state, when GitHub recorded one."
+                  },
+                  {
+                    "type": {
+                      "type": "scalar",
+                      "base": "null"
+                    }
+                  }
+                ]
+              },
+              "required": false,
+              "docstring": "Why the issue is in its state, when GitHub recorded one."
+            },
+            "locked": {
+              "type": {
+                "type": "scalar",
+                "base": "boolean"
+              },
+              "required": true,
+              "docstring": "Whether the conversation is locked."
+            },
+            "user": {
+              "type": {
+                "type": "union",
+                "variants": [
+                  {
+                    "type": {
+                      "type": "ref",
+                      "id": "SimpleUser"
+                    }
+                  },
+                  {
+                    "type": {
+                      "type": "scalar",
+                      "base": "null"
+                    }
+                  }
+                ]
+              },
+              "required": false,
+              "docstring": "Author, when the account still exists."
+            },
+            "labels": {
+              "type": {
+                "type": "list",
+                "item": {
+                  "type": "ref",
+                  "id": "Label"
+                }
+              },
+              "required": true,
+              "docstring": "Labels on the issue."
+            },
+            "comments": {
+              "type": {
+                "type": "scalar",
+                "base": "integer"
+              },
+              "required": true,
+              "docstring": "Number of comments."
+            },
+            "created_at": {
+              "type": {
+                "type": "scalar",
+                "base": "string",
+                "format": "date-time"
+              },
+              "required": true,
+              "docstring": "When the issue was opened."
+            },
+            "updated_at": {
+              "type": {
+                "type": "scalar",
+                "base": "string",
+                "format": "date-time"
+              },
+              "required": true,
+              "docstring": "When the issue last changed."
+            },
+            "closed_at": {
+              "type": {
+                "type": "union",
+                "variants": [
+                  {
+                    "type": {
+                      "type": "scalar",
+                      "base": "string",
+                      "format": "date-time"
+                    },
+                    "docstring": "When the issue was closed; null while open."
+                  },
+                  {
+                    "type": {
+                      "type": "scalar",
+                      "base": "null"
+                    }
+                  }
+                ]
+              },
+              "required": false,
+              "docstring": "When the issue was closed; null while open."
+            },
+            "body": {
+              "type": {
+                "type": "union",
+                "variants": [
+                  {
+                    "type": {
+                      "type": "scalar",
+                      "base": "string"
+                    },
+                    "docstring": "Body in Markdown, when set."
+                  },
+                  {
+                    "type": {
+                      "type": "scalar",
+                      "base": "null"
+                    }
+                  }
+                ]
+              },
+              "required": false,
+              "docstring": "Body in Markdown, when set."
+            },
+            "html_url": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": true,
+              "docstring": "Web page of the issue."
+            },
+            "author_association": {
+              "type": {
+                "type": "literal",
+                "values": [
+                  "COLLABORATOR",
+                  "CONTRIBUTOR",
+                  "FIRST_TIMER",
+                  "FIRST_TIME_CONTRIBUTOR",
+                  "MANNEQUIN",
+                  "MEMBER",
+                  "NONE",
+                  "OWNER"
+                ]
+              },
+              "required": false,
+              "docstring": "How the author relates to the repository."
+            },
+            "pull_request": {
+              "type": {
+                "type": "ref",
+                "id": "IssuePullRequest"
+              },
+              "required": false
+            }
+          },
+          "docstring": "An issue, or a pull request seen as one."
+        },
+        "Issues": {
+          "type": "list",
+          "item": {
+            "type": "ref",
+            "id": "Issue"
+          },
+          "id": "Issues"
+        }
+      },
+      "wireTypes": {},
+      "docs": {
+        "description": "List issues in a repository. GitHub returns pull requests here too; a row with `pull_request` set is one.",
+        "url": "https://docs.github.com/en/rest/issues/issues#list-repository-issues",
+        "notes": [
+          "The `page1`..`page3` examples are one real walk with `per_page: 1` over a repository with two merged pull requests and no issues: two full pages and an empty third. `short_page` ends the walk on the empty page, so a walk over an exact multiple of the page size costs one extra request."
+        ]
+      }
+    },
+    {
+      "path": [
+        "repos",
+        "get"
+      ],
+      "kind": "rpc",
+      "transports": [
+        "http"
+      ],
+      "wire": {
+        "path": "/repos/{owner}/{repo}",
+        "method": "GET",
+        "placeholders": [
+          "owner",
+          "repo"
+        ]
+      },
+      "core": "default",
+      "meta": {
+        "public": true
+      },
+      "deprecated": false,
+      "request": {
+        "shape": "fields",
+        "type": "Request",
+        "fields": [
+          {
+            "wire": "owner",
+            "required": true,
+            "type": {
+              "type": "scalar",
+              "base": "string"
+            },
+            "description": "Account owner of the repository, case-insensitive."
+          },
+          {
+            "wire": "repo",
+            "required": true,
+            "type": {
+              "type": "scalar",
+              "base": "string"
+            },
+            "description": "Repository name without the `.git` extension, case-insensitive."
+          }
+        ],
+        "needsCast": false
+      },
+      "response": {
+        "wire": "Repository",
+        "payload": "Repository",
+        "selector": "",
+        "optional": false,
+        "needsCast": false
+      },
+      "types": {
+        "Request": {
+          "type": "record",
+          "id": "Request",
+          "fields": {
+            "owner": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": true,
+              "docstring": "Account owner of the repository, case-insensitive."
+            },
+            "repo": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": true,
+              "docstring": "Repository name without the `.git` extension, case-insensitive."
+            }
+          },
+          "docstring": "Which repository."
+        },
+        "Repository": {
+          "type": "record",
+          "id": "Repository",
+          "fields": {
+            "id": {
+              "type": {
+                "type": "scalar",
+                "base": "integer"
+              },
+              "required": true,
+              "docstring": "Repository id."
+            },
+            "node_id": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": false,
+              "docstring": "GraphQL node id."
+            },
+            "name": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": true,
+              "docstring": "Repository name."
+            },
+            "full_name": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": true,
+              "docstring": "`owner/name`."
+            },
+            "private": {
+              "type": {
+                "type": "scalar",
+                "base": "boolean"
+              },
+              "required": true,
+              "docstring": "Whether the repository is private."
+            },
+            "owner": {
+              "type": {
+                "type": "ref",
+                "id": "SimpleUser"
+              },
+              "required": true
+            },
+            "html_url": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": true,
+              "docstring": "Web page of the repository."
+            },
+            "description": {
+              "type": {
+                "type": "union",
+                "variants": [
+                  {
+                    "type": {
+                      "type": "scalar",
+                      "base": "string"
+                    },
+                    "docstring": "Short description, when set."
+                  },
+                  {
+                    "type": {
+                      "type": "scalar",
+                      "base": "null"
+                    }
+                  }
+                ]
+              },
+              "required": false,
+              "docstring": "Short description, when set."
+            },
+            "fork": {
+              "type": {
+                "type": "scalar",
+                "base": "boolean"
+              },
+              "required": false,
+              "docstring": "Whether the repository is a fork."
+            },
+            "created_at": {
+              "type": {
+                "type": "scalar",
+                "base": "string",
+                "format": "date-time"
+              },
+              "required": true,
+              "docstring": "When the repository was created."
+            },
+            "updated_at": {
+              "type": {
+                "type": "scalar",
+                "base": "string",
+                "format": "date-time"
+              },
+              "required": true,
+              "docstring": "When repository metadata last changed."
+            },
+            "pushed_at": {
+              "type": {
+                "type": "scalar",
+                "base": "string",
+                "format": "date-time"
+              },
+              "required": false,
+              "docstring": "When a branch was last pushed."
+            },
+            "homepage": {
+              "type": {
+                "type": "union",
+                "variants": [
+                  {
+                    "type": {
+                      "type": "scalar",
+                      "base": "string"
+                    },
+                    "docstring": "Homepage URL, when set."
+                  },
+                  {
+                    "type": {
+                      "type": "scalar",
+                      "base": "null"
+                    }
+                  }
+                ]
+              },
+              "required": false,
+              "docstring": "Homepage URL, when set."
+            },
+            "size": {
+              "type": {
+                "type": "scalar",
+                "base": "integer"
+              },
+              "required": false,
+              "docstring": "Size in kilobytes."
+            },
+            "stargazers_count": {
+              "type": {
+                "type": "scalar",
+                "base": "integer"
+              },
+              "required": false,
+              "docstring": "Number of stars."
+            },
+            "watchers_count": {
+              "type": {
+                "type": "scalar",
+                "base": "integer"
+              },
+              "required": false,
+              "docstring": "Number of watchers."
+            },
+            "language": {
+              "type": {
+                "type": "union",
+                "variants": [
+                  {
+                    "type": {
+                      "type": "scalar",
+                      "base": "string"
+                    },
+                    "docstring": "Primary language, when detected."
+                  },
+                  {
+                    "type": {
+                      "type": "scalar",
+                      "base": "null"
+                    }
+                  }
+                ]
+              },
+              "required": false,
+              "docstring": "Primary language, when detected."
+            },
+            "forks_count": {
+              "type": {
+                "type": "scalar",
+                "base": "integer"
+              },
+              "required": false,
+              "docstring": "Number of forks."
+            },
+            "open_issues_count": {
+              "type": {
+                "type": "scalar",
+                "base": "integer"
+              },
+              "required": false,
+              "docstring": "Open issues and pull requests."
+            },
+            "archived": {
+              "type": {
+                "type": "scalar",
+                "base": "boolean"
+              },
+              "required": false,
+              "docstring": "Whether the repository is archived."
+            },
+            "disabled": {
+              "type": {
+                "type": "scalar",
+                "base": "boolean"
+              },
+              "required": false,
+              "docstring": "Whether the repository is disabled."
+            },
+            "license": {
+              "type": {
+                "type": "union",
+                "variants": [
+                  {
+                    "type": {
+                      "type": "ref",
+                      "id": "License"
+                    }
+                  },
+                  {
+                    "type": {
+                      "type": "scalar",
+                      "base": "null"
+                    }
+                  }
+                ]
+              },
+              "required": false,
+              "docstring": "License, when detected."
+            },
+            "topics": {
+              "type": {
+                "type": "list",
+                "item": {
+                  "type": "scalar",
+                  "base": "string"
+                }
+              },
+              "required": false,
+              "docstring": "Repository topics."
+            },
+            "visibility": {
+              "type": {
+                "type": "literal",
+                "values": [
+                  "public",
+                  "private",
+                  "internal"
+                ]
+              },
+              "required": false,
+              "docstring": "Visibility."
+            },
+            "default_branch": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": true,
+              "docstring": "Default branch name."
+            }
+          },
+          "docstring": "A repository."
+        }
+      },
+      "wireTypes": {},
+      "docs": {
+        "description": "Get a repository. Metadata, counts and the license as GitHub reports them.",
+        "url": "https://docs.github.com/en/rest/repos/repos#get-a-repository",
+        "notes": [
+          "The response schema names the fields a caller reads; GitHub sends about a hundred, and the rest pass through unchecked. Add a field here when you need it typed.",
+          "Recorded with an authenticated token, so the live payload carried `temp_clone_token`; the capture script replaces it with `REDACTED_TEMP_CLONE_TOKEN` (authoring rule 6)."
+        ]
+      }
+    },
+    {
+      "path": [
+        "repos",
+        "get_commit"
+      ],
+      "kind": "rpc",
+      "transports": [
+        "http"
+      ],
+      "wire": {
+        "path": "/repos/{owner}/{repo}/commits/{ref}",
+        "method": "GET",
+        "placeholders": [
+          "owner",
+          "repo",
+          "ref"
+        ]
+      },
+      "core": "default",
+      "meta": {
+        "public": true
+      },
+      "deprecated": false,
+      "request": {
+        "shape": "fields",
+        "type": "Request",
+        "fields": [
+          {
+            "wire": "owner",
+            "required": true,
+            "type": {
+              "type": "scalar",
+              "base": "string"
+            },
+            "description": "Account owner of the repository, case-insensitive."
+          },
+          {
+            "wire": "repo",
+            "required": true,
+            "type": {
+              "type": "scalar",
+              "base": "string"
+            },
+            "description": "Repository name without the `.git` extension, case-insensitive."
+          },
+          {
+            "wire": "ref",
+            "required": true,
+            "type": {
+              "type": "scalar",
+              "base": "string"
+            },
+            "description": "Commit sha, branch name or tag name."
+          }
+        ],
+        "needsCast": false
+      },
+      "response": {
+        "wire": "CommitDetail",
+        "payload": "CommitDetail",
+        "selector": "",
+        "optional": false,
+        "needsCast": false
+      },
+      "types": {
+        "CommitFile": {
+          "type": "record",
+          "id": "CommitFile",
+          "fields": {
+            "sha": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": true,
+              "docstring": "Blob sha after the change."
+            },
+            "filename": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": true,
+              "docstring": "Path of the file."
+            },
+            "status": {
+              "type": {
+                "type": "literal",
+                "values": [
+                  "added",
+                  "removed",
+                  "modified",
+                  "renamed",
+                  "copied",
+                  "changed",
+                  "unchanged"
+                ]
+              },
+              "required": true,
+              "docstring": "What happened to the file."
+            },
+            "additions": {
+              "type": {
+                "type": "scalar",
+                "base": "integer"
+              },
+              "required": true,
+              "docstring": "Lines added."
+            },
+            "deletions": {
+              "type": {
+                "type": "scalar",
+                "base": "integer"
+              },
+              "required": true,
+              "docstring": "Lines deleted."
+            },
+            "changes": {
+              "type": {
+                "type": "scalar",
+                "base": "integer"
+              },
+              "required": true,
+              "docstring": "Lines added plus deleted."
+            },
+            "blob_url": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": false,
+              "docstring": "Web page of the blob."
+            },
+            "patch": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": false,
+              "docstring": "Unified diff hunk; absent for binary or very large files."
+            }
+          },
+          "docstring": "One changed file."
+        },
+        "CommitStats": {
+          "type": "record",
+          "id": "CommitStats",
+          "fields": {
+            "additions": {
+              "type": {
+                "type": "scalar",
+                "base": "integer"
+              },
+              "required": true,
+              "docstring": "Lines added."
+            },
+            "deletions": {
+              "type": {
+                "type": "scalar",
+                "base": "integer"
+              },
+              "required": true,
+              "docstring": "Lines deleted."
+            },
+            "total": {
+              "type": {
+                "type": "scalar",
+                "base": "integer"
+              },
+              "required": true,
+              "docstring": "Lines added plus deleted."
+            }
+          },
+          "docstring": "Line counts over the whole diff."
+        },
+        "Request": {
+          "type": "record",
+          "id": "Request",
+          "fields": {
+            "owner": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": true,
+              "docstring": "Account owner of the repository, case-insensitive."
+            },
+            "repo": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": true,
+              "docstring": "Repository name without the `.git` extension, case-insensitive."
+            },
+            "ref": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": true,
+              "docstring": "Commit sha, branch name or tag name."
+            }
+          },
+          "docstring": "Which commit."
+        },
+        "CommitDetail": {
+          "type": "record",
+          "id": "CommitDetail",
+          "fields": {
+            "sha": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": true,
+              "docstring": "Commit sha."
+            },
+            "node_id": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": false,
+              "docstring": "GraphQL node id."
+            },
+            "html_url": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": false,
+              "docstring": "Web page of the commit."
+            },
+            "commit": {
+              "type": {
+                "type": "ref",
+                "id": "GitCommit"
+              },
+              "required": true
+            },
+            "author": {
+              "type": {
+                "type": "union",
+                "variants": [
+                  {
+                    "type": {
+                      "type": "ref",
+                      "id": "SimpleUser"
+                    }
+                  },
+                  {
+                    "type": {
+                      "type": "scalar",
+                      "base": "null"
+                    }
+                  }
+                ]
+              },
+              "required": false,
+              "docstring": "GitHub account matched to the author, when known."
+            },
+            "committer": {
+              "type": {
+                "type": "union",
+                "variants": [
+                  {
+                    "type": {
+                      "type": "ref",
+                      "id": "SimpleUser"
+                    }
+                  },
+                  {
+                    "type": {
+                      "type": "scalar",
+                      "base": "null"
+                    }
+                  }
+                ]
+              },
+              "required": false,
+              "docstring": "GitHub account matched to the committer, when known."
+            },
+            "parents": {
+              "type": {
+                "type": "list",
+                "item": {
+                  "type": "ref",
+                  "id": "CommitRef"
+                }
+              },
+              "required": true,
+              "docstring": "Parent commits."
+            },
+            "stats": {
+              "type": {
+                "type": "ref",
+                "id": "CommitStats"
+              },
+              "required": true
+            },
+            "files": {
+              "type": {
+                "type": "list",
+                "item": {
+                  "type": "ref",
+                  "id": "CommitFile"
+                }
+              },
+              "required": true,
+              "docstring": "Files changed by the commit."
+            }
+          },
+          "docstring": "A commit with diff statistics and files."
+        }
+      },
+      "wireTypes": {},
+      "docs": {
+        "description": "Get one commit with its diff statistics and changed files.",
+        "url": "https://docs.github.com/en/rest/commits/commits#get-a-commit",
+        "notes": []
+      }
+    },
+    {
+      "path": [
+        "repos",
+        "list_commits"
+      ],
+      "kind": "rpc",
+      "transports": [
+        "http"
+      ],
+      "wire": {
+        "path": "/repos/{owner}/{repo}/commits",
+        "method": "GET",
+        "placeholders": [
+          "owner",
+          "repo"
+        ]
+      },
+      "core": "default",
+      "meta": {
+        "public": true
+      },
+      "deprecated": false,
+      "request": {
+        "shape": "fields",
+        "type": "Request",
+        "fields": [
+          {
+            "wire": "owner",
+            "required": true,
+            "type": {
+              "type": "scalar",
+              "base": "string"
+            },
+            "description": "Account owner of the repository, case-insensitive."
+          },
+          {
+            "wire": "repo",
+            "required": true,
+            "type": {
+              "type": "scalar",
+              "base": "string"
+            },
+            "description": "Repository name without the `.git` extension, case-insensitive."
+          },
+          {
+            "wire": "sha",
+            "required": false,
+            "type": {
+              "type": "scalar",
+              "base": "string"
+            },
+            "description": "Branch name or commit sha to start from; the default branch when omitted."
+          },
+          {
+            "wire": "path",
+            "required": false,
+            "type": {
+              "type": "scalar",
+              "base": "string"
+            },
+            "description": "Only commits touching this file path."
+          },
+          {
+            "wire": "author",
+            "required": false,
+            "type": {
+              "type": "scalar",
+              "base": "string"
+            },
+            "description": "Only commits by this GitHub login or email."
+          },
+          {
+            "wire": "since",
+            "required": false,
+            "type": {
+              "type": "scalar",
+              "base": "string",
+              "format": "date-time"
+            },
+            "description": "Only commits after this instant."
+          },
+          {
+            "wire": "until",
+            "required": false,
+            "type": {
+              "type": "scalar",
+              "base": "string",
+              "format": "date-time"
+            },
+            "description": "Only commits before this instant."
+          },
+          {
+            "wire": "per_page",
+            "required": false,
+            "type": {
+              "type": "scalar",
+              "base": "integer"
+            },
+            "description": "Results per page, at most 100.",
+            "default": 30
+          },
+          {
+            "wire": "page",
+            "required": false,
+            "type": {
+              "type": "scalar",
+              "base": "integer"
+            },
+            "description": "Page number of the results to fetch, starting at 1.",
+            "default": 1
+          }
+        ],
+        "needsCast": false
+      },
+      "response": {
+        "wire": "Commits",
+        "payload": "Commits",
+        "selector": "",
+        "optional": false,
+        "needsCast": false
+      },
+      "pagination": {
+        "strategy": "page",
+        "driver": "page",
+        "driverRequired": false,
+        "size": "per_page",
+        "sizeDefault": 30,
+        "start": 1,
+        "done": {
+          "kind": "short_page"
+        },
+        "rowType": {
+          "type": "ref",
+          "id": "Commit"
+        },
+        "stateType": {
+          "type": "scalar",
+          "base": "integer"
+        },
+        "seedable": true,
+        "walker": "paginated"
+      },
+      "types": {
+        "Request": {
+          "type": "record",
+          "id": "Request",
+          "fields": {
+            "owner": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": true,
+              "docstring": "Account owner of the repository, case-insensitive."
+            },
+            "repo": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": true,
+              "docstring": "Repository name without the `.git` extension, case-insensitive."
+            },
+            "sha": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": false,
+              "docstring": "Branch name or commit sha to start from; the default branch when omitted."
+            },
+            "path": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": false,
+              "docstring": "Only commits touching this file path."
+            },
+            "author": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": false,
+              "docstring": "Only commits by this GitHub login or email."
+            },
+            "since": {
+              "type": {
+                "type": "scalar",
+                "base": "string",
+                "format": "date-time"
+              },
+              "required": false,
+              "docstring": "Only commits after this instant."
+            },
+            "until": {
+              "type": {
+                "type": "scalar",
+                "base": "string",
+                "format": "date-time"
+              },
+              "required": false,
+              "docstring": "Only commits before this instant."
+            },
+            "per_page": {
+              "type": {
+                "type": "scalar",
+                "base": "integer"
+              },
+              "required": false,
+              "docstring": "Results per page, at most 100."
+            },
+            "page": {
+              "type": {
+                "type": "scalar",
+                "base": "integer"
+              },
+              "required": false,
+              "docstring": "Page number of the results to fetch, starting at 1."
+            }
+          },
+          "docstring": "Which repository, an optional filter, and which page."
+        },
+        "Commits": {
+          "type": "list",
+          "item": {
+            "type": "ref",
+            "id": "Commit"
+          },
+          "id": "Commits"
+        }
+      },
+      "wireTypes": {},
+      "docs": {
+        "description": "List commits reachable from a branch or sha, newest first. Pages are joined by `page`/`per_page`; the generated `list_commits_paged` walks them until a short page.",
+        "url": "https://docs.github.com/en/rest/commits/commits#list-commits",
+        "notes": [
+          "The `page1`..`page4` examples are one real walk with `per_page: 3`, pinned to the 0.1.0 release commit through `sha` so re-recording yields the same 11 commits: three full pages and a short fourth, which is what ends `list_commits_paged`."
+        ]
+      }
+    },
+    {
+      "path": [
+        "repos",
+        "list_releases"
+      ],
+      "kind": "rpc",
+      "transports": [
+        "http"
+      ],
+      "wire": {
+        "path": "/repos/{owner}/{repo}/releases",
+        "method": "GET",
+        "placeholders": [
+          "owner",
+          "repo"
+        ]
+      },
+      "core": "default",
+      "meta": {
+        "public": true
+      },
+      "deprecated": false,
+      "request": {
+        "shape": "fields",
+        "type": "Request",
+        "fields": [
+          {
+            "wire": "owner",
+            "required": true,
+            "type": {
+              "type": "scalar",
+              "base": "string"
+            },
+            "description": "Account owner of the repository, case-insensitive."
+          },
+          {
+            "wire": "repo",
+            "required": true,
+            "type": {
+              "type": "scalar",
+              "base": "string"
+            },
+            "description": "Repository name without the `.git` extension, case-insensitive."
+          },
+          {
+            "wire": "per_page",
+            "required": false,
+            "type": {
+              "type": "scalar",
+              "base": "integer"
+            },
+            "description": "Results per page, at most 100.",
+            "default": 30
+          },
+          {
+            "wire": "page",
+            "required": false,
+            "type": {
+              "type": "scalar",
+              "base": "integer"
+            },
+            "description": "Page number of the results to fetch, starting at 1.",
+            "default": 1
+          }
+        ],
+        "needsCast": false
+      },
+      "response": {
+        "wire": "Releases",
+        "payload": "Releases",
+        "selector": "",
+        "optional": false,
+        "needsCast": false
+      },
+      "pagination": {
+        "strategy": "page",
+        "driver": "page",
+        "driverRequired": false,
+        "size": "per_page",
+        "sizeDefault": 30,
+        "start": 1,
+        "done": {
+          "kind": "short_page"
+        },
+        "rowType": {
+          "type": "ref",
+          "id": "Release"
+        },
+        "stateType": {
+          "type": "scalar",
+          "base": "integer"
+        },
+        "seedable": true,
+        "walker": "paginated"
+      },
+      "types": {
+        "Request": {
+          "type": "record",
+          "id": "Request",
+          "fields": {
+            "owner": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": true,
+              "docstring": "Account owner of the repository, case-insensitive."
+            },
+            "repo": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": true,
+              "docstring": "Repository name without the `.git` extension, case-insensitive."
+            },
+            "per_page": {
+              "type": {
+                "type": "scalar",
+                "base": "integer"
+              },
+              "required": false,
+              "docstring": "Results per page, at most 100."
+            },
+            "page": {
+              "type": {
+                "type": "scalar",
+                "base": "integer"
+              },
+              "required": false,
+              "docstring": "Page number of the results to fetch, starting at 1."
+            }
+          },
+          "docstring": "Which repository, and which page."
+        },
+        "Release": {
+          "type": "record",
+          "id": "Release",
+          "fields": {
+            "id": {
+              "type": {
+                "type": "scalar",
+                "base": "integer"
+              },
+              "required": true,
+              "docstring": "Release id."
+            },
+            "node_id": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": false,
+              "docstring": "GraphQL node id."
+            },
+            "tag_name": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": true,
+              "docstring": "Tag the release points at."
+            },
+            "target_commitish": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": false,
+              "docstring": "Branch or sha the tag was created from."
+            },
+            "name": {
+              "type": {
+                "type": "union",
+                "variants": [
+                  {
+                    "type": {
+                      "type": "scalar",
+                      "base": "string"
+                    },
+                    "docstring": "Release title, when set."
+                  },
+                  {
+                    "type": {
+                      "type": "scalar",
+                      "base": "null"
+                    }
+                  }
+                ]
+              },
+              "required": false,
+              "docstring": "Release title, when set."
+            },
+            "body": {
+              "type": {
+                "type": "union",
+                "variants": [
+                  {
+                    "type": {
+                      "type": "scalar",
+                      "base": "string"
+                    },
+                    "docstring": "Release notes in Markdown, when set."
+                  },
+                  {
+                    "type": {
+                      "type": "scalar",
+                      "base": "null"
+                    }
+                  }
+                ]
+              },
+              "required": false,
+              "docstring": "Release notes in Markdown, when set."
+            },
+            "draft": {
+              "type": {
+                "type": "scalar",
+                "base": "boolean"
+              },
+              "required": true,
+              "docstring": "Whether the release is an unpublished draft."
+            },
+            "prerelease": {
+              "type": {
+                "type": "scalar",
+                "base": "boolean"
+              },
+              "required": true,
+              "docstring": "Whether the release is marked as a pre-release."
+            },
+            "created_at": {
+              "type": {
+                "type": "scalar",
+                "base": "string",
+                "format": "date-time"
+              },
+              "required": true,
+              "docstring": "When the release object was created."
+            },
+            "published_at": {
+              "type": {
+                "type": "union",
+                "variants": [
+                  {
+                    "type": {
+                      "type": "scalar",
+                      "base": "string",
+                      "format": "date-time"
+                    },
+                    "docstring": "When the release was published; absent for drafts."
+                  },
+                  {
+                    "type": {
+                      "type": "scalar",
+                      "base": "null"
+                    }
+                  }
+                ]
+              },
+              "required": false,
+              "docstring": "When the release was published; absent for drafts."
+            },
+            "html_url": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": true,
+              "docstring": "Web page of the release."
+            },
+            "author": {
+              "type": {
+                "type": "ref",
+                "id": "SimpleUser"
+              },
+              "required": true
+            }
+          },
+          "docstring": "A GitHub release."
+        },
+        "Releases": {
+          "type": "list",
+          "item": {
+            "type": "ref",
+            "id": "Release"
+          },
+          "id": "Releases"
+        }
+      },
+      "wireTypes": {},
+      "docs": {
+        "description": "List releases, newest first. Includes drafts and pre-releases the caller can see.",
+        "url": "https://docs.github.com/en/rest/releases/releases#list-releases",
+        "notes": []
+      }
+    },
+    {
+      "path": [
+        "repos",
+        "list_tags"
+      ],
+      "kind": "rpc",
+      "transports": [
+        "http"
+      ],
+      "wire": {
+        "path": "/repos/{owner}/{repo}/tags",
+        "method": "GET",
+        "placeholders": [
+          "owner",
+          "repo"
+        ]
+      },
+      "core": "default",
+      "meta": {
+        "public": true
+      },
+      "deprecated": false,
+      "request": {
+        "shape": "fields",
+        "type": "Request",
+        "fields": [
+          {
+            "wire": "owner",
+            "required": true,
+            "type": {
+              "type": "scalar",
+              "base": "string"
+            },
+            "description": "Account owner of the repository, case-insensitive."
+          },
+          {
+            "wire": "repo",
+            "required": true,
+            "type": {
+              "type": "scalar",
+              "base": "string"
+            },
+            "description": "Repository name without the `.git` extension, case-insensitive."
+          },
+          {
+            "wire": "per_page",
+            "required": false,
+            "type": {
+              "type": "scalar",
+              "base": "integer"
+            },
+            "description": "Results per page, at most 100.",
+            "default": 30
+          },
+          {
+            "wire": "page",
+            "required": false,
+            "type": {
+              "type": "scalar",
+              "base": "integer"
+            },
+            "description": "Page number of the results to fetch, starting at 1.",
+            "default": 1
+          }
+        ],
+        "needsCast": false
+      },
+      "response": {
+        "wire": "Tags",
+        "payload": "Tags",
+        "selector": "",
+        "optional": false,
+        "needsCast": false
+      },
+      "pagination": {
+        "strategy": "page",
+        "driver": "page",
+        "driverRequired": false,
+        "size": "per_page",
+        "sizeDefault": 30,
+        "start": 1,
+        "done": {
+          "kind": "short_page"
+        },
+        "rowType": {
+          "type": "ref",
+          "id": "Tag"
+        },
+        "stateType": {
+          "type": "scalar",
+          "base": "integer"
+        },
+        "seedable": true,
+        "walker": "paginated"
+      },
+      "types": {
+        "Request": {
+          "type": "record",
+          "id": "Request",
+          "fields": {
+            "owner": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": true,
+              "docstring": "Account owner of the repository, case-insensitive."
+            },
+            "repo": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": true,
+              "docstring": "Repository name without the `.git` extension, case-insensitive."
+            },
+            "per_page": {
+              "type": {
+                "type": "scalar",
+                "base": "integer"
+              },
+              "required": false,
+              "docstring": "Results per page, at most 100."
+            },
+            "page": {
+              "type": {
+                "type": "scalar",
+                "base": "integer"
+              },
+              "required": false,
+              "docstring": "Page number of the results to fetch, starting at 1."
+            }
+          },
+          "docstring": "Which repository, and which page."
+        },
+        "Tag": {
+          "type": "record",
+          "id": "Tag",
+          "fields": {
+            "name": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": true,
+              "docstring": "Tag name."
+            },
+            "zipball_url": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": false,
+              "docstring": "Zip archive of the tagged tree."
+            },
+            "tarball_url": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": false,
+              "docstring": "Tar archive of the tagged tree."
+            },
+            "commit": {
+              "type": {
+                "type": "ref",
+                "id": "CommitRef"
+              },
+              "required": true
+            },
+            "node_id": {
+              "type": {
+                "type": "scalar",
+                "base": "string"
+              },
+              "required": false,
+              "docstring": "GraphQL node id."
+            }
+          },
+          "docstring": "A git tag and the commit it points at."
+        },
+        "Tags": {
+          "type": "list",
+          "item": {
+            "type": "ref",
+            "id": "Tag"
+          },
+          "id": "Tags"
+        }
+      },
+      "wireTypes": {},
+      "docs": {
+        "description": "List repository tags, newest first.",
+        "url": "https://docs.github.com/en/rest/repos/repos#list-repository-tags",
+        "notes": []
+      }
+    }
+  ]
+}

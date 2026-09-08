@@ -2,6 +2,20 @@
 
 ## 0.5.0 (2026-09-08)
 
+- **The plan** (`truewire.plan`, `docs/plan.md`): a frozen, JSON-serialisable model of
+  every decision a backend renders -- package, cores, shared type scopes, routers, and
+  per endpoint the wire location, request shape and fields, the returned type and its
+  nullability, stream facts and the pagination decisions (`driver`, `size`, `done`,
+  `rowType`, `stateType`, `seedable`, `walker`) -- computed once from a project by
+  `truewire.plan.build.build_plan`. Types are the language-neutral tree with a
+  `Scalar{base, format}` node; no Python name appears in the plan.
+- `truewire generate python` builds the plan once and the Python backend reads its four
+  formerly string-derived decisions from it (the cursor's seed type, seedability, response
+  nullability, `cast(type, ...)`) instead of re-parsing rendered definitions. Generated
+  output is byte-identical for both examples.
+- `truewire plan [--project DIR] [--json]`: prints the plan as a one-line-per-endpoint
+  summary, or as JSON for a second backend, a docs site or a test.
+
 - **The generator reads a declared core contract and never imports the target package**
   (ADR 0011). Composing a child through `.new()` is declared in `truewire.toml`:
   `[python.cores.<name>]` gains `forward` (keywords passed from the composing class's own

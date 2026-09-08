@@ -9,7 +9,13 @@ asserts on the emitted IR and, where the shape is new, on the rendered source.
 import pytest
 
 from truewire.generation.python.types import Parser, Renderer, TypeGenerator
+from truewire.generation.python.types.code import CodeGenerator
 from truewire.generation.schema import Schema
+
+def rendered(ir) -> tuple[str, dict]:
+  """The Python expression one IR node renders to, and the imports it needs."""
+  code = CodeGenerator()(ir)
+  return code.iden, dict(code.imports)
 
 def parse(schema: dict, *, id: str | None = None):
   """Parse a raw JSON Schema fragment into the Python backend's IR."""
@@ -48,13 +54,13 @@ class TestEnum:
     }
 
   def test_integer_without_enum_stays_int(self):
-    assert parse({'type': 'integer'}) == {'type': 'ref', 'id': 'int'}
+    assert parse({'type': 'integer'}) == {'type': 'scalar', 'base': 'integer'}
 
   def test_boolean_without_enum_stays_bool(self):
-    assert parse({'type': 'boolean'}) == {'type': 'ref', 'id': 'bool'}
+    assert parse({'type': 'boolean'}) == {'type': 'scalar', 'base': 'boolean'}
 
   def test_number_without_enum_stays_float(self):
-    assert parse({'type': 'number'}) == {'type': 'ref', 'id': 'float'}
+    assert parse({'type': 'number'}) == {'type': 'scalar', 'base': 'number'}
 
   def test_integer_enum_renders_literal_field(self):
     rendered = render({'SubmitOrder': {
@@ -101,13 +107,13 @@ class TestPrefixItems:
   def test_prefix_items_becomes_tuple(self):
     assert parse({'type': 'array', 'prefixItems': [{'type': 'integer'}, {'type': 'string'}]}) == {
       'type': 'tuple',
-      'items': [{'type': 'ref', 'id': 'int'}, {'type': 'ref', 'id': 'str'}],
+      'items': [{'type': 'scalar', 'base': 'integer'}, {'type': 'scalar', 'base': 'string'}],
       'id': None,
     }
 
   def test_array_without_prefix_items_stays_list(self):
     assert parse({'type': 'array', 'items': {'type': 'string'}}) == {
-      'type': 'list', 'item': {'type': 'ref', 'id': 'str'}, 'id': None,
+      'type': 'list', 'item': {'type': 'scalar', 'base': 'string'}, 'id': None,
     }
 
   def test_tuple_carries_its_id(self):
@@ -150,26 +156,30 @@ class TestPrefixItems:
 def test_integer_with_epoch_millis_format_renders_as_timestamp_millis():
   parser = Parser()
   result = parser(Schema(type='integer', format='epoch-millis'))
-  assert result == {'type': 'ref', 'id': 'TimestampMillis', 'package': 'truewire_core.types'}
+  assert result == {'type': 'scalar', 'base': 'integer', 'format': 'epoch-millis'}
+  assert rendered(result) == ('TimestampMillis', {'truewire_core.types': {'TimestampMillis'}})
 
 
 def test_string_carried_epoch_renders_as_timestamp_millis():
   """Several venues send millisecond epochs as JSON strings, not numbers."""
   parser = Parser()
   result = parser(Schema(type='string', format='epoch-millis'))
-  assert result == {'type': 'ref', 'id': 'TimestampMillis', 'package': 'truewire_core.types'}
+  assert result == {'type': 'scalar', 'base': 'string', 'format': 'epoch-millis'}
+  assert rendered(result) == ('TimestampMillis', {'truewire_core.types': {'TimestampMillis'}})
 
 
 def test_epoch_seconds_format_renders_as_timestamp_seconds():
   parser = Parser()
   result = parser(Schema(type='integer', format='epoch-seconds'))
-  assert result == {'type': 'ref', 'id': 'TimestampSeconds', 'package': 'truewire_core.types'}
+  assert result == {'type': 'scalar', 'base': 'integer', 'format': 'epoch-seconds'}
+  assert rendered(result) == ('TimestampSeconds', {'truewire_core.types': {'TimestampSeconds'}})
 
 
 def test_epoch_micros_format_renders_as_timestamp_micros():
   parser = Parser()
   result = parser(Schema(type='integer', format='epoch-micros'))
-  assert result == {'type': 'ref', 'id': 'TimestampMicros', 'package': 'truewire_core.types'}
+  assert result == {'type': 'scalar', 'base': 'integer', 'format': 'epoch-micros'}
+  assert rendered(result) == ('TimestampMicros', {'truewire_core.types': {'TimestampMicros'}})
 
 
 def test_date_time_format_renders_as_timestamp_iso():
@@ -177,7 +187,8 @@ def test_date_time_format_renders_as_timestamp_iso():
   -- it now goes through the same per-format lookup as every epoch shape."""
   parser = Parser()
   result = parser(Schema(type='string', format='date-time'))
-  assert result == {'type': 'ref', 'id': 'TimestampIso', 'package': 'truewire_core.types'}
+  assert result == {'type': 'scalar', 'base': 'string', 'format': 'date-time'}
+  assert rendered(result) == ('TimestampIso', {'truewire_core.types': {'TimestampIso'}})
 
 
 def test_epoch_nanos_format_renders_as_timestamp_nanos():
@@ -185,7 +196,8 @@ def test_epoch_nanos_format_renders_as_timestamp_nanos():
   `starbase_last_update_timestamp` fields the original vocabulary couldn't express."""
   parser = Parser()
   result = parser(Schema(type='integer', format='epoch-nanos'))
-  assert result == {'type': 'ref', 'id': 'TimestampNanos', 'package': 'truewire_core.types'}
+  assert result == {'type': 'scalar', 'base': 'integer', 'format': 'epoch-nanos'}
+  assert rendered(result) == ('TimestampNanos', {'truewire_core.types': {'TimestampNanos'}})
 
 
 def test_date_format_renders_as_date_iso():
@@ -193,12 +205,13 @@ def test_date_format_renders_as_date_iso():
   plain calendar date with no time component."""
   parser = Parser()
   result = parser(Schema(type='string', format='date'))
-  assert result == {'type': 'ref', 'id': 'DateIso', 'package': 'truewire_core.types'}
+  assert result == {'type': 'scalar', 'base': 'string', 'format': 'date'}
+  assert rendered(result) == ('DateIso', {'truewire_core.types': {'DateIso'}})
 
 
 def test_plain_integer_is_unaffected():
   parser = Parser()
-  assert parser(Schema(type='integer')) == {'type': 'ref', 'id': 'int'}
+  assert parser(Schema(type='integer')) == {'type': 'scalar', 'base': 'integer'}
 
 
 def test_uuid_format_renders_as_a_plain_string():
@@ -209,7 +222,7 @@ def test_uuid_format_renders_as_a_plain_string():
   `str` — but an unlisted format raises rather than rendering, so it has to be named.
   """
   parser = Parser()
-  assert parser(Schema(type='string', format='uuid')) == {'type': 'ref', 'id': 'str'}
+  assert parser(Schema(type='string', format='uuid')) == {'type': 'scalar', 'base': 'string', 'format': 'uuid'}
 
 
 def test_unknown_string_format_still_raises():
@@ -228,8 +241,8 @@ def test_hostname_and_uri_formats_render_as_a_plain_string():
   types its `domain`/`uri` request properties this way.
   """
   parser = Parser()
-  assert parser(Schema(type='string', format='hostname')) == {'type': 'ref', 'id': 'str'}
-  assert parser(Schema(type='string', format='uri')) == {'type': 'ref', 'id': 'str'}
+  assert parser(Schema(type='string', format='hostname')) == {'type': 'scalar', 'base': 'string', 'format': 'hostname'}
+  assert parser(Schema(type='string', format='uri')) == {'type': 'scalar', 'base': 'string', 'format': 'uri'}
 
 
 def test_a_nested_array_carrying_properties_is_not_unnested():

@@ -11,6 +11,7 @@ from .init import init
 from .mcp import mcp
 from .migrate import migrate
 from .mock import mock
+from .plan import plan
 from .standards import standards
 from .surface import surface
 
@@ -23,6 +24,7 @@ app.command('examples')(examples)
 app.command('surface')(surface)
 app.command('generate')(generate)
 app.command('mock')(mock)
+app.command('plan')(plan)
 app.command('mcp')(mcp)
 app.command('migrate')(migrate)
 app.command('standards')(standards)

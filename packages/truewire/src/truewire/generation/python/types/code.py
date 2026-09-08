@@ -9,8 +9,17 @@ from truewire.generation.schema import Schema
 from truewire.generation.types import generation_order, RenderedTypes, Imports, merge_imports
 from truewire.generation.util import indent
 from truewire.generation.python.util import escape_docstring
-from .schema import Ref, Literal, List, Tuple, Union, Dict, Record, Type
-from .parser import Parser
+from .schema import Ref, Scalar, Literal, List, Tuple, Union, Dict, Record, Type
+from .parser import (
+  BOOLEAN_STRING_FORMATS, DECIMAL_STRING_FORMATS, INTEGER_STRING_FORMATS, Parser,
+  TIMESTAMP_FORMATS, TYPES_PACKAGE,
+)
+
+SCALAR_BASES: builtins.dict[str, str] = {
+  'string': 'str', 'integer': 'int', 'number': 'float', 'boolean': 'bool', 'null': 'None',
+  'any': 'Any',
+}
+"""Neutral scalar base -> the Python name it renders to when no format narrows it."""
 
 @dataclass
 class ReservedKeywordType:
@@ -36,6 +45,24 @@ class Code:
   defn: str | None = None
   imports: Imports = field(default_factory=dict)
   reserved_keyword_types: builtins.list[ReservedKeywordType] = field(default_factory=builtins.list)
+
+def scalar(type: Scalar, recur: Callable[[Type], Code]) -> Code:
+  """Render one wire scalar to its Python type: a builtin, `Decimal` for a
+  `decimal-string`, or the `truewire_core.types` alias for a timestamp/date format.
+  `Any` (an unconstrained schema) needs its `typing_extensions` import."""
+  fmt = type.get('format')
+  if fmt in TIMESTAMP_FORMATS:
+    name = TIMESTAMP_FORMATS[fmt]
+    return Code(iden=name, imports={TYPES_PACKAGE: {name}})
+  if fmt in DECIMAL_STRING_FORMATS:
+    return Code(iden='Decimal', imports={'decimal': {'Decimal'}})
+  if fmt in INTEGER_STRING_FORMATS:
+    return Code(iden='int')
+  if fmt in BOOLEAN_STRING_FORMATS:
+    return Code(iden='bool')
+  if type['base'] == 'any':
+    return Code(iden='Any', imports={'typing_extensions': {'Any'}})
+  return Code(iden=SCALAR_BASES[type['base']])
 
 def ref(type: Ref, recur: Callable[[Type], Code]) -> Code:
   imports: Imports = {} if (pkg := type.get('package')) is None else {pkg: {type['id']}}
@@ -186,6 +213,7 @@ class GeneratorFn(Protocol, Generic[T]):
 
 @dataclass
 class CodeGenerator:
+  scalar: GeneratorFn[Scalar] = scalar
   ref: GeneratorFn[Ref] = ref
   literal: GeneratorFn[Literal] = literal
   list: GeneratorFn[List] = list
@@ -206,6 +234,8 @@ class CodeGenerator:
         return self.list(type, self.__call__)
       case 'tuple':
         return self.tuple(type, self.__call__)
+      case 'scalar':
+        return self.scalar(type, self.__call__)
       case 'ref':
         return self.ref(type, self.__call__)
       case 'literal':

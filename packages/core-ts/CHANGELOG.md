@@ -2,6 +2,9 @@
 
 ## 0.1.0 (unreleased)
 
+- `Stream` and `Subscription` are exported from the package root beside `PaginatedResponse`,
+  so a generated `stream` endpoint's return type reads `Subscription<TickerMessage>` with
+  one `@truewire/core` import; `ws.Subscription` still names the same class.
 - `@truewire/core/contract`: the interfaces a generated client's core satisfies
   (`HttpEndpoint<Meta>`, `CommandEndpoint<Meta>`, `StreamEndpoint<Meta>`) and the
   `CallOptions` every generated method takes (`validate`, `signal`), the TypeScript half

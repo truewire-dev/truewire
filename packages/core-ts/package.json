@@ -2,18 +2,44 @@
   "name": "@truewire/core",
   "version": "0.1.0",
   "description": "Runtime for Truewire-generated TypeScript clients: HTTP and WebSocket transport, codecs, paging, timestamps, errors.",
+  "keywords": [
+    "truewire",
+    "api-client",
+    "codegen",
+    "typescript",
+    "http",
+    "websocket",
+    "codec",
+    "validation",
+    "pagination"
+  ],
+  "homepage": "https://truewire.dev",
+  "bugs": "https://github.com/truewire-dev/truewire/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/truewire-dev/truewire.git",
+    "directory": "packages/core-ts"
+  },
   "license": "MIT",
+  "author": "Truewire",
   "type": "module",
   "sideEffects": false,
   "engines": {
     "node": ">=22"
   },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "files": [
     "dist",
+    "src",
     "README.md",
     "CHANGELOG.md",
     "LICENSE"
   ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -51,12 +77,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/truewire-dev/truewire",
-    "directory": "packages/core-ts"
+    "test": "vitest run",
+    "prepack": "npm run build"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

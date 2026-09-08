@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 (unreleased)
+## 0.1.0 (2026-09-08)
 
 - `Stream` and `Subscription` are exported from the package root beside `PaginatedResponse`,
   so a generated `stream` endpoint's return type reads `Subscription<TickerMessage>` with

@@ -250,7 +250,7 @@ def test_capture_records_the_endpoint_exchange_when_a_token_call_comes_first(tmp
   recorded = json.loads((examples / 'captured.response.json').read_text())
   assert recorded == {'status': served['status'], 'payload': served['payload']}
   assert 'recorded the exchange for GET /pets/42' in result.output
-  assert 'the 1 below are not this endpoint\'s and were skipped' in result.output
+  assert 'the one below is not this endpoint\'s and was skipped' in result.output
   assert 'POST /oauth2/token' in result.output
 
 

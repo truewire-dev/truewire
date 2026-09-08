@@ -373,10 +373,12 @@ def selection_report(
     )
   if skipped:
     total = len(matched) + len(skipped)
-    lines.append(
-      f'  your core made {total} requests; the {len(skipped)} below are not this '
-      'endpoint\'s and were skipped:'
+    rest = (
+      'the one below is not this endpoint\'s and was skipped'
+      if len(skipped) == 1
+      else f'the {len(skipped)} below are not this endpoint\'s and were skipped'
     )
+    lines.append(f'  your core made {total} requests; {rest}:')
     lines.extend(f'    {line}' for line in exchange_lines(skipped))
   return lines
 

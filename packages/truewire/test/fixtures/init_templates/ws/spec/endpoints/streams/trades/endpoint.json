@@ -1,0 +1,46 @@
+{
+  "docs": "https://petstore.example/docs/streams/trades",
+  "meta": {},
+  "notes": [
+    "Fixture for `truewire init --template ws`: one channel keyed by a market `id`, in the subscribe dialect `truewire mock` serves by default."
+  ],
+  "spec": {
+    "kind": "stream",
+    "channel": "trades",
+    "description": "Trades for one market, pushed as they happen.",
+    "parameters": {
+      "title": "TradesParameters",
+      "type": "object",
+      "description": "Subscription parameters.",
+      "required": ["id"],
+      "properties": {
+        "id": {"type": "string", "description": "Market id."}
+      }
+    },
+    "payload": {
+      "title": "TradeMessage",
+      "type": "object",
+      "description": "One pushed trade.",
+      "required": ["type", "channel", "id", "data"],
+      "properties": {
+        "type": {"type": "string", "enum": ["update"], "description": "Frame type."},
+        "channel": {"type": "string", "enum": ["trades"], "description": "The channel the frame belongs to."},
+        "id": {"type": "string", "description": "Market id."},
+        "data": {
+          "title": "Trade",
+          "type": "object",
+          "description": "The trade.",
+          "required": ["price", "size"],
+          "properties": {
+            "price": {"type": "string", "format": "decimal-string", "description": "Trade price."},
+            "size": {"type": "string", "format": "decimal-string", "description": "Trade size."}
+          }
+        }
+      }
+    }
+  },
+  "envelope": {
+    "payload": "",
+    "verb": {"path": "type", "subscribe": "subscribe", "unsubscribe": "unsubscribe"}
+  }
+}

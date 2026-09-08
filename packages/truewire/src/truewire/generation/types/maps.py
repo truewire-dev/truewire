@@ -1,8 +1,10 @@
 from typing_extensions import TypeVar, Generic, Iterable, Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from abc import ABC, abstractmethod
 
-from truewire.generation.schema import Schema, Reference, SchemaResolver
+from truewire.generation.schema import (
+  Schema, Reference, SchemaResolver, SchemaCycleError,
+)
 
 A = TypeVar('A')
 B = TypeVar('B')
@@ -15,6 +17,25 @@ def unzip(xs: Iterable[tuple[A, B]]) -> tuple[list[A], list[B]]:
     out_a.append(a)
     out_b.append(b)
   return out_a, out_b
+
+def renders_as_record(schema: Schema) -> bool:
+  """Whether `schema` renders as its own named class rather than as an expression.
+
+  `properties` alone is not the test, because a parser dispatches on `type` first: a
+  schema declaring `type: 'array'` renders as a `list[...]` however many `properties` it
+  also carries, and one declaring `type: 'object'` with no `properties` renders as a
+  `dict[...]`. Both are expressions pasted at each use site, with no name of their own.
+
+  Two callers need exactly this question, for the same underlying reason -- a name is
+  what a reference can point at. `Unnest.records` asks it of a nested schema, to decide
+  whether extracting it to the top level would define anything; `unrenderable_cycles`
+  asks it of a schema on a reference cycle, to decide whether the cycle has a name to
+  close on at all.
+
+  Args:
+    schema: The schema to judge.
+  """
+  return schema.properties is not None and schema.type in (None, 'object')
 
 class MapReduce(ABC, Generic[A]):
   """Map-reduce operation for schemas.
@@ -240,6 +261,16 @@ class InlineSchemas(Map):
   """Inlines non-record schemas"""
   resolve: SchemaResolver
   nested: bool = True
+  expanding: tuple[str, ...] = field(default=(), init=False, repr=False)
+  """Ids currently being expanded, outermost first -- the chain `map` is partway down.
+
+  A stack rather than a plain `visited` set: an id is on it only while its own expansion
+  is unfinished, so the same schema inlined twice side by side is not mistaken for a
+  cycle. It is the only cycle guard in the pipeline that can see a real one, because this
+  is the only walk that follows a reference into the schema's *properties* and back out
+  through another reference (`LocalResolver` resolves one hop and reads no properties at
+  all).
+  """
 
   def map(self, schema: Reference|Schema) -> Reference|Schema:
     if (s := self.resolve(schema)) is None:
@@ -249,9 +280,20 @@ class InlineSchemas(Map):
       # this before recursing matters for a self-referential record -- a
       # `BasicOrder.children: BasicOrder[]` -- where resolving-then-recursing first would
       # walk back into this same reference forever; this reads only the schema `resolve`
-      # already returned, no recursion, so a self-referential record cannot loop.
+      # already returned, no recursion, so a self-referential record cannot loop. It is
+      # also what makes a cycle through a record legal: the chain below stops here, and
+      # the reference survives into the type tree, where a backend renders it as a
+      # forward reference.
       return schema
     if self.nested and isinstance(schema, Reference):
-      s = self(s)
+      if schema.ref in self.expanding:
+        raise SchemaCycleError(
+          self.expanding[self.expanding.index(schema.ref):]
+        )
+      self.expanding = (*self.expanding, schema.ref)
+      try:
+        s = self(s)
+      finally:
+        self.expanding = self.expanding[:-1]
     return s
     

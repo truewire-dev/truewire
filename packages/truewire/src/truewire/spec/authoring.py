@@ -20,12 +20,14 @@ from typing_extensions import Any, Iterator, Literal, TypedDict
 
 from jsonschema import Draft202012Validator
 
+from truewire.generation.schema import Schema
+from truewire.generation.types import unrenderable_cycles
 from truewire.project import Project, resolve, spec_dir as project_spec_dir
 from .endpoint import (
   Endpoint, GrpcEndpointSpec, Pagination, PaginationParameter, RpcEndpointSpec,
   StreamEndpointSpec, last_row_field, path_segments,
 )
-from .repo import load_endpoint
+from .repo import load_endpoint, load_shared_schemas
 from .request import PLACEHOLDER
 from .router import load_router
 
@@ -34,6 +36,7 @@ Rule = Literal[
   'unions', 'description', 'pagination', 'identifier-templating', 'ws-verb',
   'timestamp-format', 'reserved-param', 'meta-collision', 'meta-schema',
   'router-core-missing', 'schemas-shadowing', 'mixed-leaf-router', 'envelope',
+  'schema-cycle',
 ]
 """Mechanizable checks of the spec-authoring contract, in contract order."""
 
@@ -148,6 +151,9 @@ RULE_HEADINGS: dict[Rule, str] = {
   'schemas-shadowing': (
     'no two `schemas.json` scopes on the same path to root may declare the '
     'same id'
+  ),
+  'schema-cycle': (
+    '17. A schema may reference itself, through a record'
   ),
 }
 """Contract heading each check is derived from, for reporting."""
@@ -1821,4 +1827,58 @@ def audit(endpoint: Endpoint) -> list[Violation]:
   out.extend(check_pagination(endpoint, operation))
   out.extend(check_identifier_templating(endpoint, operation))
   out.extend(check_ws_verb(endpoint))
+  return out
+
+
+def check_schema_cycles(client_root: Path | Project) -> list[Violation]:
+  """
+  A reference cycle among a project's shared schemas must pass through at least one
+  record (`docs/spec/authoring.md` rule 17).
+
+  A record has a name in the generated module, so a reference back to it renders as a
+  forward reference and the cycle closes. A cycle where every schema renders inline --
+  `Tree` = a string or an array of `Tree` -- has no name to close on: each schema is an
+  expression pasted at its use sites, and pasting one pastes the next forever.
+
+  A client-root-level check, like `check_router_core`/`check_mixed_leaf_router` beside
+  it: a shared schema belongs to a `schemas.json` scope, not to any one endpoint, so
+  there is no endpoint to report it against. Wired into `report_authoring` so it
+  actually fails `truewire check` -- before it existed, a spec on such a cycle passed
+  the gate and then died inside `truewire generate python` with a bare `RecursionError`.
+
+  One violation per cycle, not per schema on it: a two-schema cycle is one thing to fix.
+
+  Args:
+    client_root: Project (or project root).
+  """
+  try:
+    raw = load_shared_schemas(client_root)
+  except ValueError:
+    # A shadowed id; `check_schemas_no_shadowing` reports that, and there is no single
+    # schema set to look for a cycle in until it is fixed.
+    return []
+  try:
+    schemas = {id: Schema.model_validate(schema) for id, schema in raw.items()}
+  except Exception:
+    # An unparseable schema is reported where the schema is loaded, not here.
+    return []
+  out: list[Violation] = []
+  for cycle in unrenderable_cycles(schemas):
+    if len(cycle) == 1:
+      subject = f'{cycle[0]} references itself, and it is not a record'
+      fix = f'Give {cycle[0]} `properties`'
+    else:
+      subject = f'{" and ".join(cycle)} reference each other in a cycle, and none is a record'
+      fix = 'Give one of them `properties`'
+    out.append(Violation(
+      rule='schema-cycle',
+      location=' -> '.join((*cycle, cycle[0])),
+      message=(
+        f'{subject} -- every schema on the cycle renders inline, so there is no '
+        'generated name for it to close on and no backend can express it. '
+        f'{fix} (and `title`) so it renders as its own type, and let the rest of the '
+        'cycle reference that; a record may reference itself freely '
+        '(docs/spec/authoring.md rule 17).'
+      ),
+    ))
   return out

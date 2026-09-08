@@ -19,7 +19,8 @@ from truewire.spec import (
 
 from .common import PATH_OPTION, PROJECT_OPTION, resolve_spec_scope
 from truewire.spec.authoring import (
-  RULE_HEADINGS, WARNING_RULES, audit, check_meta, check_mixed_leaf_router, severity,
+  RULE_HEADINGS, WARNING_RULES, audit, check_meta, check_mixed_leaf_router,
+  check_schema_cycles, severity,
 )
 
 max_samples = 5
@@ -37,7 +38,8 @@ def report_authoring(
   `WARNING_RULES` — but the summary line always states both counts, so a `warning` total
   cannot grow unnoticed just because it never turns the gate red.
 
-  Also runs `check_mixed_leaf_router` and `check_meta` once each, over the whole project
+  Also runs `check_mixed_leaf_router`, `check_meta` and `check_schema_cycles` once each,
+  over the whole project
   (`root`, never `scope` -- a project-root-level check, like `check_router_core`/
   `check_schemas_no_shadowing` beside them in `truewire.spec.authoring`, has no
   per-endpoint scope to restrict to) -- unlike those two, both are wired in here so their
@@ -79,7 +81,9 @@ def report_authoring(
       grouped.setdefault(violation['rule'], []).append(
         f'{function}  {violation["location"]}: {violation["message"]}'
       )
-  for violation in [*check_mixed_leaf_router(root), *check_meta(root)]:
+  for violation in [
+    *check_mixed_leaf_router(root), *check_meta(root), *check_schema_cycles(root),
+  ]:
     if severity(violation) == 'error':
       errors += 1
       dirty.add(violation['location'])

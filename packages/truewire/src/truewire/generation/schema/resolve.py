@@ -1,4 +1,4 @@
-from typing_extensions import Mapping, TypeVar, Protocol
+from typing_extensions import Mapping, Sequence, TypeVar, Protocol
 from dataclasses import dataclass
 from pydantic import TypeAdapter
 from . import Reference, Schema, Parameter, Response, RequestBody
@@ -15,6 +15,29 @@ class ResolutionError(Exception):
 
   __repr__ = __str__
 
+class SchemaCycleError(ResolutionError):
+  """A reference cycle no amount of inlining can break.
+
+  Every schema on the cycle renders *inline* -- it has no `properties`, so it becomes an
+  expression (`list[...]`, `A | B`) substituted at each use site rather than a class with
+  a name. Expanding one therefore expands the next, forever: `Tree = string | Tree[]`
+  is `string | list[string | list[...]]` all the way down, and no finite Python type
+  expression states it. A cycle that passes through at least one record is a different
+  matter and is supported -- the record has a name, so the reference to it renders as a
+  forward reference (`docs/spec/authoring.md` rule 17).
+  """
+
+  def __init__(self, cycle: 'Sequence[str]'):
+    self.cycle = tuple(cycle)
+    """The schema ids on the cycle, in the order they were expanded, closing back on
+    `cycle[0]`."""
+    super().__init__(self.cycle[0] if self.cycle else '')
+
+  def __str__(self):
+    return f'SchemaCycleError(cycle="{" -> ".join((*self.cycle, self.cycle[0]))}")'
+
+  __repr__ = __str__
+
 class SchemaResolver(Protocol):
   def __call__(self, schema: Reference|Schema, /) -> Schema | None:
     """Resolve a schema from a reference or string. Returning `None` indicates the schema shall be treated as an external reference."""
@@ -25,30 +48,27 @@ class SchemaResolver(Protocol):
 
 @dataclass
 class LocalResolver(SchemaResolver):
+  """Look one reference up in a flat mapping of schemas.
+
+  Exactly one hop, and no cycle detection: `schemas` maps an id to a `Schema`, never to
+  another `Reference` (`TypeGenerator` splits top-level references out before building
+  this), so there is no chain here to loop on. A reference cycle in a spec runs through a
+  schema's *properties*, which this never reads -- it is created, and caught, where the
+  properties are walked, in `truewire.generation.types.InlineSchemas`.
+  """
   schemas: Mapping[str, Schema]
   raise_on_unknown: bool = False
   """Whether to raise an error if an unknown reference is encountered (or return `None`)."""
-  
+
   def __call__(self, schema: Reference|Schema) -> Schema | None:
-    visited = set[str]()
-
-    def rec(schema: Reference|Schema) -> Schema | None:
-      if isinstance(schema, Reference):
-        ref = schema.ref
-        if ref in visited:
-          raise ResolutionError(f'Cycle detected at {ref}')
-        visited.add(ref)
-        if ref in self.schemas:
-          return rec(self.schemas[ref])
-        elif self.raise_on_unknown:
-          raise ResolutionError(f'Unknown reference: {ref}')
-        else:
-          return None
-      else:
-        return schema
-
     s = Reference(ref=schema) if isinstance(schema, str) else schema
-    return rec(s)
+    if not isinstance(s, Reference):
+      return s
+    if s.ref in self.schemas:
+      return self.schemas[s.ref]
+    if self.raise_on_unknown:
+      raise ResolutionError(f'Unknown reference: {s.ref}')
+    return None
 
 class Resolver(Protocol):
   def schema(self, ref: Reference|Schema, /) -> Schema | None:

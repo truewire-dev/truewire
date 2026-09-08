@@ -9,6 +9,8 @@ from .maps import (
   Translate,
 )
 from .unnest import Unnest
-from .references import dependencies, generation_order, external_references
+from .references import (
+  cycles, dependencies, generation_order, external_references, unrenderable_cycles,
+)
 from .transforms import IterativeNormalizer
 from .main import TypeGenerator, ExternalReference, Disambiguator

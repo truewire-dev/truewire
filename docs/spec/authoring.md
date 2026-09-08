@@ -306,3 +306,36 @@ A directory carrying its own `endpoint.json` never also has an endpoint-bearing 
 The restructure is usually already decided by the spec: a leaf whose `function` ends one segment deeper than its directory (`v1.account.get` in `v1/account/`) moves to the subdirectory that segment names (`v1/account/get/`).
 
 Enforcement: `truewire check`, `error`. The generator also raises, naming the directory, if a leaf's resolved function collides with a node already in the function tree.
+
+## 17. A schema may reference itself, through a record
+
+A comment thread, a file tree and a nested JSON value are all recursive, and a schema states that by referencing itself — directly, through an array's `items`, or around a cycle of several schemas.
+
+```jsonc
+{
+  "Node": {
+    "title": "Node",
+    "type": "object",
+    "description": "One node of a tree.",
+    "properties": {
+      "id": {"type": "string", "description": "Node id."},
+      "children": {"type": "array", "description": "Child nodes.", "items": {"$ref": "Node"}}
+    },
+    "required": ["id"]
+  }
+}
+```
+
+The rule is that at least one schema on the cycle is a **record** — an object schema with `properties`, which renders as its own named type. A name is what lets the cycle close: whichever record is emitted first names the other as a forward reference (`children: NotRequired[list['Node']]`), which a `TypedDict` accepts. Mutual recursion (`Node.branch` → `Branch`, `Branch.node` → `Node`) works for the same reason, in either order.
+
+A cycle where *no* schema is a record does not render, and is refused. Every schema on it is an expression pasted at each use site rather than a named type, so there is nothing for the cycle to close on:
+
+```jsonc
+{"Tree": {"title": "Tree", "anyOf": [{"type": "string"}, {"type": "array", "items": {"$ref": "Tree"}}]}}
+```
+
+`properties` is what makes a record, not `type: "object"`: an object schema declaring only `additionalProperties` renders as a `dict[...]`, an expression, and `{"Node": {"type": "object", "additionalProperties": {"$ref": "Node"}}}` is refused for the same reason as `Tree`.
+
+The fix is to give one schema on the cycle `properties` and a `title`, so it becomes the record the cycle closes on, and to point the rest at it.
+
+Enforcement: `truewire check`, `error`, naming the schemas on the cycle. Generation refuses the same shape with a `SchemaCycleError` rather than a `RecursionError`.

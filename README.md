@@ -113,6 +113,7 @@ Questions, bugs and spec corrections: open an issue, or write to hello@truewire.
 - [Spec authoring](docs/spec/authoring.md): the rules `truewire check` enforces.
 - [The plan](docs/plan.md): what a backend renders from, and its JSON shape.
 - [TypeScript](docs/typescript.md): the second backend, the core contract, and codecs.
+- [Generated code](docs/generated.md): what `truewire generate` writes, quoted from `examples/github`, and what stays hand-written.
 - [Architecture decisions](docs/adr/README.md): why things are the way they are.
 - [Contributing](CONTRIBUTING.md): dev setup, adding a check, adding a pagination strategy.
 

@@ -28,7 +28,7 @@ name = "{package}"
 version = "0.1.0"
 description = "Typed client generated with Truewire."
 requires-python = ">=3.11"
-dependencies = ["truewire-core>=0.2.0,<0.3"]
+dependencies = ["truewire-core>=0.2.1,<0.3"]
 
 [build-system]
 requires = ["setuptools>=68"]

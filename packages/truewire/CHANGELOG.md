@@ -1,7 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.7.0 (2026-09-08)
 
+- The toolchain and `truewire init` now require `truewire-core>=0.2.1`, the release whose
+  converters accept an already-parsed `date`/`datetime`; a generated request carrying a
+  real `date` fails to validate against 0.2.0.
 - **`truewire generate typescript` renders stream endpoints.** A `kind: stream` endpoint
   is a class over `StreamEndpoint<Meta>` whose method returns the core's
   `Subscription<Message>` (`Subscription<unknown>` under `validate: false`), handing the

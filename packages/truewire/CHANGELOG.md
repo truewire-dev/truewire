@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **Recursive schemas render instead of crashing.** A schema may reference itself --
+  directly, through an array's `items`, or around a cycle of several schemas -- as long
+  as one schema on the cycle is a record (`docs/spec/authoring.md` rule 17). Two records
+  referencing each other used to pass `truewire check` and then raise
+  `CircularDependencyError` from `generation_order`; the order now collapses each cycle
+  before sorting, and the reference that points forward is emitted quoted. A cycle where
+  *no* schema is a record cannot be expressed at all: it used to pass `truewire check`
+  and die in generation with a bare `RecursionError`, and is now one `schema-cycle`
+  violation naming the schemas on it, with `InlineSchemas` raising `SchemaCycleError` if
+  generation is asked anyway. `LocalResolver`'s unreachable `Cycle detected` guard is
+  gone -- its mapping never held a reference for it to loop on.
 - **`truewire capture` drops the stale `unverified` block.** The pair it writes is the
   evidence the declaration said was missing (ADR 0001), and leaving the block in place
   failed `truewire examples` on the next run. `capture` now removes it from

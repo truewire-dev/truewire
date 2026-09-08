@@ -39,6 +39,7 @@ from typer.testing import CliRunner
 from truewire.cli import app
 from truewire.generation.python.types import TypeGenerator
 from truewire.generation.schema import Schema, SchemaCycleError
+from truewire.spec.authoring import check_schema_cycles
 
 
 def generate(schemas: dict[str, dict], *, inline: bool = True):
@@ -221,10 +222,62 @@ class TestEndToEnd:
     assert source.index('class Branch') < source.index('class Node')
     assert "node: NotRequired['Node']" in source
 
-  @pytest.mark.xfail(strict=True, reason='reproduction: `truewire check` passes a spec that cannot render')
   def test_inline_cycle_fails_check(self, tmp_path: Path, monkeypatch):
     runner = CliRunner()
     monkeypatch.chdir(tmp_path)
     project = write_project(tmp_path, runner, INLINE_CYCLE)
     result = runner.invoke(app, ['check', '--project', str(project)])
     assert result.exit_code != 0, result.output
+    assert 'Tree references itself' in result.output
+    assert 'rule 17' in result.output
+
+  def test_inline_cycle_refused_by_generation_too(self, tmp_path: Path, monkeypatch):
+    """The gate and the generator must agree about what is renderable."""
+    runner = CliRunner()
+    monkeypatch.chdir(tmp_path)
+    project = write_project(tmp_path, runner, INLINE_CYCLE)
+    result = runner.invoke(app, ['generate', 'python', '--project', str(project)])
+    assert result.exit_code != 0
+    assert not isinstance(result.exception, RecursionError)
+
+  def test_array_self_reference_generates(self, tmp_path: Path, monkeypatch):
+    runner = CliRunner()
+    monkeypatch.chdir(tmp_path)
+    project = write_project(tmp_path, runner, NODE_ARRAY)
+    assert runner.invoke(app, ['check', '--project', str(project)]).exit_code == 0
+    result = runner.invoke(app, ['generate', 'python', '--project', str(project)])
+    assert result.exit_code == 0, result.output
+    source = (project / 'src' / 'demo' / 'schemas.py').read_text()
+    assert "children: NotRequired[list['Node']]" in source
+
+
+class TestCycleAudit:
+  """`check_schema_cycles` reports only the cycles nothing can render."""
+
+  def test_a_record_cycle_is_not_a_violation(self, tmp_path: Path, monkeypatch):
+    runner = CliRunner()
+    monkeypatch.chdir(tmp_path)
+    project = write_project(tmp_path, runner, MUTUAL)
+    assert check_schema_cycles(project) == []
+
+  def test_an_inline_cycle_is_one_violation_naming_every_schema(self, tmp_path: Path, monkeypatch):
+    runner = CliRunner()
+    monkeypatch.chdir(tmp_path)
+    project = write_project(tmp_path, runner, {
+      'Leaves': {'type': 'array', 'description': 'Trees.', 'items': {'$ref': 'Tree'}},
+      'Tree': {
+        'title': 'Tree',
+        'description': 'A leaf or some trees.',
+        'anyOf': [{'type': 'string'}, {'$ref': 'Leaves'}],
+      },
+    })
+    violations = check_schema_cycles(project)
+    assert len(violations) == 1
+    assert violations[0]['rule'] == 'schema-cycle'
+    assert violations[0]['location'] == 'Leaves -> Tree -> Leaves'
+
+  def test_a_project_with_no_shared_schemas_reports_nothing(self, tmp_path: Path, monkeypatch):
+    runner = CliRunner()
+    monkeypatch.chdir(tmp_path)
+    assert runner.invoke(app, ['init', 'bare']).exit_code == 0
+    assert check_schema_cycles(tmp_path / 'bare') == []

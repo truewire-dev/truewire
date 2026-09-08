@@ -1,8 +1,10 @@
 from typing_extensions import Iterator, Mapping
 from dataclasses import dataclass
 
-from truewire.generation.schema import Schema, Reference
-from .maps import MapReduce
+from truewire.generation.schema import (
+  LocalResolver, ResolutionError, Schema, Reference, SchemaCycleError,
+)
+from .maps import FlattenAllOf, InlineSchemas, MapReduce, MergeAnyOf, RemoveOneOf
 
 @dataclass
 class dependencies(MapReduce[set[str]]):
@@ -144,4 +146,46 @@ def external_references(schemas: Mapping[str, Schema]) -> set[str]:
     for k in deps:
       if k not in schemas:
         out.add(k)
+  return out
+
+
+def inline_cycles(schemas: Mapping[str, Schema]) -> list[list[str]]:
+  """Every reference cycle in `schemas` that no backend can render, name-sorted.
+
+  A cycle is renderable when at least one schema on it has a name in the generated
+  module -- a record, which becomes a class other schemas point at. A cycle where every
+  schema renders *inline* has no such anchor: each one is an expression substituted at
+  its use sites, so expanding one expands the next forever.
+
+  Found by running the same normalization a backend runs and collecting what it refuses,
+  rather than by reimplementing "renders inline" against raw JSON. The two could
+  otherwise drift, and a `truewire check` that passes a spec `truewire generate` then
+  cannot render is the whole defect this exists to close.
+
+  A spec that is broken some other way -- a `$ref` to nothing, an external reference
+  inside an `allOf` -- reports nothing here: those have their own checks, and guessing
+  past them would report a cycle that is really a typo.
+
+  Args:
+    schemas: Every shared schema in one project, id to schema.
+  """
+  prepared = dict(schemas)
+  resolver = LocalResolver(prepared)
+  try:
+    for step in (RemoveOneOf(), FlattenAllOf(resolver), MergeAnyOf(resolver)):
+      prepared = {id: step(schema) for id, schema in prepared.items()}
+  except (ValueError, ResolutionError):
+    return []
+  inline = InlineSchemas(LocalResolver(prepared))
+  out: list[list[str]] = []
+  seen: set[frozenset[str]] = set()
+  for schema in prepared.values():
+    try:
+      inline(schema)
+    except SchemaCycleError as cycle:
+      if (key := frozenset(cycle.cycle)) not in seen:
+        seen.add(key)
+        out.append(sorted(cycle.cycle))
+    except (ValueError, ResolutionError):
+      continue
   return out

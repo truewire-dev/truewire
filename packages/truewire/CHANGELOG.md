@@ -1,5 +1,41 @@
 # Changelog
 
+## Unreleased
+
+- **`truewire capture` recorded the wrong exchange, and it could be a credential.** It
+  wrote `exchanges[-1]`, the *last* request that went through `truewire_core.http.HttpClient`
+  during the call, rather than the one belonging to the endpoint being captured. A
+  hand-written core legitimately sends more than one request around an endpoint call --
+  minting an OAuth token, refreshing an expired one, fetching a WebSocket ticket, retrying
+  after a 401 -- and whenever one of those landed last, *its* response body was written to
+  `spec/endpoints/**/examples/<id>.response.json`, then committed and published. A token
+  endpoint's 200 body is an access token, so a capture through such a core could publish a
+  live credential to a public repository, which is exactly what `docs/spec/authoring.md`
+  rule 6 exists to prevent. `truewire check` catches it only when the foreign body happens
+  to violate the endpoint's response schema, and the file is written before the check runs
+  either way, so the recording is on disk regardless. **Anyone who captured through a core
+  that makes more than one request should re-read every recorded response it wrote, and
+  rotate any credential that appears in one** -- a value published in a git history stays
+  published after the file is deleted.
+  `capture` now records the exchange the endpoint declares: its method plus its `path`
+  filled from the call's own parameters, matched against the tail of the wire URL path
+  (so a base URL's own prefix and any query string are ignored), or, for a JSON-RPC-shaped
+  endpoint whose `path` is a method name, that name read off the posted frame at the
+  envelope's selector. No match records nothing and fails, naming the endpoint, the route
+  it expected and every request the core actually made -- method and path only, since a
+  header, a request body and a response body are where a credential would be, and an
+  `ApiError` message is withheld for the same reason. Several matches are all this
+  endpoint's own attempts (a retry re-sending the same call), so the last stands and the
+  output says how many matched. Every capture now reports which exchange it recorded and
+  which it skipped; there is no flag that restores the old behaviour.
+- `truewire_core.http.recording()` (and its TypeScript and Rust twins) document that the
+  list holds everything the core sent and that an exchange is identified by its request,
+  never by its position -- the assumption that produced the bug above was taught in their
+  own examples.
+- `truewire.spec.rpc_selector`: the rule naming an RPC frame's operation (`envelope.selector`,
+  or JSON-RPC's `method`), moved out of `truewire.mock` so the mock server and `capture`
+  read one canonical definition.
+
 ## 0.8.1 (2026-09-08)
 
 - **A router group may no longer claim a class name that is already taken**

@@ -68,10 +68,15 @@ export class HttpClient {
   /**
    * Record every exchange this client makes until the recording is stopped, in order.
    *
+   * Everything the client sent is in here, in order, not just the call's own request: a
+   * token mint, a refresh, a retry. Pick the exchange you mean by its request, never by
+   * position -- `at(-1)` may be some other endpoint's, and its body may be a credential.
+   *
    * ```ts
    * using rec = client.recording()
    * const pet = await client.pets.getPet({ petId: 42 })
-   * const { status } = rec.exchanges.at(-1)!.response
+   * const mine = rec.exchanges.filter((x) => new URL(x.request.url).pathname.endsWith('/pets/42'))
+   * const { status } = mine.at(-1)!.response
    * ```
    */
   recording(): Recording {

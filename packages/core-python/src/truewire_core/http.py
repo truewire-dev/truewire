@@ -28,11 +28,18 @@ def recording() -> Iterator[list[Exchange]]:
   describes what the API actually sent. Scoped to the current task via a context variable,
   so concurrent callers outside the block record nothing.
 
+  Everything the core sent is in here, in order, not just the call's own request: a token
+  mint, a refresh, a retry after a 401. Pick the exchange you mean out of the list by its
+  request -- method and path, or the operation name in the frame -- never by position.
+  Reading `exchanges[-1]` is what once recorded an OAuth token's 200 body as an endpoint's
+  example (`truewire capture`, fixed).
+
   Examples:
     ```python
     with recording() as exchanges:
       pet = await client.pets.get_pet(pet_id=42)
-    status, body = exchanges[-1].response.status_code, exchanges[-1].response.json()
+    mine = [x for x in exchanges if x.request.url.path.endswith('/pets/42')]
+    status, body = mine[-1].response.status_code, mine[-1].response.json()
     ```
   """
   exchanges: list[Exchange] = []

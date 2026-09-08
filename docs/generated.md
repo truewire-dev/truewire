@@ -735,13 +735,15 @@ cd github
 truewire import registry github     # spec/, examples and the [cores.default] meta declaration
 truewire generate python            # src/github/**/*.py
 truewire generate typescript        # src/github/**/*.ts, after adding [typescript] to truewire.toml
+truewire generate rust              # src/github/**/*.rs, after adding [rust] to truewire.toml
 ```
 
-`truewire init` names the root class `Github`; the example sets `name = "GitHub"` under `[python]` and `[typescript]`. `truewire init` also writes the scaffold core; edit `headers` and the default `base_url` as the example does, and for TypeScript write `src/github/core/index.ts` against `HttpEndpoint<DefaultMeta>`. The example's `truewire.toml`, `package.json` and `test/` are what to copy. The two test suites run from `examples/github`, against the repository's own environment:
+`truewire init` names the root class `Github`; the example sets `name = "GitHub"` under `[python]`, `[typescript]` and `[rust]`. `truewire init` also writes the scaffold core; edit `headers` and the default `base_url` as the example does, for TypeScript write `src/github/core/index.ts` against `HttpEndpoint<DefaultMeta>`, and for Rust `src/github/core/mod.rs` implementing `HttpEndpoint<DefaultMeta>` (`docs/rust.md`). The example's `truewire.toml`, `package.json`, `Cargo.toml`, `test/` and `tests/` are what to copy. The three test suites run from `examples/github`, against the repository's own environment:
 
 ```sh
 PYTHONPATH=src ../../.venv/bin/python -m pytest -q
 yarn test
+cargo test
 ```
 
 The second needs `packages/core-ts` built (`yarn build`) and the example installed (`yarn install`), because `@truewire/core` is a `file:` dependency until it is on npm.

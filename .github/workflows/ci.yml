@@ -87,6 +87,34 @@ jobs:
         working-directory: examples/${{ matrix.example }}
         run: yarn test
 
+  examples-rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - name: Install the toolchain
+        run: |
+          uv venv --python 3.12 .venv
+          uv pip install --python .venv/bin/python -e packages/core-python[dev] -e 'packages/truewire[dev]'
+      - name: Generated code is current
+        # A fresh checkout has no .truewire/ manifest; --check takes the plan as the owned
+        # file list and compares each file's content with what the plan renders.
+        working-directory: examples/github
+        run: ../../.venv/bin/truewire generate rust --check
+      - name: Format
+        working-directory: examples/github
+        run: cargo fmt --check
+      - name: Lint
+        working-directory: examples/github
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Test
+        # The tests spawn `truewire mock` from ../../.venv/bin/truewire.
+        working-directory: examples/github
+        run: cargo test
+
   runtime-ts:
     runs-on: ubuntu-latest
     defaults:

@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+- **`truewire generate rust`.** The third backend, reading the plan into the modules of
+  a crate over `truewire-core`: one `serde` struct per record (`snake_case` fields with
+  `#[serde(rename)]` carrying the wire name, `Option` and `double_option`, a flattened
+  `extra` map, cycles boxed), an enum per string literal and per untagged union (inline
+  ones hoisted and named after their position), the runtime's newtype per format, one
+  struct per HTTP `rpc` endpoint holding an `Arc<dyn HttpEndpoint<Meta>>` with the typed
+  method, its `_raw` twin and a `<method>_paged` walker over `PaginatedResponse` for the
+  `page`, `token` and plain `seek` strategies, routers delegating to their endpoints, the
+  root, `meta.rs` and `lib.rs`. `[rust]` in `truewire.toml` (`package`, `src`, `name`)
+  declares it, under the same manifest discipline as the other backends
+  (`.truewire/rust-files.json`, `--check`, `--delete`). The output is printed to satisfy
+  `cargo fmt --check` without running a formatter. Stream endpoints, WebSocket commands,
+  composite cores, `window`/`seek`-with-`overlap`/`unchanged` walks and generator-shaped
+  walks are reported as skipped for now (`docs/rust.md`).
+- **`examples/github` generates Rust** beside its Python and TypeScript packages: a
+  hand-written core over `HttpClient`, a replay test proving every recorded example
+  decodes and dumps back to the wire body unchanged, and the paging walks. CI's
+  `examples-rust` job runs `generate rust --check`, `cargo fmt --check`, `cargo clippy`
+  and `cargo test`.
+
 ## 0.7.0 (2026-09-08)
 
 - The toolchain and `truewire init` now require `truewire-core>=0.2.1`, the release whose

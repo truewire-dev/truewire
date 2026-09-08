@@ -1,0 +1,19 @@
+[package]
+name = "github"
+version = "0.1.0"
+edition = "2021"
+description = "Typed client generated with Truewire."
+license = "MIT"
+publish = false
+
+[lib]
+path = "src/github/lib.rs"
+
+[dependencies]
+async-trait = "0.1"
+serde = { version = "1", features = ["derive"] }
+truewire-core = { path = "../../crates/truewire-core" }
+
+[dev-dependencies]
+futures = "0.3"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

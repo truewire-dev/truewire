@@ -22,10 +22,11 @@ from jsonschema import Draft202012Validator
 
 from truewire.generation.schema import Schema
 from truewire.generation.types import unrenderable_cycles
+from truewire.generation.util import pascal_case
 from truewire.project import Project, resolve, spec_dir as project_spec_dir
 from .endpoint import (
   Endpoint, GrpcEndpointSpec, Pagination, PaginationParameter, RpcEndpointSpec,
-  StreamEndpointSpec, last_row_field, path_segments,
+  StreamEndpointSpec, directory_function, last_row_field, path_segments,
 )
 from .repo import load_endpoint, load_shared_schemas
 from .request import PLACEHOLDER
@@ -36,7 +37,7 @@ Rule = Literal[
   'unions', 'description', 'pagination', 'identifier-templating', 'ws-verb',
   'timestamp-format', 'reserved-param', 'meta-collision', 'meta-schema',
   'router-core-missing', 'schemas-shadowing', 'mixed-leaf-router', 'envelope',
-  'schema-cycle',
+  'schema-cycle', 'router-name-collision',
 ]
 """Mechanizable checks of the spec-authoring contract, in contract order."""
 
@@ -154,6 +155,9 @@ RULE_HEADINGS: dict[Rule, str] = {
   ),
   'schema-cycle': (
     '17. A schema may reference itself, through a record'
+  ),
+  'router-name-collision': (
+    "18. A router group's class name is not its parent's, and not a sibling's"
   ),
 }
 """Contract heading each check is derived from, for reporting."""
@@ -1784,6 +1788,193 @@ def check_schemas_no_shadowing(client_root: Path | Project) -> list[Violation]:
             'resolving it by nearer-wins precedence'
           ),
         ))
+  return violations
+
+
+BACKEND_SECTIONS = ('python', 'typescript', 'rust')
+"""The `truewire.toml` sections that name a generated root class, in generation order."""
+
+
+def client_class_names(project: Project) -> dict[str, str]:
+  """The root class name each backend a project actually declares will render.
+
+  One copy of the resolution the three backends perform separately: `[python].name`
+  falling back to PascalCase of `[project].name` (`truewire.plan.build`'s own
+  `root_class`), and `[typescript].name`/`[rust].name` falling back to that in turn
+  (`codegen.typescript.root_class_name`, `codegen.rust.root_struct_name`). A section a
+  project does not declare is absent from the result rather than resolved to its default
+  -- there is no package for that name to collide inside of.
+
+  Args:
+    project: The loaded project.
+  """
+  python = project.python
+  default = (python.name if python is not None and python.name else None) or pascal_case(project.name)
+  names: dict[str, str] = {}
+  if python is not None:
+    names['python'] = default
+  if project.typescript is not None:
+    names['typescript'] = project.typescript.name or default
+  if project.rust is not None:
+    names['rust'] = project.rust.name or default
+  return names
+
+
+def function_tree(client_root: Path | Project) -> tuple[set[tuple[str, ...]], set[tuple[str, ...]]]:
+  """A project's function tree as `(router nodes, leaf endpoints)`, root-first tuples.
+
+  The root node `()` is always a router node, even for a project with no endpoints at
+  all: it is the client class itself.
+
+  Read through `Endpoint.resolved_function` rather than off the directory names, so a
+  project that still authors `function` explicitly is judged on the tree it actually
+  generates -- the same source `report_authoring` names its own findings by. An
+  `endpoint.json` too malformed to load falls back to its directory position, so that a
+  caller reading the tree is never the first thing to raise on a broken file: whoever
+  validates that endpoint reports it, the same way `check_schema_cycles` leaves an
+  unparseable schema to whoever loads it.
+
+  Args:
+    client_root: Project (or project root).
+  """
+  spec_root = project_spec_dir(client_root)
+  endpoints_root = spec_root / 'endpoints'
+  if not endpoints_root.is_dir():
+    return {()}, set()
+
+  def function(path: Path) -> str:
+    try:
+      return load_endpoint(path).resolved_function(path, spec_root)
+    except Exception:
+      return directory_function(path, spec_root)
+
+  leaves = {
+    tuple(function(path).split('.'))
+    for path in sorted(endpoints_root.rglob('endpoint.json'))
+  }
+  nodes: set[tuple[str, ...]] = {()}
+  for parts in leaves:
+    for depth in range(1, len(parts)):
+      nodes.add(parts[:depth])
+  return nodes, leaves - nodes
+
+
+def check_router_names(
+  client_root: Path | Project, *, language: str | None = None,
+) -> list[Violation]:
+  """
+  A router group's rendered class name must differ from the class composing it, and from
+  every sibling's (`docs/spec/authoring.md` rule 18).
+
+  Two shapes, one rule, because one module names both:
+
+  - **The composing class.** A router node's module names its own class and imports each
+    child group's, so a group whose class name equals its parent's leaves the parent
+    holding itself. At the root that parent is the client, and its name comes from
+    `truewire.toml` rather than from a directory -- which is why this check is the only
+    one here that reads a backend section at all.
+  - **A sibling.** A node composes each child under the name its own segment renders, so
+    two children rendering the same name (`list-orders` and `list_orders` both render
+    `ListOrders`) claim one name twice.
+
+  `error`-severity, and never a heuristic: two rendered strings are equal or they are
+  not. Refused rather than auto-renamed, because the root class name and every group
+  attribute are the client's public surface -- a generator that quietly picked
+  `Weather2` would change what a caller writes without saying so.
+
+  The condition is judged for every backend, not per backend, even though each fails on
+  it differently: Rust's root imports its child groups by bare name (`E0255`, then
+  `E0072` for the struct that now contains itself) while its nested modules qualify
+  theirs and survive; TypeScript's every level imports by bare name (`TS2440`/`TS2395`);
+  Python raises nothing at all and simply shadows the import, so the group attribute
+  returns another root client and the endpoints under it become unreachable. A spec is
+  refused on the first of those, not on each backend's own tolerance, so that one spec
+  means one answer.
+
+  Args:
+    client_root: Project (or project root).
+    language: One of `BACKEND_SECTIONS`, to judge the root against only that backend's
+      declared client name -- what `truewire generate <language>` refuses on. `None`
+      (what `truewire check` runs) judges the root against every backend the project
+      declares.
+  """
+  # Deferred: `truewire.codegen` imports `truewire.spec`, so a module-level import here
+  # would close the cycle. Reused rather than reimplemented all the same -- a second copy
+  # of the segment-to-class-name rule would drift, and this check would then report on a
+  # tree other than the one the backends render (`truewire.codegen.layout`'s docstring).
+  from truewire.codegen.layout import class_name
+
+  project = resolve(client_root)
+  client_root = project.root
+  endpoints_root = project.endpoints_dir
+  nodes, leaves = function_tree(project)
+  names = client_class_names(project)
+  if language is not None:
+    names = {language: names[language]} if language in names else {}
+
+  def location(node: tuple[str, ...]) -> str:
+    """The `router.json` a group comes from, or its directory when it has none."""
+    directory = endpoints_root.joinpath(*node)
+    router = directory / 'router.json'
+    return str((router if router.is_file() else directory).relative_to(client_root))
+
+  paths = nodes | leaves
+  violations: list[Violation] = []
+  for node in sorted(nodes):
+    depth = len(node)
+    segments = sorted({
+      parts[depth] for parts in paths
+      if len(parts) > depth and parts[:depth] == node
+    })
+    groups = [segment for segment in segments if (*node, segment) in nodes]
+
+    for segment in groups:
+      rendered = class_name(segment)
+      group = '.'.join((*node, segment))
+      if node:
+        if class_name(node[-1]) != rendered:
+          continue
+        claimed = f'the router group {".".join(node)!r} already renders it'
+        fix = 'rename one of the two group directories'
+      else:
+        sections = [section for section, name in sorted(names.items()) if name == rendered]
+        if not sections:
+          continue
+        declared = ', '.join(f'[{section}].name' for section in sections)
+        tables = ', '.join(f'[{section}]' for section in sections)
+        claimed = f'the client is already called {rendered!r} ({declared})'
+        fix = (
+          f'choose a different `name` in {tables}, or rename the '
+          f'{segment!r} group directory'
+        )
+      violations.append(Violation(
+        rule='router-name-collision',
+        location=location((*node, segment)),
+        message=(
+          f'the router group {group!r} renders the class {rendered!r}, and {claimed} -- '
+          'the module composing the group imports that class and declares its own under '
+          'the same name, so the composing class ends up holding itself. '
+          f'Fix: {fix}.'
+        ),
+      ))
+
+    by_rendered: dict[str, list[str]] = {}
+    for segment in segments:
+      by_rendered.setdefault(class_name(segment), []).append(segment)
+    for rendered, colliding in sorted(by_rendered.items()):
+      if len(colliding) < 2:
+        continue
+      under = '.'.join(node) if node else 'the client root'
+      violations.append(Violation(
+        rule='router-name-collision',
+        location=' / '.join(location((*node, segment)) for segment in colliding),
+        message=(
+          f'{" and ".join(repr(segment) for segment in colliding)} under {under} both '
+          f'render the class {rendered!r} -- one module composes both, under one name, '
+          'so whichever is written second is the only one a caller can reach. Fix: '
+          'rename one of the directories so the two render different names.'
+        ),
+      ))
   return violations
 
 

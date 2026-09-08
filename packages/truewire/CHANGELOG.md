@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- **A router group may no longer claim a class name that is already taken**
+  (`docs/spec/authoring.md` rule 18). A client whose declared `name` matches one of its
+  router groups generated code that did not build: Rust's `client.rs` imported
+  `crate::weather::Weather` and then declared its own `Weather`, so the root struct
+  contained itself (`E0255`, `E0072`, `E0391`), and TypeScript's `main.ts` did the same
+  by bare import (`TS2440`, `TS2395`). Python raised nothing at all -- the class shadowed
+  the import, so `client.weather` returned another root client and every endpoint under
+  the group became unreachable. The same shape one level down (a group whose class name
+  is its parent group's) and sideways (`list-orders` and `list_orders`, which both render
+  `ListOrders`) is refused with it. `truewire check` reports it as an `error` naming the
+  client, the group and the `router.json` it comes from, and `truewire generate python`,
+  `typescript` and `rust` refuse the same condition before writing a file. The rename is
+  never made for you: the root class name and every group attribute are the client's
+  public surface.
+
 ## 0.8.0 (2026-09-08)
 
 - **`truewire generate rust`.** The third backend, reading the plan into the modules of

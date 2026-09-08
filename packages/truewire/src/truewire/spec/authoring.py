@@ -1918,11 +1918,12 @@ def check_router_names(
     router = directory / 'router.json'
     return str((router if router.is_file() else directory).relative_to(client_root))
 
+  paths = nodes | leaves
   violations: list[Violation] = []
   for node in sorted(nodes):
     depth = len(node)
     segments = sorted({
-      parts[depth] for parts in nodes | leaves
+      parts[depth] for parts in paths
       if len(parts) > depth and parts[:depth] == node
     })
     groups = [segment for segment in segments if (*node, segment) in nodes]

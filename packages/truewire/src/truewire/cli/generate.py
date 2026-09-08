@@ -309,6 +309,10 @@ def typecheck_project(project: Project) -> bool:
   return True
 
 
+PLANNED_BACKENDS = ('typescript', 'rust')
+"""Backends that render the plan (`docs/plan.md`) rather than the spec tree directly."""
+
+
 def generate_typescript(
   project: Project, *, delete: bool = False, check: bool = False,
   log: Callable[[str], None] = lambda message: None,
@@ -321,15 +325,44 @@ def generate_typescript(
     CodegenError: The project declares no `[typescript]` section, or the manifest is
       missing where `--delete` needs it, or the plan cannot be built.
   """
-  from truewire.codegen.typescript import render_package
+  generate_planned(project, language='typescript', delete=delete, check=check, log=log)
+
+
+def generate_rust(
+  project: Project, *, delete: bool = False, check: bool = False,
+  log: Callable[[str], None] = lambda message: None,
+):
+  """`truewire generate rust`: render the plan through the Rust backend into
+  `<[rust].src>/<[rust].package>/`, under the same manifest discipline
+  (`.truewire/rust-files.json`; `--check`, `--delete`).
+
+  Raises:
+    CodegenError: The project declares no `[rust]` section, or the manifest is missing
+      where `--delete` needs it, or the plan cannot be built.
+  """
+  generate_planned(project, language='rust', delete=delete, check=check, log=log)
+
+
+def generate_planned(
+  project: Project, *, language: str, delete: bool = False, check: bool = False,
+  log: Callable[[str], None] = lambda message: None,
+):
+  """Render the plan through one of `PLANNED_BACKENDS` into its declared package
+  directory, under the manifest discipline every backend shares."""
   from truewire.plan.build import build_plan
   from truewire.project import NotAProject
 
-  language = 'typescript'
   root = project.root
   client = project.name
   try:
-    output_root = project.typescript_package_dir
+    if language == 'typescript':
+      from truewire.codegen.typescript import render_package
+
+      output_root = project.typescript_package_dir
+    else:
+      from truewire.codegen.rust import render_package
+
+      output_root = project.rust_package_dir
   except NotAProject as exc:
     raise CodegenError(str(exc))
   manifest_path = project.manifest_path(language)
@@ -382,7 +415,7 @@ def generate_typescript(
 
 
 def generate(
-  language: str = typer.Argument('python', help='Target language: `python` or `typescript`.'),
+  language: str = typer.Argument('python', help='Target language: `python`, `typescript` or `rust`.'),
   project: str | None = PROJECT_OPTION,
   verbose: int = typer.Option(0, '--verbose', '-v', count=True),
   delete: Annotated[
@@ -397,7 +430,7 @@ def generate(
   """Generate the project's package from its spec, for the given language.
 
   Args:
-    language: Codegen backend to generate with: `python` (the default) or `typescript`.
+    language: Codegen backend to generate with: `python` (the default), `typescript` or `rust`.
     project: Project directory (holding `truewire.toml`); the nearest one by default.
     verbose: Repeat for more detail: `-v` logs per-stage progress, `-vv` logs every file written.
     delete: Delete manifest-owned files without loading the backend or spec.
@@ -482,11 +515,11 @@ def generate(
     suffix = '.'.join(target)
     return dots + suffix if suffix else dots
 
-  if language == 'typescript':
+  if language in PLANNED_BACKENDS:
     try:
       if delete and check:
         raise CodegenError('`--delete` and `--check` cannot be combined')
-      generate_typescript(resolve_project(project), delete=delete, check=check, log=log)
+      generate_planned(resolve_project(project), language=language, delete=delete, check=check, log=log)
     except CodegenError as exc:
       typer.echo(str(exc), err=True)
       raise typer.Exit(code=1)

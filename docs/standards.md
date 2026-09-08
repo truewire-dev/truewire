@@ -79,13 +79,13 @@ Enforcement: the empty-object half is `truewire check`, the `title-empty-object`
 
 Why: `docs/spec/authoring.md` rule 3. An undeclared timestamp renders as a raw `int`/`str`, and a request-side one is sent to the wire wrong. One client read `0 errors` while declaring a format on 0 of 218 endpoints.
 
-Enforcement: `truewire check`, the `timestamp-format` rule, `warning`-severity: a field name ending in `time`/`timestamp`/`date`/`datetime`/`ts`/`since`/`at` with no declared format is flagged. Only the last word of a split name is matched, so `timeInForce` is never mistaken for a timestamp. Each format's runtime type lives in the project's own core types module, built from `truewire_core.times` converters.
+Enforcement: `truewire check`, the `timestamp-format` rule, `warning`-severity: a field name ending in `time`/`timestamp`/`date`/`datetime`/`ts`/`since`/`at` with no declared format is flagged. Only the last word of a split name is matched, so `timeInForce` is never mistaken for a timestamp. Each format's runtime type is an alias in `truewire_core.types`, built from `truewire_core.times` converters.
 
-**S27. A project's core types module pairs every timestamp and date type's `BeforeValidator` with a matching `PlainSerializer(converter.dump, when_used='json')`.**
+**S27. Every timestamp and date alias pairs its `BeforeValidator` with a matching `PlainSerializer(converter.dump, when_used='json')`.**
 
 Why: ADR 0008. Without the serializer half, `validator(Type).dump()` (S28) silently renders ISO-8601 regardless of the declared wire format. Latent on every client at the time.
 
-Enforcement: manual. `truewire init`'s core template includes the pairing for every format.
+Enforcement: `truewire_core.types` ships the six aliases generated code uses, paired, and its tests round-trip each one. A project-specific alias added beside the core follows the same pairing by hand.
 
 ## Validation And Errors
 

@@ -79,7 +79,7 @@ Each declared format renders to a distinct, correctly converting type (`Timestam
 {"startTime": {"type": "integer", "format": "epoch-millis", "description": "Start time, Unix ms."}}
 ```
 
-Every declared format needs a matching type in the client's own core types module. A missing pair generates a module that fails with `NameError` on import.
+Every declared format renders to an alias `truewire_core.types` ships (`TimestampSeconds`, `TimestampMillis`, `TimestampMicros`, `TimestampNanos`, `TimestampIso`, `DateIso`); a format outside this list is refused at generation.
 
 Enforcement: `truewire check`, `warning` (`timestamp-format`). A scalar field whose name ends, after splitting at case boundaries, in `time`, `timestamp`, `date`, `datetime`, `ts`, `since` or `at` and declares no format is reported. Only the last word is matched, so `timeInForce` is never mistaken for a timestamp. Like rule 2, a name is a lower bound on the real gap, not proof. Two clients read `0 errors` while declaring a format on 0 of 218 and 117 of 310 endpoints respectively before this check existed.
 

@@ -32,12 +32,28 @@ class CoreConfig(BaseModel):
   its own `meta: {}`."""
 
 
+class NewParam(BaseModel):
+  """The table form of one `[python.cores.<name>].params` value: its type plus whether a
+  caller must pass it. The string form (`network = "pkg.core:Network"`) is a required
+  parameter; this form exists to declare an optional one."""
+  model_config = ConfigDict(extra='forbid')
+
+  type: str = Field(min_length=1)
+  """`module.path:Name` (imported by the composing module) or a bare builtin name
+  (`str`, `int`, `bool`, `float`), rendered as the parameter's annotation."""
+  required: bool = True
+  """`False` renders `name: Type | None = None` and passes `None` through to `new()`."""
+
+
 class PythonCoreConfig(BaseModel):
   """One `[python.cores.<name>]` entry: the hand-written base class this symbolic core
-  name resolves to, and -- only for a base that genuinely composes more than
-  one distinctly-based child -- which field of `self` each such child forwards. Every entry is this identical `{base, children?}` shape, root position included:
-  there is no separate bare-string form, and no separate `client_base` field -- whatever
-  resolves at the root position is just another entry here."""
+  name resolves to, how a composite whose base it is hands each child its transport
+  (`children`), and -- when the base is built through `new(client, *, ...)` rather than
+  its dataclass constructor -- which keywords that `new()` takes (`forward`, `params`).
+  Every entry is this identical shape, root position included: there is no separate
+  bare-string form, and no separate `client_base` field -- whatever resolves at the root
+  position is just another entry here. The generator reads only this table to compose a
+  router; it never imports the base (ADR 0011)."""
   model_config = ConfigDict(extra='forbid')
 
   base: str = Field(min_length=1)
@@ -47,6 +63,30 @@ class PythonCoreConfig(BaseModel):
   e.g. `{"rest": "rest_client", "streams": "streams_client"}`. `None` (the common
   case for most projects) means this base composes no distinctly-based child -- every
   subdirectory it composes forwards the single implicit `self.client`."""
+  forward: list[str] | None = None
+  """`new()` keywords the composing class passes from its own same-named fields
+  (`market_client=self.market_client`). Declaring this (even as `[]`) or `params` means
+  the base is constructed through `new(client, *, ...)`; a child under a core declaring
+  neither is constructed as `Child(client=self.<field>)`."""
+  params: dict[str, str | NewParam] | None = None
+  """`new()` keywords a caller supplies, name -> type (`"pkg.core:Network"`, a bare
+  builtin, or the `{type, required}` table). The composing class exposes each as a
+  keyword-only parameter of the child's accessor method, unless its own resolved core is
+  this same core, in which case the class already carries the field and forwards
+  `self.<name>` instead."""
+
+  @property
+  def composes_via_new(self) -> bool:
+    """Whether a child under this core is built through `new(client, *, ...)`."""
+    return self.forward is not None or self.params is not None
+
+  @property
+  def new_params(self) -> dict[str, NewParam]:
+    """`params` with every string-form entry expanded to its `NewParam` table."""
+    return {
+      name: value if isinstance(value, NewParam) else NewParam(type=value)
+      for name, value in (self.params or {}).items()
+    }
 
 
 class ExtraEntry(BaseModel):

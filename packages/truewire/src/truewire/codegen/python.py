@@ -6,8 +6,8 @@ generated the same way; a project's optional `[python].backend` module subclasse
 `Generator` to override only the hooks it needs.
 """
 from typing_extensions import (
-  Any, Callable, Container, Iterable, Literal, Mapping, NotRequired, TypeAliasType,
-  TypedDict, Union, get_args, get_origin, get_type_hints,
+  Any, Container, Iterable, Literal, Mapping, NotRequired, TypedDict, get_args, get_origin,
+  get_type_hints,
 )
 import dataclasses
 import enum
@@ -22,6 +22,7 @@ from types import UnionType
 
 from truewire.generation.openapi import BODY_KEY, PARAMETER_KEY, RESPONSE_KEY, normalize_schemas
 from truewire.generation.python import TypeGenerator, Parser, Renderer
+from truewire.generation.python.types.parser import TYPES_PACKAGE
 from truewire.generation.python.code import Docstring, Function, HttpRequest, self_shadowing_alias
 from truewire.generation.python.code.functions import group_lines
 from truewire.generation.python.code.imports import Imports as ImportsRenderer
@@ -702,9 +703,6 @@ class Generator:
     typing_names = imports.pop('typing_extensions', None)
     if typing_names:
       lines.append(f'from typing_extensions import {", ".join(sorted(typing_names))}')
-    core_names = imports.pop(self.core_package, None)
-    if core_names:
-      lines.append(f'from {self.core_package} import {", ".join(sorted(core_names))}')
     for pkg in sorted(imports):
       if imports[pkg]:
         lines.append(f'from {pkg} import {", ".join(sorted(imports[pkg]))}')
@@ -732,7 +730,7 @@ class Generator:
     """
     return TypeGenerator(
       external_references=external_references,
-      render=Renderer(parser=Parser(core_package=self.core_package)),
+      render=Renderer(parser=Parser()),
     )
 
   def subscription(self, endpoint: Endpoint) -> Subscription:
@@ -1426,19 +1424,18 @@ class Generator:
 
     `HttpRequest` emits `timestamp_millis.dump(...)` (or the sibling helper matching a
     parameter's declared render id -- see `HttpRequest.TIMESTAMP_HELPERS`) for a timestamp
-    parameter and no import for the helper it names, because nothing in `truewire.generation`
-    knows where a project keeps its core. `core_package` does, and it is the only thing here
-    that does — so the two halves meet at this method rather than in every backend's own
-    condition. A module generated without the import raises `NameError` on first import,
-    which gates 1, 2 and 3 never reach, and gate 4 reports as a bare undefined name.
+    parameter and no import for the helper it names; the helpers live in
+    `truewire_core.types` beside the aliases, so the import is added here. A module
+    generated without it raises `NameError` on first import, which gates 1, 2 and 3 never
+    reach, and gate 4 reports as a bare undefined name.
 
     Args:
       request: The request rendered for this endpoint's method.
     """
     helpers = request.helpers
-    if not helpers or self.core_package is None:
+    if not helpers:
       return {}
-    return {self.core_package: set(helpers)}
+    return {TYPES_PACKAGE: set(helpers)}
 
   def paged_imports(self, endpoint: Endpoint, *, header: Function) -> Mapping[str, set[str]]:
     """Return the imports the page iterator this endpoint generates needs.
@@ -1465,7 +1462,7 @@ class Generator:
     if pagination.strategy == 'seek' and pagination.overlap is not None:
       imports: Mapping[str, set[str]] = {**PAGED_IMPORTS, **PAGED_TRUNCATION_IMPORTS}
       base = self._seek_cursor_base_type(endpoint, header=header)
-      if base is None or self.core_package is None:
+      if base is None:
         return imports
       unit = TIMESTAMP_TICKS.get(base)
       if unit is None:
@@ -1479,7 +1476,7 @@ class Generator:
       return merge_imports([
         imports,
         {'datetime': {'timedelta', 'datetime'}},
-        {self.core_package: {helper}},
+        {TYPES_PACKAGE: {helper}},
         {'typing_extensions': {'cast'}},
       ])
     if pagination.strategy in ('page', 'offset') and pagination.done.kind == 'total':
@@ -1502,17 +1499,15 @@ class Generator:
         return imports
       # `datetime` (the bare class), not just `timedelta`: `row_field_expression`'s own
       # `isinstance(x, datetime)` discriminator (Fix 2) is emitted wherever `is_datetime`
-      # is true here, the identical condition -- so it needs no `core_package` gate either,
-      # same as `timedelta` above it.
+      # is true here, the identical condition -- so it belongs in the same place, same as
+      # `timedelta` above it.
       imports = merge_imports([imports, {'datetime': {'timedelta', 'datetime'}}])
-      if self.core_package is None:
-        return imports
       base = (bound.type or 'str').removesuffix(' | None')
       helper = HttpRequest.TIMESTAMP_HELPERS.get(base)
       if helper is None:
         return imports
       return merge_imports([
-        imports, {self.core_package: {helper}}, {'typing_extensions': {'cast'}},
+        imports, {TYPES_PACKAGE: {helper}}, {'typing_extensions': {'cast'}},
       ])
     if pagination.strategy != 'window':
       return PAGED_IMPORTS
@@ -6128,164 +6123,51 @@ class Generator:
     parts.append(class_code)
     return '\n\n\n'.join(parts)
 
-  def _import_core_class(self, base: str) -> type:
-    """Import and return the live class one `PythonCoreConfig.base` reference names
-    (`module.path:ClassName`), inserting the project's own source directory onto `sys.path`
-    first so the import succeeds even for a project not otherwise installed (a synthetic
-    test fixture, say) -- the same convention `_grpc_proto_module` already uses.
-
-    Unlike `_grpc_proto_module` (which imports already-generated, static proto stubs),
-    this imports a module that is itself part of the client codegen is *currently*
-    generating -- the `.new()`-forwarding mechanism genuinely needs the resolved core's
-    live `.new()` signature, so there is no way around importing the real package mid-run.
-    That means a project whose `__init__.py` (or any module on the import path to this
-    core) itself depends on a file codegen hasn't written yet this run -- most commonly
-    `from .main import <RootClass>`, the hand-curated export surface's own dependency on
-    the generated root module -- fails here on a brand-new client's *first* generation,
-    before that file exists on disk at all. A project already generated once always has a
-    real, if stale, `main.py` on disk before any regeneration, so this is narrow, but
-    the raw `ImportError` a caller would otherwise see names nothing about the real cause
-    -- wrapped below into a diagnosable message instead.
-
-    The `sys.path` insertion is undone before returning (or raising) whenever this call is
-    the one that added it, rather than left on `sys.path` for the rest of the process --
-    unlike `_grpc_proto_module`'s own one-per-endpoint call pattern, this can run many
-    times across one client's generation (once per router node needing this mechanism),
-    and a lingering entry is a latent cross-client shadowing hazard for any caller that
-    generates more than one client in one process.
+  def _new_param_annotation(self, type_ref: str, imports: dict[str, set[str]]) -> str:
+    """Render one declared `[python.cores.<name>].params` type -- `module.path:Name`
+    (imported by name into this module) or a bare builtin such as `str` -- to the
+    annotation the exposed parameter carries, recording the import in `imports`.
 
     Args:
-      base: `module.path:ClassName`, as a `[python.cores.<name>].base` declares it.
-
-    Raises:
-      ValueError: `project` is unset, `base` doesn't resolve to a real class, or the
-        module import itself failed (wrapping the original `ImportError`).
+      type_ref: The declared type, exactly as `truewire.toml` spells it.
+      imports: This module's accumulated import table, mutated in place.
     """
-    if self.project is None:
-      raise ValueError(f'{base}: needs project (set by the CLI) to import a resolved core')
-    pkg_src = self.project.python_src
-    pkg_src_str = str(pkg_src)
-    inserted = pkg_src_str not in sys.path
-    if inserted:
-      sys.path.insert(0, pkg_src_str)
-    module_name, _, class_name = base.partition(':')
-    try:
-      module = import_module(module_name)
-    except ImportError as exc:
-      raise ValueError(
-        f'{base}: could not import {module_name!r} while resolving this core (design '
-        f'§5a/§5c) -- {exc}. Codegen imports the client package it is currently '
-        "generating to resolve this core's own live `.new()` signature -- a package "
-        'whose `__init__.py`, or any module on the import path to this core, itself '
-        "depends on a file codegen hasn't written yet this run (most commonly "
-        '`from .main import <RootClass>`) fails exactly like this on a project\'s '
-        '*first* generation, before that file exists. Seed a minimal placeholder for '
-        'the missing module (it will be overwritten by the real generated content in '
-        'this same run) before generating this client the first time.'
-      ) from exc
-    finally:
-      if inserted and pkg_src_str in sys.path:
-        sys.path.remove(pkg_src_str)
-    cls = getattr(module, class_name, None)
-    if cls is None:
-      raise ValueError(f'{base}: no {class_name!r} in {module_name}')
-    return cls
-
-  def _core_fields(self, base: str) -> set[str]:
-    """Return the dataclass field names the resolved core `base` names already carries
-    -- what fields `self` already has, for `.new()` own-field matching (a `.new()`
-    parameter of this exact name is already satisfied by `self`, and forwards rather
-    than becoming a new caller-supplied parameter).
-
-    Args:
-      base: `module.path:ClassName` to introspect.
-
-    Raises:
-      ValueError: `base` doesn't resolve to a real dataclass -- every hand-written core/
-        `Base` class in this convention is one (every worked example declares
-        `@dataclass(kw_only=True, ...)`), so a class that isn't one can't be
-        reasoned about here.
-    """
-    cls = self._import_core_class(base)
-    if not dataclasses.is_dataclass(cls):
-      raise ValueError(
-        f'{base}: not a dataclass, cannot introspect its own fields for `.new()` '
-        "forwarding -- every resolved core/Base class is expected to be one"
-      )
-    return {f.name for f in dataclasses.fields(cls)}
-
-  def _core_new_method(self, base: str) -> Callable[..., object] | None:
-    """Return the resolved core `base` names its own `.new` function (unbound -- `cls`
-    still a real parameter a caller reads via `inspect.signature`) when it participates
-    in the `.new()` forwarding mechanism, `None` otherwise.
-
-    Participation is decided by one convention, not general introspection: `.new()`'s
-    own first parameter (besides `cls`) must be literally named `client` -- the worked
-    example being `classmethod new(cls, client: ClientBase, *, network: Network)`.
-    This is what correctly excludes two other real `.new()` shapes from ever being
-    mistaken for a forwarding participant: `ClientBase.new(cls, *, api_key=None, public=False)`
-    (the root's own once-only, externally-called entry point -- no forwarded value at
-    all, nothing for generated code to ever call) and a composing `Base`'s own `.new()`
-    (`SpotBase.new(cls, *, rest_url: str, streams_url: str)` -- built once from its own
-    hand-written construction, e.g. by an enclosing `Base`'s own `.new()`, never invoked
-    by generated composing code either). Neither takes an already-built value to forward
-    at all, so neither has a `client`-named first parameter, and both are correctly
-    skipped by this rule with no separate flag needed.
-
-    Args:
-      base: `module.path:ClassName` to introspect.
-    """
-    cls = self._import_core_class(base)
-    new = inspect.getattr_static(cls, 'new', None)
-    if not isinstance(new, classmethod):
-      return None
-    func = new.__func__
-    params = list(inspect.signature(func).parameters.values())
-    if len(params) < 2 or params[1].name != 'client':
-      return None
-    return func
-
-  def _router_child_new_method(self, child: RouterChild) -> Callable[..., object] | None:
-    """Resolve `child`'s own resolved core's `.new` function, when the
-    child's `spec/endpoints/` directory is known (`RouterChild.spec_dir`, set by the CLI
-    the same way `doc` already is) and that core participates in the mechanism
-    (`_core_new_method`). `None` when `spec_dir` is unset -- a caller that hasn't wired
-    it (an existing hand-built `RouterChild` dict, e.g. this module's own unit tests)
-    gets exactly today's already-shipped behavior, never an attempted import.
-
-    Args:
-      child: The `kind: 'router'` child being composed.
-    """
-    child_spec_dir = child.get('spec_dir')
-    if child_spec_dir is None or self.project is None or self.codegen_config is None:
-      return None
-    child_core = self._resolve_core(child_spec_dir, self.project.spec_dir, self.codegen_config)
-    return self._core_new_method(child_core.base)
+    module, sep, name = type_ref.rpartition(':')
+    if not sep:
+      if not type_ref.isidentifier():
+        raise ValueError(
+          f'{type_ref!r}: a `params` type is `module.path:Name` or a bare builtin name'
+        )
+      return type_ref
+    if not module or not name.isidentifier():
+      raise ValueError(f'{type_ref!r}: a `params` type is `module.path:Name`')
+    imports.setdefault(module, set()).add(name)
+    return name
 
   def _router_cached_property(
     self, child: RouterChild, *, own_core: PythonCoreConfig | None, imports: dict[str, set[str]],
   ) -> str:
-    """Render one subdirectory child as a `@cached_property`, S11's shape for a lazily-
-    constructed, cached router child -- or, when its own resolved core needs a caller-
-    supplied value beyond `client`, a real method exposing exactly that
-    remainder (still a `@cached_property`, calling `.new()` with zero exposed parameters,
-    when nothing is left to expose after matching -- the degenerate case, generalized: not just "no `.new()` at all" but "a `.new()` whose every
-    non-`client` parameter is already a field `self` carries").
+    """Render one subdirectory child as a `@cached_property` constructing it, or -- when
+    the child's own resolved core declares `params` this composing class cannot supply
+    from its own fields -- a real method exposing exactly those parameters.
 
-    `own_core` is this composing class's own resolved core (`PythonCoreConfig`), when one
-    was resolved -- unset for an aggregate/mixed parent (no resolved core of its own;
-    `self.client` reaches every child transitively through whichever leaf class the
-    parent multiply-inherits). A `children` mapping declared on it picks
-    which field of `self` *this* child forwards in place of the default `self.client`;
-    that forwarded field also feeds `.new()`'s own first (`client`-named) parameter when
-    `.new()` forwarding additionally applies -- the two mechanisms compose without
-    conflict, since they answer independent questions.
+    Everything here is read from `truewire.toml` (ADR 0011); the child's base is never
+    imported. A child whose core declares neither `forward` nor `params` is built as
+    `Child(client=self.<field>)`, `<field>` being `client` unless `own_core.children`
+    names another field for this child. A child whose core declares either is built
+    through `Child.new(self.<field>, ...)`: every `forward` name passes the composing
+    class's own same-named field, and every `params` name is exposed as a keyword-only
+    parameter -- unless `own_core` is that same core, in which case this class already
+    carries the field (its base is the child's base) and forwards `self.<name>` instead.
+    That last rule is what lets a parameterized subtree (`token(network=...)` at the root)
+    compose its own descendants without re-exposing `network` at every level.
 
     Args:
       child: A `kind: 'router'` child (a subdirectory grouping).
-      own_core: This composing class's own resolved `PythonCoreConfig`, if any.
+      own_core: This composing class's own resolved `PythonCoreConfig`, if any (unset for
+        an aggregate parent, which reaches `self.client` through its leaf bases).
       imports: This module's accumulated import table -- mutated in place with whatever
-        an exposed `.new()` parameter's own type needs.
+        an exposed parameter's declared type needs.
     """
     attr = self.identifier(child['attr_name'])
     child_class = child['class_name']
@@ -6294,8 +6176,11 @@ class Generator:
       forwarded_field = own_core.children.get(child['attr_name'], 'client')
     docstring = indent(router_docstring(attr, child.get('doc')), '  ')
 
-    new_func = self._router_child_new_method(child)
-    if new_func is None:
+    child_core: PythonCoreConfig | None = None
+    child_spec_dir = child.get('spec_dir')
+    if child_spec_dir is not None and self.project is not None and self.codegen_config is not None:
+      child_core = self._resolve_core(child_spec_dir, self.project.spec_dir, self.codegen_config)
+    if child_core is None or not child_core.composes_via_new:
       return '\n'.join([
         '@cached_property',
         f'def {attr}(self) -> {child_class}:',
@@ -6303,25 +6188,19 @@ class Generator:
         indent(f'return {child_class}(client=self.{forwarded_field})', '  '),
       ])
 
-    parent_fields = self._core_fields(own_core.base) if own_core is not None else {'client'}
-    hints = get_type_hints(new_func)
-    forwarded_params = list(inspect.signature(new_func).parameters.values())[2:]  # drop cls, client
-
     call_parts = [f'self.{forwarded_field}']
+    for name in child_core.forward or ():
+      call_parts.append(f'{name}=self.{name}')
+    same_core = own_core is not None and own_core.base == child_core.base
     extra_params: list[Function.Param] = []
-    for p in forwarded_params:
-      if p.name in parent_fields:
-        call_parts.append(f'{p.name}=self.{p.name}')
+    for name, param in child_core.new_params.items():
+      if same_core:
+        call_parts.append(f'{name}=self.{name}')
         continue
-      hint = hints.get(p.name)
-      type_expr, nullable, param_imports = self._new_param_type(hint)
-      for pkg, names in param_imports.items():
-        imports.setdefault(pkg, set()).update(names)
       extra_params.append(Function.Param(
-        name=p.name, type=type_expr,
-        required=not nullable and p.default is inspect.Parameter.empty,
+        name=name, type=self._new_param_annotation(param.type, imports), required=param.required,
       ))
-      call_parts.append(f'{p.name}={p.name}')
+      call_parts.append(f'{name}={name}')
     call_args = ', '.join(call_parts)
 
     if not extra_params:
@@ -6496,77 +6375,6 @@ class Generator:
         'path -- nothing to resolve a composite base class from'
       )
     return self._resolve_core(endpoint_dir, self.project.spec_dir, self.codegen_config)
-
-  def _new_param_type(self, hint: object) -> tuple[str, bool, dict[str, set[str]]]:
-    """Render one `.new()` parameter's live, resolved type hint to a bare
-    type expression -- builtin, external class, `T | None`, named `TypeAliasType` alias,
-    or `Literal[...]` (a worked `Network` example is exactly this shape: a
-    closed set of EVM network names). Deliberately its own small renderer rather than a
-    reuse of `_grpc_field_type` -- that one is scoped to what a proto message field can
-    actually be (no `Literal`, since proto3 has no such concept), and a `.new()`
-    parameter is ordinary Python, not a proto field.
-
-    Args:
-      hint: One parameter's real type, as `typing_extensions.get_type_hints` resolved it.
-
-    Returns:
-      The bare type expression -- no `| None`, added separately by `Function.Param`'s own
-      caller when the parameter is optional -- whether `hint` itself is already a
-      `T | None` union, and the imports the bare expression needs.
-    """
-    # `T | None` written with the PEP 604 `|` operator does not always resolve to a real
-    # runtime `types.UnionType` -- `get_type_hints` normalizes it to `typing.Optional[T]`
-    # (origin `typing.Union`, not `UnionType`) whenever `T` is itself a `Literal[...]`
-    # alias, confirmed directly (`get_type_hints` on `def f(x: Literal['a'] | None):
-    # ...)` resolves to `typing.Optional[typing.Literal['a']]`) -- a `Network`
-    # (`ChainRpc.new`'s `network: Network | None = None`, preserving the
-    # pre-migration default-network convenience the mechanized derivation can't itself
-    # express -- see `_router_cached_property`'s own "no default value" limitation) is the
-    # real case that surfaced this: the fixture's own `.new()` never has an optional
-    # `Literal`-typed parameter to exercise it. Both spellings mean the same thing, so both
-    # are accepted here.
-    if get_origin(hint) in (UnionType, Union):
-      args = get_args(hint)
-      non_none = [a for a in args if a is not type(None)]
-      if len(args) != 2 or len(non_none) != 1:
-        raise NotImplementedError(
-          f'.new() forwarding only supports a plain `T | None` union parameter type, got {hint!r}'
-        )
-      inner_expr, _, inner_imports = self._new_param_type(non_none[0])
-      return inner_expr, True, inner_imports
-    # A *plain* `Network = Literal[...]` assignment is exactly what the comment above
-    # describes falling through to the branch below as a raw, unnamed `Literal[...]` --
-    # `get_type_hints` erases a plain-assignment alias entirely, with no way to recover
-    # the name `Network` from the erased hint at all (confirmed directly: `Network =
-    # Literal['a', 'b']; def f(x: Network): ...` resolves via `get_type_hints` to
-    # `{'x': typing.Literal['a', 'b']}`, origin `Literal`, no trace of the alias name). A
-    # `TypeAliasType('Network', Literal[...])` alias (`typing_extensions`, constructed
-    # directly rather than PEP 695's 3.12-only `type Network = ...` statement, since
-    # generated packages pin `requires-python = '>=3.10'`) is the one spelling that
-    # survives that resolution: the *hint itself* comes back as the `TypeAliasType`
-    # instance, not its expansion -- `get_origin`/`get_args` on it are both empty, so it
-    # is checked and handled here, ahead of the bare-`Literal[...]` branch below, rather
-    # than risk being misrouted into it. It renders the same way the plain-`type` branch
-    # two cases down already does (the alias's own `__name__`/`__module__`, imported by
-    # name) rather than re-expanding its wrapped `Literal[...]` inline -- which is the
-    # whole point: a `Network` alias in a project's core is declared this way
-    # specifically so the five
-    # generated factory methods that take a `network` parameter
-    # (`nft`/`token`/`transfers`/`utility`/`simulation`) render `network: Network | None
-    # = None`, one shared import, instead of re-inlining the same 9-value `Literal[...]`
-    # five separate times.
-    if isinstance(hint, TypeAliasType):
-      return hint.__name__, False, {hint.__module__: {hint.__name__}}
-    if get_origin(hint) is Literal:
-      values = ', '.join(repr(value) for value in get_args(hint))
-      return f'Literal[{values}]', False, {'typing_extensions': {'Literal'}}
-    if isinstance(hint, type) and hint.__module__ == 'builtins':
-      return hint.__name__, False, {}
-    if isinstance(hint, type):
-      return hint.__name__, False, {hint.__module__: {hint.__name__}}
-    raise NotImplementedError(
-      f'no rendering rule for a `.new()` parameter type {hint!r}'
-    )
 
   def router(self, section: str, children: Mapping[str, RouterChild]) -> str:
     """

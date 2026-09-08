@@ -15,9 +15,9 @@ def parse(schema: dict, *, id: str | None = None):
   """Parse a raw JSON Schema fragment into the Python backend's IR."""
   return Parser()(Schema.model_validate(schema), id=id)
 
-def render(schemas: dict[str, dict], *, inline: bool = True, core_package: str | None = None):
+def render(schemas: dict[str, dict], *, inline: bool = True):
   """Render raw JSON Schema fragments into Python source."""
-  parser = Parser(core_package=core_package)
+  parser = Parser()
   return Renderer(parser=parser)({k: Schema.model_validate(v) for k, v in schemas.items()}, inline=inline)
 
 def generate(schemas: dict[str, dict], *, inline: bool = True):
@@ -128,11 +128,11 @@ class TestPrefixItems:
         {'type': 'string', 'format': 'date-time'},
         {'type': 'string'},
       ],
-    }}, core_package='venue.core')
+    }})
     assert rendered.definitions['SpotCandle'] == (
       'SpotCandle = tuple[TimestampIso, str, str, str, str, str, TimestampIso, str]'
     )
-    assert rendered.imports['venue.core'] == {'TimestampIso'}
+    assert rendered.imports['truewire_core.types'] == {'TimestampIso'}
 
   def test_tuple_of_records_references_the_unnested_records(self):
     generated = generate({'Row': {
@@ -148,71 +148,57 @@ class TestPrefixItems:
 
 
 def test_integer_with_epoch_millis_format_renders_as_timestamp_millis():
-  parser = Parser(core_package='venue.core')
+  parser = Parser()
   result = parser(Schema(type='integer', format='epoch-millis'))
-  assert result == {'type': 'ref', 'id': 'TimestampMillis', 'package': 'venue.core'}
+  assert result == {'type': 'ref', 'id': 'TimestampMillis', 'package': 'truewire_core.types'}
 
 
 def test_string_carried_epoch_renders_as_timestamp_millis():
   """Several venues send millisecond epochs as JSON strings, not numbers."""
-  parser = Parser(core_package='venue.core')
+  parser = Parser()
   result = parser(Schema(type='string', format='epoch-millis'))
-  assert result == {'type': 'ref', 'id': 'TimestampMillis', 'package': 'venue.core'}
+  assert result == {'type': 'ref', 'id': 'TimestampMillis', 'package': 'truewire_core.types'}
 
 
 def test_epoch_seconds_format_renders_as_timestamp_seconds():
-  parser = Parser(core_package='venue.core')
+  parser = Parser()
   result = parser(Schema(type='integer', format='epoch-seconds'))
-  assert result == {'type': 'ref', 'id': 'TimestampSeconds', 'package': 'venue.core'}
+  assert result == {'type': 'ref', 'id': 'TimestampSeconds', 'package': 'truewire_core.types'}
 
 
 def test_epoch_micros_format_renders_as_timestamp_micros():
-  parser = Parser(core_package='venue.core')
+  parser = Parser()
   result = parser(Schema(type='integer', format='epoch-micros'))
-  assert result == {'type': 'ref', 'id': 'TimestampMicros', 'package': 'venue.core'}
+  assert result == {'type': 'ref', 'id': 'TimestampMicros', 'package': 'truewire_core.types'}
 
 
 def test_date_time_format_renders_as_timestamp_iso():
   """The actual bug fix: `date-time` used to render to a bare, unconvertible `datetime`
-  regardless of `core_package` -- it now goes through the same per-format lookup as
-  every epoch shape, and needs a `core_package` for the same reason they do."""
-  parser = Parser(core_package='venue.core')
-  result = parser(Schema(type='string', format='date-time'))
-  assert result == {'type': 'ref', 'id': 'TimestampIso', 'package': 'venue.core'}
-
-
-def test_date_time_format_without_a_core_package_is_an_error():
+  -- it now goes through the same per-format lookup as every epoch shape."""
   parser = Parser()
-  with pytest.raises(ValueError, match='core_package'):
-    parser(Schema(type='string', format='date-time'))
+  result = parser(Schema(type='string', format='date-time'))
+  assert result == {'type': 'ref', 'id': 'TimestampIso', 'package': 'truewire_core.types'}
 
 
 def test_epoch_nanos_format_renders_as_timestamp_nanos():
   """Added after a deribit review found genuine epoch-nanosecond `starbase_timestamp`/
   `starbase_last_update_timestamp` fields the original vocabulary couldn't express."""
-  parser = Parser(core_package='venue.core')
+  parser = Parser()
   result = parser(Schema(type='integer', format='epoch-nanos'))
-  assert result == {'type': 'ref', 'id': 'TimestampNanos', 'package': 'venue.core'}
+  assert result == {'type': 'ref', 'id': 'TimestampNanos', 'package': 'truewire_core.types'}
 
 
 def test_date_format_renders_as_date_iso():
   """Added after a deribit review found `market_data.get_delivery_prices.date`, a genuine
   plain calendar date with no time component."""
-  parser = Parser(core_package='venue.core')
+  parser = Parser()
   result = parser(Schema(type='string', format='date'))
-  assert result == {'type': 'ref', 'id': 'DateIso', 'package': 'venue.core'}
+  assert result == {'type': 'ref', 'id': 'DateIso', 'package': 'truewire_core.types'}
 
 
 def test_plain_integer_is_unaffected():
-  parser = Parser(core_package='venue.core')
-  assert parser(Schema(type='integer')) == {'type': 'ref', 'id': 'int'}
-
-
-def test_epoch_format_without_a_core_package_is_an_error():
-  """Rendering `Timestamp` with nowhere to import it from would emit a NameError."""
   parser = Parser()
-  with pytest.raises(ValueError, match='core_package'):
-    parser(Schema(type='integer', format='epoch-millis'))
+  assert parser(Schema(type='integer')) == {'type': 'ref', 'id': 'int'}
 
 
 def test_uuid_format_renders_as_a_plain_string():
@@ -222,12 +208,12 @@ def test_uuid_format_renders_as_a_plain_string():
   which is what the venue sends. Nothing generated parses it, so the rendered type is
   `str` — but an unlisted format raises rather than rendering, so it has to be named.
   """
-  parser = Parser(core_package='venue.core')
+  parser = Parser()
   assert parser(Schema(type='string', format='uuid')) == {'type': 'ref', 'id': 'str'}
 
 
 def test_unknown_string_format_still_raises():
-  parser = Parser(core_package='venue.core')
+  parser = Parser()
   with pytest.raises(NotImplementedError):
     parser(Schema(type='string', format='email'))
 
@@ -241,7 +227,7 @@ def test_hostname_and_uri_formats_render_as_a_plain_string():
   Parser-customization escape hatch). moralis's `auth.challenge.request_evm_challenge`
   types its `domain`/`uri` request properties this way.
   """
-  parser = Parser(core_package='venue.core')
+  parser = Parser()
   assert parser(Schema(type='string', format='hostname')) == {'type': 'ref', 'id': 'str'}
   assert parser(Schema(type='string', format='uri')) == {'type': 'ref', 'id': 'str'}
 

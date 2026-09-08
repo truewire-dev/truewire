@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+- **The generator reads a declared core contract and never imports the target package**
+  (ADR 0011). Composing a child through `.new()` is declared in `truewire.toml`:
+  `[python.cores.<name>]` gains `forward` (keywords passed from the composing class's own
+  fields) and `params` (keywords a caller supplies, with their types). The `.new()`
+  introspection, the `sys.path` patching and `truewire init`'s placeholder `main.py` are
+  gone; a new project generates on its first run with nothing seeded. A test generates the
+  fixture project with the target package refused from `sys.path`.
+- `truewire generate python` writes `<package>/meta.py`: one `TypedDict` per
+  `[cores.<name>]` that declares a `meta` schema, named `<Name>Meta`. A core annotates
+  its `meta` parameter with it instead of hand-writing the class. `truewire init` writes
+  the first one from the same renderer.
+- Generated code imports the timestamp aliases (`TimestampMillis`, ...) and their
+  converters from `truewire_core.types` instead of the project's `core`. `truewire init`
+  writes `core/types.py` as a re-export, and pins `truewire-core>=0.2.0,<0.3`.
+- Both example projects updated: cores import `Meta` from the generated module,
+  `examples/kraken` declares `forward = ["market_client"]` for `streams`.
+
 ## 0.4.0 (2026-09-07)
 
 - **A response schema describes the wire body; `envelope.payload` selects the returned

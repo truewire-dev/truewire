@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- `truewire_core.types`: the timestamp and date aliases generated code imports by name
+  (`TimestampSeconds`, `TimestampMillis`, `TimestampMicros`, `TimestampNanos`,
+  `TimestampIso`, `DateIso`) and the converter instance behind each. They were written into
+  every project's `core/types.py` by `truewire init`, identical everywhere; generated code
+  now imports them from here, and a project's `core/types.py` is a re-export kept for
+  callers that import it.
+- `truewire_core.contract`: `Protocol`s for the contract between a hand-written core and
+  generated code: `HttpEndpoint` (`request` with `method`), `CommandEndpoint` (`request`
+  without it), `StreamEndpoint` (`subscribe`), `ClientRoot` (`new`, `__aenter__`,
+  `__aexit__`) and `Composite` (`new(client, *, ...)`). The generator no longer imports a
+  project's package to learn this shape (ADR 0011).
+
 ## 0.1.1 (2026-09-07)
 
 - `truewire_core.http.recording()`: a context manager that records every request and

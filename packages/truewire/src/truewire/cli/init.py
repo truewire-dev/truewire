@@ -4,7 +4,11 @@ from pathlib import Path
 
 import typer
 
+from truewire.codegen.meta import META_MODULE, meta_module
 from truewire.project import PROJECT_FILE
+from truewire.spec.codegen_toml import load_codegen_toml
+
+from .generate import GENERATED_BANNER
 
 CORE_TEMPLATE = '''"""Hand-written core for the {package} client: transport, auth, envelope and errors.
 
@@ -15,23 +19,15 @@ never changes when you do.
 """
 from dataclasses import dataclass, field
 from types import UnionType
-from typing_extensions import Any, NotRequired, Self, TypedDict, TypeVar, cast
+from typing_extensions import Any, Self, TypeVar, cast
 
 from truewire_core.exceptions import ApiError
 from truewire_core.http import HttpClient
 from truewire_core.validation import validator
 
-from .types import (  # noqa: F401  re-exported for generated code
-  DateIso, TimestampIso, TimestampMicros, TimestampMillis, TimestampNanos, TimestampSeconds,
-)
+from ..meta import DefaultMeta as Meta
 
 T = TypeVar('T')
-
-
-class Meta(TypedDict):
-  """Per-endpoint facts declared in `endpoint.json`'s `meta`, matching `[cores.default].meta`."""
-  public: NotRequired[bool]
-  """Whether the call needs no credentials."""
 
 
 @dataclass(kw_only=True)
@@ -110,50 +106,16 @@ class Endpoint:
 '''
 
 
-TYPES_TEMPLATE = '''"""Wire timestamp shapes the generated code refers to by name.
+TYPES_TEMPLATE = '''"""Wire timestamp shapes, re-exported from the runtime.
 
-Each spec `format` (`epoch-seconds`, `epoch-millis`, `epoch-micros`, `epoch-nanos`,
-`date-time`, `date`) renders to one of these: a real `datetime`/`date` that parses from
-the wire form and serializes back to it.
+Generated code imports `truewire_core.types` directly; this module stays so a caller that
+imports `{package}.core.types` keeps working. Add a project-specific alias here (a
+non-UTC epoch, say) built from `truewire_core.times` converters.
 """
-from datetime import date, datetime, timezone
-from typing_extensions import Annotated
-
-from pydantic import BeforeValidator, PlainSerializer
-
-from truewire_core.times import DateConverter, EpochConverter, IsoConverter
-
-timestamp_seconds = EpochConverter.seconds(tz=timezone.utc)
-timestamp_millis = EpochConverter.milliseconds(tz=timezone.utc)
-timestamp_micros = EpochConverter.microseconds(tz=timezone.utc)
-timestamp_nanos = EpochConverter.nanoseconds(tz=timezone.utc)
-timestamp_iso = IsoConverter()
-date_iso = DateConverter()
-
-TimestampSeconds = Annotated[
-  datetime, BeforeValidator(timestamp_seconds.parse), PlainSerializer(timestamp_seconds.dump, when_used='json'),
-]
-"""An `epoch-seconds` field."""
-TimestampMillis = Annotated[
-  datetime, BeforeValidator(timestamp_millis.parse), PlainSerializer(timestamp_millis.dump, when_used='json'),
-]
-"""An `epoch-millis` field."""
-TimestampMicros = Annotated[
-  datetime, BeforeValidator(timestamp_micros.parse), PlainSerializer(timestamp_micros.dump, when_used='json'),
-]
-"""An `epoch-micros` field."""
-TimestampNanos = Annotated[
-  datetime, BeforeValidator(timestamp_nanos.parse), PlainSerializer(timestamp_nanos.dump, when_used='json'),
-]
-"""An `epoch-nanos` field."""
-TimestampIso = Annotated[
-  datetime, BeforeValidator(timestamp_iso.parse), PlainSerializer(timestamp_iso.dump, when_used='json'),
-]
-"""A `date-time` (RFC 3339) field."""
-DateIso = Annotated[
-  date, BeforeValidator(date_iso.parse), PlainSerializer(date_iso.dump, when_used='json'),
-]
-"""A `date` (RFC 3339 full-date) field."""
+from truewire_core.types import (  # noqa: F401
+  DateIso, TimestampIso, TimestampMicros, TimestampMillis, TimestampNanos, TimestampSeconds,
+  date_iso, timestamp_iso, timestamp_micros, timestamp_millis, timestamp_nanos, timestamp_seconds,
+)
 '''
 
 PYPROJECT_TEMPLATE = '''[project]
@@ -161,7 +123,7 @@ name = "{package}"
 version = "0.1.0"
 description = "Typed client generated with Truewire."
 requires-python = ">=3.11"
-dependencies = ["truewire-core>=0.1.1,<0.2"]
+dependencies = ["truewire-core>=0.2.0,<0.3"]
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -222,13 +184,13 @@ base = "{name}.core:Endpoint"
   )
   (root / 'src' / name / '__init__.py').write_text(f'from .main import {class_name}\n')
   (root / 'src' / name / 'py.typed').write_text('')
-  (root / 'src' / name / 'main.py').write_text(
-    f'"""Placeholder; overwritten by `truewire generate python`."""\nfrom .core import ClientBase\n\n\nclass {class_name}(ClientBase):\n  """Generated root client (placeholder)."""\n'
-  )
+  meta_source = meta_module(load_codegen_toml(root).cores)
+  assert meta_source is not None  # the template's [cores.default] declares a schema
+  (root / 'src' / name / f'{META_MODULE}.py').write_text(GENERATED_BANNER + meta_source)
   (root / 'src' / name / 'core' / '__init__.py').write_text(
     CORE_TEMPLATE.format(package=name, base_url=base_url)
   )
-  (root / 'src' / name / 'core' / 'types.py').write_text(TYPES_TEMPLATE)
+  (root / 'src' / name / 'core' / 'types.py').write_text(TYPES_TEMPLATE.format(package=name))
   if not (root / 'pyproject.toml').exists():
     (root / 'pyproject.toml').write_text(PYPROJECT_TEMPLATE.format(package=name))
   (root / '.gitignore').write_text('.truewire/\n__pycache__/\n.venv/\n')

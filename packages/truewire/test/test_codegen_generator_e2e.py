@@ -90,11 +90,14 @@ from truewire.codegen.python import (
   endpoint_transport,
   subtree_transport,
 )
+from truewire.codegen.meta import META_MODULE, meta_module
 from truewire.spec import Endpoint, load_router
 from truewire.spec.codegen_toml import load_codegen_toml
 from dataclasses import replace
 
 from truewire.project import resolve
+
+from conftest import forbid_import
 
 FIXTURE_ROOT = Path(__file__).parent / 'fixtures' / 'codegen_fixture_client'
 
@@ -151,34 +154,30 @@ def generate_client(root: Path, output_dir: Path):
   # itself -- the empty string, not `layout.output_base`'s own `'api'` default, which
   # exists only for a legacy client with no override at all.
   generator.output_base = lambda endpoint: ''
-  # The generated package lives under `output_dir`, not the fixture's own `core_impl/`:
-  # point the project's `python_src` there so core introspection imports the tree being
-  # generated (with its placeholder `main.py`), not the committed fixture.
+  # The generated package lives under `output_dir`, not the fixture's own `core_impl/`.
   generator.project = replace(resolve(root), python_src=output_dir.parent)
   generator.codegen_config = generator.project.config
-  # Design §5a's own mechanism genuinely imports a resolved core's live class
-  # (`Generator._import_core_class`) to introspect `.new()`. Doing that requires
-  # `import fixture_client...` to succeed *during* generation, before every planned file
-  # has been written -- which in turn requires `fixture_client/__init__.py` (hand-
-  # curated, design §4: `from .main import FixtureClient`) to already find a real
-  # `main.py` on disk. For a real, already-migrated client this is never a problem --
-  # every client in this repo already has a real `main.py` from its own prior codegen
-  # backend before it would ever adopt this mechanism -- but this fixture's own
-  # `generate_client` always starts from an empty `output_dir`, so it has to reproduce
-  # that same "already has a main.py" precondition itself: copy the hand-written
-  # `core_impl/fixture_client` support code into `output_dir` (matching the copy this
-  # function used to do only at the very end) and seed a throwaway placeholder `main.py`
-  # *before* generation runs, both overwritten by the real generated content below.
-  shutil.copytree(root / 'core_impl' / 'fixture_client', output_dir, dirs_exist_ok=True)
-  (output_dir / 'main.py').write_text(
-    'class FixtureClient:\n'
-    '  """Placeholder, overwritten by generate_client below."""\n'
-  )
-  output_dir_parent = str(output_dir.parent)
-  sys.path.insert(0, output_dir_parent)
   generator.core_package = 'fixture_client.core'
+  # ADR 0011: generation reads `truewire.toml` and the spec, never the package it is
+  # generating -- the hand-written `core_impl/fixture_client` is copied in only after the
+  # plan is complete, and any import of `fixture_client` while planning is an error. This
+  # is the regression bar for the old `.new()` introspection, which imported the package
+  # mid-run and so needed a placeholder `main.py` seeded before a first generation.
+  with forbid_import('fixture_client'):
+    planned = _plan_client(root, generator)
+  shutil.copytree(root / 'core_impl' / 'fixture_client', output_dir, dirs_exist_ok=True)
+  for relative, content in planned.items():
+    destination = output_dir / relative
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(content)
 
+
+def _plan_client(root: Path, generator: Generator) -> dict[Path, str]:
+  """Build the full generation plan (path -> content) for the client at `root`."""
   planned: dict[Path, str] = {}
+  meta_source = meta_module(generator.codegen_config.cores)
+  if meta_source is not None:
+    planned[Path(f'{META_MODULE}.py')] = meta_source
   # One `schemas()` call per discovered `schemas.json` file (design §5b, Task 24b step 6)
   # -- the fixture's own root `spec/schemas.json` (`OrderSide`) plus its nested
   # `spec/endpoints/futures/schemas.json` (`FuturesSide`) -- mirroring `cli/codegen.py`'s
@@ -338,21 +337,7 @@ def generate_client(root: Path, output_dir: Path):
     # `router()` handles every node uniformly now, including the true root (design
     # §5c/Task 24a) -- no separate `_root_class` call.
     planned[out] = generator.router(section, children) + '\n'
-
-  for relative, content in planned.items():
-    destination = output_dir / relative
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(content)
-
-  # Undo the `sys.path` insertion above and drop any `fixture_client` module this
-  # function's own generation step happened to import (`_import_core_class`, design §5a)
-  # -- otherwise a later real `import fixture_client` (this function's own caller) could
-  # resolve a module cached from mid-generation (the placeholder `main.py`, say) instead
-  # of the real, now-fully-written one at `output_dir`.
-  if output_dir_parent in sys.path:
-    sys.path.remove(output_dir_parent)
-  for name in [n for n in list(sys.modules) if n == 'fixture_client' or n.startswith('fixture_client.')]:
-    del sys.modules[name]
+  return planned
 
 
 def _write_pyright_config(tmp_path: Path):

@@ -1,29 +1,22 @@
-"""Base endpoint class for Kraken Spot's HTTP endpoints: design §2's single `request()`
-verb, deciding public-vs-signed and form-vs-JSON body purely from `meta['signed']` --
-every generated call's own `meta` dict literal, matching `codegen/config.toml`'s
-`[cores.spot].meta` schema -- and from `path`. `core` decides everything about wire
-mechanics (design §2), including which of the venue's two body encodings a given private
-endpoint takes.
+"""Base endpoint class for Kraken Spot's HTTP endpoints: the single `request()` verb
+(`truewire_core.contract.HttpEndpoint`), deciding public-vs-signed and form-vs-JSON body
+purely from `meta['signed']` -- every generated call's own `meta` dict literal, matching
+`truewire.toml`'s `[cores.spot].meta` schema, typed by the `SpotMeta` the generator writes
+to `kraken/meta.py` from it -- and from `path`. The core decides everything about wire
+mechanics, including which of the venue's two body encodings a given private endpoint
+takes.
 """
 
-from typing_extensions import Any, NotRequired, Protocol, Self, TypedDict, TypeVar, cast
+from typing_extensions import Any, Protocol, Self, TypeVar, cast
 from dataclasses import dataclass
 from types import UnionType
 import json
 
 from truewire_core.validation import validator
 
+from kraken.meta import SpotMeta as Meta
+
 T = TypeVar('T')
-
-
-class Meta(TypedDict):
-  """`spot`'s own `meta` shape (`codegen/config.toml` `[cores.spot].meta`): whether this call
-  needs HMAC-SHA512 signing. Hand-written to match that declared JSON Schema -- never
-  code-generated (design §2/§6, the same precedent this repo already uses for a
-  spec-declared timestamp `format`; S27)."""
-
-  signed: NotRequired[bool]
-  """Whether this call needs HMAC-SHA512 signing (absent/`False` for every public endpoint)."""
 
 
 JSON_BODY_PATHS = {

@@ -2745,25 +2745,14 @@ class TestPagedOverlapSeekTimestampCursor:
     """`datetime` (the bare class), not just `timedelta`, is needed alongside the helper --
     `row_field_expression`'s own `isinstance(x, datetime)` discriminator (Fix 2) is
     emitted the moment this same timestamp-cursor condition is met."""
-    generator.core_package = 'venue.core'
     imports = generator.paged_imports(
       paged_endpoint(SEEK_OVERLAP_MILLIS), header=timestamp_millis_header(),
     )
     assert imports.get('datetime') == {'timedelta', 'datetime'}
-    assert imports.get('venue.core') == {'timestamp_millis'}
+    assert imports.get('truewire_core.types') == {'timestamp_millis'}
     assert 'cast' in imports.get('typing_extensions', set())
 
-  def test_no_core_package_gets_no_helper_import(self, generator: Generator):
-    """Mirrors `request_imports`'s own precedent: nothing in `truewire.generation` knows
-    where a client keeps its core, so without `core_package` the helper import can't be
-    named -- caught here rather than left to fail at runtime with a `NameError`."""
-    imports = generator.paged_imports(
-      paged_endpoint(SEEK_OVERLAP_MILLIS), header=timestamp_millis_header(),
-    )
-    assert 'datetime' not in imports
-
   def test_non_timestamp_cursor_gets_no_extra_imports(self, generator: Generator):
-    generator.core_package = 'venue.core'
     imports = generator.paged_imports(
       paged_endpoint(SEEK_OVERLAP_TIME), header=overlap_header(),
     )
@@ -3516,26 +3505,16 @@ class TestRequestImports:
   edit away from shipping a module that raises `NameError` on import.
   """
 
-  def test_an_epoch_parameter_pulls_the_helper_from_the_core(self, generator: Generator):
-    generator.core_package = 'venue.core'
+  def test_an_epoch_parameter_pulls_the_helper_from_the_runtime(self, generator: Generator):
     request = HttpRequest(method='GET', path='/candles')
     request.query_params.append(
       HttpRequest.Param(name='startTime', required=True, type='TimestampMillis'),
     )
-    assert generator.request_imports(request) == {'venue.core': {'timestamp_millis'}}
+    assert generator.request_imports(request) == {'truewire_core.types': {'timestamp_millis'}}
 
   def test_a_request_without_an_epoch_parameter_imports_nothing(self, generator: Generator):
-    generator.core_package = 'venue.core'
     request = HttpRequest(method='GET', path='/candles')
     request.query_params.append(HttpRequest.Param(name='limit', required=False, type='int'))
-    assert generator.request_imports(request) == {}
-
-  def test_no_core_package_asks_for_nothing(self, generator: Generator):
-    """The CLI sets `core_package`; a generator built by hand may not have one."""
-    request = HttpRequest(method='GET', path='/candles')
-    request.query_params.append(
-      HttpRequest.Param(name='startTime', required=True, type='TimestampMillis'),
-    )
     assert generator.request_imports(request) == {}
 
 

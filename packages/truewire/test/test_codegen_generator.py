@@ -59,9 +59,11 @@ import pytest
 
 from truewire.project import resolve
 from truewire.codegen.layout import discover_schemas_files, load_schema_file, load_schemas, schemas_scope
-from truewire.codegen.python import Generator
+from truewire.codegen.python import Generator, RouterChild
 from truewire.spec import Endpoint, endpoint_records, load_endpoint
 from truewire.spec.codegen_toml import load_codegen_toml
+
+from conftest import forbid_import
 
 FIXTURE_ROOT = Path(__file__).parent / 'fixtures' / 'codegen_fixture_client'
 
@@ -1681,10 +1683,10 @@ def test_router_composes_heterogeneous_children_below_root(tmp_path: Path):
 
 
 def _parameterized_subtree_fixture(tmp_path: Path) -> tuple[dict, Path]:
-  """Shared setup for the two tests below: a design §5a parameterized subtree
-  (`token/`, forwarding `network`) with a `balances/breakdown/` grouping beneath it --
-  `codegen/config.toml` and the raw `.new()`-carrying core `ChainRpc` both live here since neither
-  test needs its own copy."""
+  """Shared setup for the two tests below: a parameterized subtree (`token/`, whose
+  core declares `params = { network = ... }`) with a `balances/breakdown/` grouping
+  beneath it. The core source is written only so the fixture looks like a real project;
+  the generator never imports it (ADR 0011)."""
   package_root = tmp_path / 'pkg' / 'src' / 'mixed_fixture'
   package_root.mkdir(parents=True)
   (package_root / '__init__.py').write_text('')
@@ -1698,12 +1700,15 @@ def _parameterized_subtree_fixture(tmp_path: Path) -> tuple[dict, Path]:
     '  client: object\n'
     '\n'
     '\n'
+    'Network = Literal["ethereum", "polygon"]\n'
+    '\n'
+    '\n'
     '@dataclass(kw_only=True, frozen=True)\n'
     'class ChainRpc(RpcEndpoint):\n'
-    '  network: Literal["ethereum", "polygon"]\n'
+    '  network: Network\n'
     '\n'
     '  @classmethod\n'
-    '  def new(cls, client, *, network: Literal["ethereum", "polygon"]) -> Self:\n'
+    '  def new(cls, client, *, network: Network) -> Self:\n'
     '    return cls(client=client, network=network)\n'
   )
 
@@ -1728,6 +1733,7 @@ def _parameterized_subtree_fixture(tmp_path: Path) -> tuple[dict, Path]:
     '\n'
     '[python.cores.chain]\n'
     'base = "mixed_fixture.core:ChainRpc"\n'
+    'params = { network = "mixed_fixture.core:Network" }\n'
   )
 
   generator = Generator()
@@ -1796,62 +1802,19 @@ def test_leaf_and_router_siblings_forward_inherited_field_under_parameterized_su
   code = fixture['generator'].router('balances', children)
   ast.parse(code)
 
-  # The bug: without the fix, this reads `def breakdown(self, *, network) -> Breakdown:`
-  # -- `network` wrongly re-exposed instead of forwarded from `self.network`.
+  # `balances` resolves to the `chain` core itself (inherited from `token/router.json`),
+  # so its class already carries `network` and forwards it -- never
+  # `def breakdown(self, *, network) -> Breakdown:`.
   assert 'def breakdown(self) -> Breakdown:' in code
   assert '@cached_property' in code
   assert 'return Breakdown.new(self.client, network=self.network)' in code
   assert 'network=network' not in code  # would only appear if re-exposed as a new param
 
 
-def test_new_param_type_renders_a_named_type_alias_type_not_an_inlined_literal(
-  tmp_path: Path,
-):
-  """`_new_param_type`'s `TypeAliasType` branch (the fix for alchemy's real `main.py`
-  bug: five generated factory methods -- `nft`/`token`/`transfers`/`utility`/
-  `simulation` -- each re-inlining the identical 9-value `network: Literal[...]`,
-  because a *plain* `Network = Literal[...]` assignment is erased by `get_type_hints`,
-  which hands back the raw expanded `Literal[...]` with no way to recover the alias name
-  at all). A resolved core's `.new()` parameter typed through
-  `TypeAliasType('Network', Literal[...])` (`typing_extensions`, constructed directly --
-  not the 3.12-only `type Network = ...` statement, since this fleet's shared template
-  pins `requires-python = '>=3.10'`) is the one spelling that survives that erasure: the
-  hint itself comes back as the `TypeAliasType` instance, not its expansion, so it
-  renders as the bare alias name `Network`, imported once -- never as a re-expanded
-  inline `Literal[...]`.
-
-  Mirrors `_parameterized_subtree_fixture` above (also design §5a's own worked example,
-  ChainRpc/`network`), but renders the client-root factory method directly -- alchemy's
-  real shape (`Alchemy.nft(self, *, network: Network | None = None) -> Nft`) is a
-  *root-level* child, not a nested one, and the plain-vs-`TypeAliasType` distinction only
-  shows up in what `main.py` actually renders for that parameter's type expression.
-  """
-  package_root = tmp_path / 'pkg' / 'src' / 'alias_fixture'
-  package_root.mkdir(parents=True)
-  (package_root / '__init__.py').write_text('')
-  (package_root / 'core.py').write_text(
-    'from dataclasses import dataclass\n'
-    'from typing_extensions import Literal, Self, TypeAliasType\n'
-    '\n'
-    '\n'
-    '@dataclass(kw_only=True, frozen=True)\n'
-    'class RpcEndpoint:\n'
-    '  client: object\n'
-    '\n'
-    '\n'
-    "Network = TypeAliasType('Network', Literal['ethereum', 'polygon'])\n"
-    '\n'
-    '\n'
-    '@dataclass(kw_only=True, frozen=True)\n'
-    'class ChainRpc:\n'
-    '  client: object\n'
-    '  network: Network | None\n'
-    '\n'
-    '  @classmethod\n'
-    '  def new(cls, client, *, network: Network | None = None) -> Self:\n'
-    '    return cls(client=client, network=network)\n'
-  )
-
+def _declared_new_fixture(tmp_path: Path, chain_entry: str) -> Generator:
+  """A root composing one `token/` child whose `chain` core is built through `.new()`:
+  `chain_entry` is the `[python.cores.chain]` body under test. No core source exists at
+  all -- the point of ADR 0011 is that generation reads `truewire.toml` and nothing else."""
   endpoints_root = tmp_path / 'spec' / 'endpoints'
   token_dir = endpoints_root / 'token'
   token_dir.mkdir(parents=True)
@@ -1871,94 +1834,98 @@ def test_new_param_type_renders_a_named_type_alias_type_not_an_inlined_literal(
     '\n'
     '[python.cores.chain]\n'
     'base = "alias_fixture.core:ChainRpc"\n'
+    + chain_entry
   )
-
   generator = Generator()
   generator.project = resolve(tmp_path)
   generator.codegen_config = load_codegen_toml(tmp_path)
   generator.router_context = ('', ())
-  token_child = {
-    'import_path': '.token', 'class_name': 'Token', 'attr_name': 'token',
-    'kind': 'router', 'transport': 'mixed', 'doc': None,
-    'spec_dir': token_dir,
-  }
-  code = generator.router('', {'token': token_child})
+  return generator
+
+
+TOKEN_CHILD: RouterChild = {
+  'import_path': '.token', 'class_name': 'Token', 'attr_name': 'token',
+  'kind': 'router', 'transport': 'mixed', 'doc': None,
+}
+
+
+def test_declared_params_render_an_exposed_keyword_with_an_imported_type(tmp_path: Path):
+  """`params = { network = "pkg.core:Network" }` renders a real method exposing `network`,
+  typed by the bare alias name imported once -- the shape a project with several
+  parameterized subtrees wants (one shared `Network` import, never a re-inlined
+  `Literal[...]`)."""
+  generator = _declared_new_fixture(
+    tmp_path, 'params = { network = "alias_fixture.core:Network" }\n',
+  )
+  code = generator.router('', {'token': {**TOKEN_CHILD, 'spec_dir': tmp_path / 'spec' / 'endpoints' / 'token'}})
   ast.parse(code)
 
-  assert 'def token(self, *, network: Network | None = None) -> Token:' in code
+  assert 'def token(self, *, network: Network) -> Token:' in code
+  assert 'return Token.new(self.client, network=network)' in code
   assert 'from alias_fixture.core import Network' in code
-  # the plain-assignment fallback (pre-fix behavior) would have re-inlined this instead
-  assert 'Literal[' not in code
+  assert '@cached_property' not in code.split('class AliasFixture')[1]
 
 
-def test_import_core_class_raises_a_diagnosable_bootstrap_error(tmp_path: Path):
-  """Review finding 3: codegen imports the client package it is currently generating
-  (design §5a's own `.new()` introspection genuinely needs the resolved core's live
-  signature) -- so a package whose `__init__.py` depends on a file codegen hasn't
-  written yet this run (`from .main import X`, the hand-curated export surface's own
-  dependency on the generated root module, is the real, common shape) fails to import.
-  Before this fix, that surfaced as a bare `ModuleNotFoundError` naming nothing about the
-  real cause. Now it's wrapped into a `ValueError` naming the failing module and
-  explaining the bootstrap-ordering cause and the fix (seed a placeholder)."""
-  package_root = tmp_path / 'pkg' / 'src' / 'bootstrap_fixture'
-  package_root.mkdir(parents=True)
-  # `__init__.py` depends on a `main.py` that does not exist -- exactly the real shape a
-  # hand-curated export surface has (design §4: `from .main import <RootClass>`).
-  (package_root / '__init__.py').write_text('from .main import RootClient\n')
-  (package_root / 'core.py').write_text(
-    'from dataclasses import dataclass\n'
-    '\n'
-    '\n'
-    '@dataclass(kw_only=True, frozen=True)\n'
-    'class RpcEndpoint:\n'
-    '  client: object\n'
+def test_declared_optional_param_renders_a_nullable_default(tmp_path: Path):
+  """The table form `{ type = ..., required = false }` renders `Network | None = None`."""
+  generator = _declared_new_fixture(
+    tmp_path,
+    'params = { network = { type = "alias_fixture.core:Network", required = false } }\n',
   )
-
-  generator = Generator()
-  generator.project = resolve(tmp_path)
-  with pytest.raises(ValueError) as excinfo:
-    generator._import_core_class('bootstrap_fixture.core:RpcEndpoint')
-
-  message = str(excinfo.value)
-  assert 'bootstrap_fixture.core' in message
-  assert 'first' in message.lower()  # names the real, diagnosable cause
-  assert 'placeholder' in message.lower()  # names the actionable fix
+  code = generator.router('', {'token': {**TOKEN_CHILD, 'spec_dir': tmp_path / 'spec' / 'endpoints' / 'token'}})
+  ast.parse(code)
+  assert 'def token(self, *, network: Network | None = None) -> Token:' in code
 
 
-def test_import_core_class_does_not_leave_pkg_src_on_sys_path(tmp_path: Path):
-  """Review finding 3: `_import_core_class` can run many times across one client's
-  generation (once per router node needing design §5a's own introspection), so it must
-  not leave its own `pkg/src` insertion on `sys.path` for the rest of the process --
-  a latent cross-client shadowing hazard for any caller generating more than one client
-  in one process (the real CLI, run repeatedly in-process by a test, or a future
-  multi-client command). Verified on both the success and the failure path."""
-  package_root = tmp_path / 'pkg' / 'src' / 'cleanup_fixture'
-  package_root.mkdir(parents=True)
-  (package_root / '__init__.py').write_text('')
-  (package_root / 'core.py').write_text(
-    'from dataclasses import dataclass\n'
-    '\n'
-    '\n'
-    '@dataclass(kw_only=True, frozen=True)\n'
-    'class RpcEndpoint:\n'
-    '  client: object\n'
+def test_declared_builtin_param_type_needs_no_import(tmp_path: Path):
+  generator = _declared_new_fixture(tmp_path, 'params = { region = "str" }\n')
+  code = generator.router('', {'token': {**TOKEN_CHILD, 'spec_dir': tmp_path / 'spec' / 'endpoints' / 'token'}})
+  ast.parse(code)
+  assert 'def token(self, *, region: str) -> Token:' in code
+  assert 'import str' not in code
+
+
+def test_declared_forward_passes_the_composing_classs_own_field(tmp_path: Path):
+  """`forward = ["market_client"]` (kraken's `streams` shape): the composite passes its
+  own same-named field, exposing nothing -- a plain `@cached_property` calling `.new()`."""
+  generator = _declared_new_fixture(tmp_path, 'forward = ["market_client"]\n')
+  code = generator.router('', {'token': {**TOKEN_CHILD, 'spec_dir': tmp_path / 'spec' / 'endpoints' / 'token'}})
+  ast.parse(code)
+  assert '@cached_property' in code
+  assert 'def token(self) -> Token:' in code
+  assert 'return Token.new(self.client, market_client=self.market_client)' in code
+
+
+def test_empty_forward_means_new_with_only_the_client(tmp_path: Path):
+  generator = _declared_new_fixture(tmp_path, 'forward = []\n')
+  code = generator.router('', {'token': {**TOKEN_CHILD, 'spec_dir': tmp_path / 'spec' / 'endpoints' / 'token'}})
+  assert 'return Token.new(self.client)' in code
+
+
+def test_a_child_without_spec_dir_is_constructed_directly(tmp_path: Path):
+  """A hand-built `RouterChild` with no `spec_dir` (this module's older tests) can't be
+  resolved to a core, so it gets the plain constructor -- never an attempted lookup."""
+  generator = _declared_new_fixture(tmp_path, 'forward = ["market_client"]\n')
+  code = generator.router('', {'token': TOKEN_CHILD})
+  assert 'return Token(client=self.client)' in code
+
+
+def test_generation_never_imports_the_target_package(tmp_path: Path):
+  """ADR 0011's whole point: composing a `.new()`-built child reads `truewire.toml`, not
+  the live class. Any import of the target package during generation is refused here."""
+  generator = _declared_new_fixture(
+    tmp_path, 'params = { network = "alias_fixture.core:Network" }\n',
   )
-  pkg_src = str(tmp_path / 'pkg' / 'src')
-  assert pkg_src not in sys.path
-  (tmp_path / 'truewire.toml').write_text(
-    '[python]\nsrc = "pkg/src"\npackage = "cleanup_fixture"\n'
-    '[python.cores.default]\nbase = "cleanup_fixture.core:RpcEndpoint"\n'
-  )
+  with forbid_import('alias_fixture'):
+    code = generator.router('', {'token': {**TOKEN_CHILD, 'spec_dir': tmp_path / 'spec' / 'endpoints' / 'token'}})
+  assert 'network=network' in code
+  assert not any(name.split('.')[0] == 'alias_fixture' for name in sys.modules)
 
-  generator = Generator()
-  generator.project = resolve(tmp_path)
-  cls = generator._import_core_class('cleanup_fixture.core:RpcEndpoint')
-  assert cls.__name__ == 'RpcEndpoint'
-  assert pkg_src not in sys.path  # success path: cleaned up
 
-  with pytest.raises(ValueError):
-    generator._import_core_class('cleanup_fixture.core:NoSuchClass')
-  assert pkg_src not in sys.path  # failure path: still cleaned up
+def test_malformed_params_type_is_refused(tmp_path: Path):
+  generator = _declared_new_fixture(tmp_path, 'params = { network = "not a type" }\n')
+  with pytest.raises(ValueError, match='params'):
+    generator.router('', {'token': {**TOKEN_CHILD, 'spec_dir': tmp_path / 'spec' / 'endpoints' / 'token'}})
 
 
 def test_rpc_endpoint_flat_validate_property_renamed_to_avoid_collision():

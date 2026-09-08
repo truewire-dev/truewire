@@ -4,12 +4,13 @@ endpoint under `spec/endpoints/token/` (that directory's own `router.json` decla
 
 `ChainRpc` is design §5a's own worked example, ported into the fixture: a subtree
 reachable over any of several networks, with no canonical URL to bind at construction --
-`network` is threaded into every call's path, and `Generator._core_new_method` (design
-§5a) generates a real method (not a zero-arg `@cached_property`) wherever this core is
-composed one level under something that doesn't already carry `network` (the client
-root), degrading back to a plain `@cached_property` one level further down, where it
-does (`Token` itself, since it subclasses `ChainRpc` directly and so already carries
-`network` transitively -- `balances`/`nfts` are the two-level-nested proof).
+`network` is threaded into every call's path, and `truewire.toml`'s
+`[python.cores.chain] params = { network = ... }` (ADR 0011: declared, never introspected)
+makes the generator render a real method (not a zero-arg `@cached_property`) wherever this
+core is composed under a class whose own core differs (the client root), and a plain
+`@cached_property` forwarding `self.network` one level further down, where the composing
+class's own core is `chain` too (`Token` itself, since it subclasses `ChainRpc` directly
+and so already carries `network` -- `balances`/`nfts` are the two-level-nested proof).
 
 Also the fixture's own regression case for design §2/§6's `meta` mechanism: `codegen.
 toml` declares no `[cores.chain]` `meta` schema at all -- the common case, most cores

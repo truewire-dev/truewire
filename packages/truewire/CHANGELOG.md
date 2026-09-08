@@ -1,7 +1,18 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 (2026-09-08)
 
+- **`truewire init --template bearer|hmac|jsonrpc|ws`** (`docs/cores.md`): a hand-written
+  core skeleton for the common API shapes. `bearer` (the default) is REST with a bearer
+  token, a `public` meta flag and JSON errors; `hmac` signs requests with a nonce and the
+  `[cores.signed]` meta; `jsonrpc` is JSON-RPC 2.0 over HTTP with the envelope unwrapped in
+  the core; `ws` is a WebSocket core with a `streams` group (`--ws-url` sets the socket
+  URL). Every template satisfies `truewire_core.contract`, passes `check` and `generate
+  python` on a fresh project and is pyright-clean.
+- **Docs**: `docs/generated.md` (what `truewire generate` writes, Python and TypeScript
+  quoted verbatim from `examples/github`, and what stays hand-written), `docs/cores.md`
+  and `docs/agents.md` (what to hand a coding agent, the CLI gates in order, `capture`,
+  `mcp` versus the CLI plus skills, and three prompts to paste).
 - **`validate=False` is typed as the raw body it returns.** A generated method's return
   type is the parsed record, which is only true when the reply was validated. Python:
   every request/reply method and every `_paged` walker now carries two `@overload`

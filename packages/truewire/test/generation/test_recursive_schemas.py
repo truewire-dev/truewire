@@ -30,10 +30,13 @@ frames of `truewire/generation/types/maps.py` per hop) bottoming out in whicheve
 happens to exhaust the stack -- here `LocalResolver.__call__`'s own `rec`. Both passed
 `truewire check` first and died in generation.
 """
+import importlib.util
 import json
+import sys
 from pathlib import Path
 
 import pytest
+from pydantic import TypeAdapter
 from typer.testing import CliRunner
 
 from truewire.cli import app
@@ -215,6 +218,16 @@ def write_project(tmp_path: Path, runner: CliRunner, schemas: dict[str, dict]) -
   return project
 
 
+
+def import_generated(path: Path):
+  """Import one generated module by path, so its annotations are evaluated for real."""
+  spec = importlib.util.spec_from_file_location(f'generated_{path.stem}_{id(path)}', path)
+  assert spec is not None and spec.loader is not None
+  module = importlib.util.module_from_spec(spec)
+  sys.modules[spec.name] = module
+  spec.loader.exec_module(module)
+  return module
+
 class TestEndToEnd:
   """`truewire check` must never pass a spec `truewire generate python` cannot render."""
 
@@ -238,6 +251,17 @@ class TestEndToEnd:
     source = (project / 'src' / 'demo' / 'schemas.py').read_text()
     assert source.index('class Branch') < source.index('class Node')
     assert "node: NotRequired['Node']" in source
+
+  def test_generated_recursion_validates_at_runtime(self, tmp_path: Path, monkeypatch):
+    """A quoted forward reference has to resolve when the client actually validates a
+    response, not just satisfy a type checker reading the source."""
+    runner = CliRunner()
+    monkeypatch.chdir(tmp_path)
+    project = write_project(tmp_path, runner, MUTUAL)
+    assert runner.invoke(app, ['generate', 'python', '--project', str(project)]).exit_code == 0
+    module = import_generated(project / 'src' / 'demo' / 'schemas.py')
+    payload = {'id': 'a', 'branch': {'label': 'left', 'node': {'id': 'b'}}}
+    assert TypeAdapter(module.Node).validate_python(payload) == payload
 
   def test_inline_cycle_fails_check(self, tmp_path: Path, monkeypatch):
     runner = CliRunner()

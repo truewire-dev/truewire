@@ -14,6 +14,12 @@ recording passes `truewire check`.
 
 ## What `truewire init` gave you
 
+`init --template <name>` picks the skeleton: `bearer` (the default, below), `hmac` (API key
+plus an HMAC-SHA256 signature in headers), `jsonrpc` (JSON-RPC 2.0 over one POST URL,
+`result` unwrapped, `error` mapped) or `ws` (the bearer transport plus a
+`truewire_core.ws` streams client wired to a `streams/` group). Start from the one nearest
+the API; `docs/cores.md` in the toolchain repository says what each does and what to change.
+
 `core/__init__.py`: `Transport` (base URL, `HttpClient`, optional token, `headers()`,
 `send()`), `ClientBase` (the root client's `new(...)`, named after `[python].name`, and
 the context manager) and `Endpoint` (the base every generated class subclasses;

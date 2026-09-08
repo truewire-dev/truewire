@@ -1,0 +1,4 @@
+[
+  {"type": "update", "channel": "trades", "id": "ACME-1", "data": {"price": "100.5", "size": "0.25"}},
+  {"type": "update", "channel": "trades", "id": "ACME-1", "data": {"price": "100.75", "size": "1"}}
+]

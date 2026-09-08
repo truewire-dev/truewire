@@ -14,7 +14,7 @@ We start from the wire, not the document, because the wire is what your code act
 
 ```bash
 pip install truewire
-truewire init petstore
+truewire init petstore                # --template hmac | jsonrpc | ws for a signed, JSON-RPC or WebSocket core
 cd petstore
 truewire import openapi spec.yaml     # optional: seed spec/ from an OpenAPI 3.0/3.1 document
 truewire check                        # lint the spec: titles, enums, formats, pagination, envelopes
@@ -114,6 +114,7 @@ Questions, bugs and spec corrections: open an issue, or write to hello@truewire.
 - [The plan](docs/plan.md): what a backend renders from, and its JSON shape.
 - [TypeScript](docs/typescript.md): the second backend, the core contract, and codecs.
 - [Generated code](docs/generated.md): what `truewire generate` writes, quoted from `examples/github`, and what stays hand-written.
+- [Core templates](docs/cores.md): the four cores `truewire init --template` writes (`bearer`, `hmac`, `jsonrpc`, `ws`), what each does and what to change.
 - [Architecture decisions](docs/adr/README.md): why things are the way they are.
 - [Contributing](CONTRIBUTING.md): dev setup, adding a check, adding a pagination strategy.
 

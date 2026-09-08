@@ -18,11 +18,12 @@ from typer.testing import CliRunner
 from truewire.cli import app
 from truewire.codegen.typescript import render_package, root_class_name
 from truewire.codegen.typescript.endpoint import (
-  RAW_OPTIONS, Method, Param, emit_signatures, raw_returns, read_path,
+  RAW_OPTIONS, Method, Param, channel_expr, emit_signatures, raw_returns, read_path,
 )
 from truewire.codegen.typescript.meta import meta_module, meta_type
 from truewire.codegen.typescript.names import binding, camel_case, literal, property_key, string
 from truewire.codegen.typescript.printer import BANNER, Writer, relative_specifier
+from truewire.codegen.typescript.routers import core_shapes
 from truewire.codegen.typescript.types import Module
 from truewire.plan.build import build_plan
 from truewire.plan.model import CorePlan, PackagePlan
@@ -200,7 +201,8 @@ def test_fixture_package_layout(fixture_rendered):
   assert 'types/index.ts' in files
   assert 'market/index.ts' in files and 'market/order_list.ts' in files
   assert all(content.startswith(BANNER + '\n') for content in files.values())
-  assert any('token.nfts.list' in note for note in fixture_rendered.skipped)
+  assert fixture_rendered.skipped == []
+  assert 'token/nfts/list.ts' in files and 'market/ticker_stream.ts' in files
   assert 'export class FixtureClient' in files['main.ts']
 
 
@@ -269,6 +271,40 @@ def test_emit_signatures_for_a_generator_walker_and_a_reply_less_method():
   )
 
 
+def test_stream_endpoint_subscribes_through_the_core(fixture_rendered):
+  """A `stream` endpoint is a class over `StreamEndpoint<Meta>` whose method returns the
+  core's `Subscription` of the pushed message, overloaded to `unknown` for `validate:
+  false`. The fixture's stream is direct-channel: its parameters are exactly the
+  channel's placeholders, so the module declares a `Parameters` interface with no codec,
+  fills the template itself and hands the core no parameters object, as the Python
+  backend fills the channel from its locals."""
+  files = fixture_rendered.files
+  stream = files['market/ticker_stream.ts']
+  assert 'constructor(readonly core: StreamEndpoint<DefaultMeta>) {}' in stream
+  assert 'export interface Parameters {\n  /** Trading pair. */\n  symbol: string\n}' in stream
+  assert 'Parameters: Codec' not in stream
+  raw = f'  tickerStream(parameters: Parameters, options: {RAW_OPTIONS}): Subscription<unknown>\n'
+  typed = '  tickerStream(parameters: Parameters, options?: CallOptions): Subscription<Ticker>\n'
+  assert stream.index(raw) < stream.index(typed)
+  assert 'channel: `/ticker/${parameters.symbol}`,' in stream
+  assert 'parameters: undefined,\n      parametersCodec: undefined,\n      messageCodec: Ticker,' in stream
+  assert 'meta: { public: true },' in stream
+  assert 'type StreamEndpoint, type Subscription' in stream.splitlines()[1]
+  router = files['market/index.ts']
+  assert 'tickerStream(parameters: tickerStream.Parameters, options?: CallOptions): Subscription<tickerStream.Ticker> {' in router
+  assert 'constructor(readonly core: HttpEndpoint<DefaultMeta> & StreamEndpoint<DefaultMeta>) {' in router
+
+
+def test_channel_expr():
+  """The channel a direct-channel or connect-only stream subscribes with: a template
+  literal over the parameters, or the bare value when the whole channel is one placeholder."""
+  assert channel_expr('{listenKey}', 'parameters') == 'parameters.listenKey'
+  assert channel_expr('/ticker/{symbol}', 'parameters') == '`/ticker/${parameters.symbol}`'
+  assert channel_expr('{pair}@kline_{interval}', 'p') == '`${p.pair}@kline_${p.interval}`'
+  assert channel_expr('a`b${ {x-y}', 'p') == "`a\\`b\\${ ${p['x-y']}`"
+  assert channel_expr('plain', 'p') == '`plain`'
+
+
 def test_fixture_routers_delegate_with_qualified_types(fixture_rendered):
   router = fixture_rendered.files['market/index.ts']
   assert "import * as orderList from './order_list.js'" in router
@@ -299,6 +335,85 @@ def test_github_example_output_is_what_the_backend_renders():
     assert sorted(manifest['files']) == sorted(rendered.files)
   assert rendered.skipped == []
   assert 'listCommitsPaged(request: ListCommitsPagedRequest, options?: CallOptions): PaginatedResponse<Commit, number>' in rendered.files['repos/list_commits.ts']
+
+
+def test_kraken_example_output_is_what_the_backend_renders():
+  """`examples/kraken` is the composite and stream case: every `.ts` under `src/kraken`
+  is the backend's current output, its root takes a fields object, and a composite
+  child receives the whole object while a plain child receives its declared field."""
+  root = _example('kraken')
+  project = load_project(root)
+  plan = build_plan(project)
+  rendered = render_package(plan, project)
+  package = project.typescript_package_dir
+  for path, content in rendered.files.items():
+    assert (package / path).read_text() == content, path
+  assert rendered.skipped == []
+
+  shapes = core_shapes(plan, {})
+  assert shapes[()].composite and shapes[('streams',)].composite
+  assert not shapes[('spot',)].composite and not shapes[('streams', 'market_data')].composite
+  main = rendered.files['main.ts']
+  assert (
+    'export interface KrakenCore {\n'
+    '  market_client: CommandEndpoint & StreamEndpoint\n'
+    '  private_client: CommandEndpoint & StreamEndpoint\n'
+    '  spot_client: HttpEndpoint<SpotMeta>\n'
+    '}'
+  ) in main
+  assert 'constructor(readonly core: KrakenCore) {' in main
+  assert 'this.spot = new Spot(core.spot_client)' in main
+  assert 'this.streams = new Streams(core)' in main
+  assert 'this.tradingWs = new TradingWs(core.private_client)' in main
+  streams = rendered.files['streams/index.ts']
+  assert 'export interface StreamsCore {\n  market_client: CommandEndpoint & StreamEndpoint\n  private_client: StreamEndpoint\n}' in streams
+  assert 'this.marketData = new MarketData(core.market_client)' in streams
+  assert 'this.private = new Private(core.private_client)' in streams
+  assert "export { Kraken, type KrakenCore } from './main.js'" in rendered.files['index.ts']
+  ticker = rendered.files['streams/market_data/ticker.ts']
+  assert 'ticker(parameters: Parameters, options?: CallOptions): Subscription<TickerMessage> {' in ticker
+  assert "channel: 'ticker',\n      parameters,\n      parametersCodec: Parameters,\n      messageCodec: TickerMessage,\n      meta: {}," in ticker
+  balances = rendered.files['streams/private/balances.ts']
+  assert 'balances(parameters?: Parameters, options?: CallOptions): Subscription<Payload> {' in balances
+  assert 'parameters: parameters ?? {},' in balances
+  status = rendered.files['streams/market_data/status.ts']
+  assert 'status(options?: CallOptions): Subscription<StatusMessage> {' in status
+  assert 'parameters: undefined,\n      parametersCodec: undefined,' in status
+
+
+def test_a_plain_router_over_a_composite_child_takes_the_fields_object():
+  """A router whose own core declares nothing but whose child is a composite has to carry
+  the child's fields: it takes the fields object too, its own endpoints under `client`."""
+  plan = PackagePlan.model_validate({
+    'name': 'p', 'rootClass': 'P',
+    'cores': {'root': {}, 'group': {'children': {'feed': 'socket'}}, 'plain': {}},
+    'schemas': {},
+    'routers': [
+      {'path': [], 'core': 'root', 'children': [{'name': 'ping', 'kind': 'endpoint', 'class': 'Ping'}, {'name': 'group', 'kind': 'router', 'class': 'Group'}]},
+      {'path': ['group'], 'core': 'group', 'children': [{'name': 'feed', 'kind': 'router', 'class': 'Feed'}, {'name': 'status', 'kind': 'endpoint', 'class': 'Status'}]},
+      {'path': ['group', 'feed'], 'core': 'plain', 'children': [{'name': 'ticks', 'kind': 'endpoint', 'class': 'Ticks'}]},
+    ],
+    'endpoints': [
+      {'path': ['ping'], 'kind': 'rpc', 'transports': ['http'], 'wire': {'path': '/ping', 'method': 'GET'}, 'core': 'root', 'request': {'shape': 'none'}, 'response': {}},
+      {'path': ['group', 'status'], 'kind': 'rpc', 'transports': ['http'], 'wire': {'path': '/status', 'method': 'GET'}, 'core': 'group', 'request': {'shape': 'none'}, 'response': {}},
+      {'path': ['group', 'feed', 'ticks'], 'kind': 'stream', 'transports': ['ws'], 'wire': {'channel': 'ticks'}, 'core': 'plain', 'request': {'shape': 'none'}, 'response': {}, 'stream': {}},
+    ],
+  })
+  rendered = render_package(plan)
+  assert rendered.skipped == []
+  main = rendered.files['main.ts']
+  assert 'export interface PCore {\n  client: HttpEndpoint\n  socket: StreamEndpoint\n}' in main
+  assert 'this.ping_ = new ping.Ping(core.client)' in main
+  assert 'this.group = new Group(core)' in main
+  group = rendered.files['group/index.ts']
+  assert 'export interface GroupCore {\n  client: HttpEndpoint\n  socket: StreamEndpoint\n}' in group
+  assert 'this.feed = new Feed(core.socket)' in group
+  assert 'this.status_ = new status.Status(core.client)' in group
+  assert 'constructor(readonly core: StreamEndpoint) {' in rendered.files['group/feed/index.ts']
+  ticks = rendered.files['group/feed/ticks.ts']
+  assert 'ticks(options?: CallOptions): Subscription<unknown> {' in ticks
+  assert ticks.count('ticks(options') == 1, 'no second overload when the message is unknown already'
+  assert 'messageCodec: undefined,' in ticks
 
 
 # -- the command ----------------------------------------------------------------------

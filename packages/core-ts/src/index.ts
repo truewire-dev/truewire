@@ -16,3 +16,4 @@ export type {
   Call, CallOptions, CommandCall, CommandEndpoint, HttpCall, HttpEndpoint, StreamEndpoint, SubscribeCall,
 } from './contract.js'
 export * as ws from './ws/index.js'
+export { Stream, Subscription } from './ws/streams.js'

@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- **`truewire generate typescript` renders stream endpoints.** A `kind: stream` endpoint
+  is a class over `StreamEndpoint<Meta>` whose method returns the core's
+  `Subscription<Message>` (`Subscription<unknown>` under `validate: false`), handing the
+  core what the Python backend hands `self.subscribe(...)`: the channel template with the
+  `Parameters` object and its codec, or the channel filled from the parameters for a
+  direct-channel or connect-only stream. `@truewire/core` exports `Subscription` from its
+  root for it.
+- **`truewire generate typescript` composes cores.** A router under a core declaring
+  `children` or `forward` takes a fields object, exported as the `<Class>Core` interface,
+  and hands each child its declared field, or the whole object to a composite child;
+  `params` needs no rendering, since generated code never builds a core (ADR 0011). The
+  groups this used to skip (`examples/kraken`'s `root` and `streams`) are generated. The
+  one remaining skip is the `ws` half of an `rpc` endpoint declaring both transports.
+- **`examples/kraken` generates TypeScript** beside its Python package: a hand-written
+  core in three transports (REST with HMAC-SHA512 signing and a nonce, two WebSocket v2
+  connections over `ws.StreamsRpc`), and a vitest suite against `truewire mock` mirroring
+  the Python one. CI's `examples-ts` job runs both examples through `generate typescript
+  --check`, `tsc` and `vitest`.
 - **Recursive schemas render instead of crashing.** A schema may reference itself --
   directly, through an array's `items`, or around a cycle of several schemas -- as long
   as one schema on the cycle is a record (`docs/spec/authoring.md` rule 17). Two records

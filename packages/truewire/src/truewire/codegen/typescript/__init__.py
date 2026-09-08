@@ -13,19 +13,19 @@ Layout, mirroring the Python package one file per spec node:
 - `meta.ts`: one interface per core that declares a `meta` schema.
 - `index.ts`: the package's exports.
 
-Stream endpoints (`kind: stream`) are not rendered yet; `render_package` reports them in
-`Rendered.skipped` so the CLI can say so.
+What this backend leaves out is reported in `Rendered.skipped` so the CLI can say so: an
+`rpc` endpoint declaring both `http` and `ws` transports is rendered for HTTP only.
 """
 from dataclasses import dataclass, field
 
 from truewire.plan.model import PackagePlan
 from truewire.project import Project
 
-from .endpoint import META_FILE, EndpointModule, render_endpoint
+from .endpoint import META_FILE, EndpointModule, render_endpoint, render_stream
 from .meta import meta_module
 from .names import pascal_case
 from .printer import BANNER
-from .routers import INDEX_FILE, render_index, render_router, router_file
+from .routers import INDEX_FILE, core_shapes, render_index, render_router, router_file
 from .types import Module, scope_file
 
 
@@ -34,7 +34,7 @@ class Rendered:
   files: dict[str, str] = field(default_factory=dict)
   """Package-relative POSIX path -> content, banner included."""
   skipped: list[str] = field(default_factory=list)
-  """Function paths of endpoints this backend does not emit yet, with the reason."""
+  """Function paths of endpoints this backend does not emit in full, with the reason."""
 
 
 def root_class_name(plan: PackagePlan, project: Project | None) -> str:
@@ -66,19 +66,15 @@ def render_package(plan: PackagePlan, project: Project | None = None) -> Rendere
   }
   endpoints: dict[str, EndpointModule] = {}
   for endpoint in plan.endpoints:
-    if endpoint.kind != 'rpc':
-      out.skipped.append(f'{endpoint.function}: stream endpoints are not generated for TypeScript yet')
-      continue
-    if endpoint.core in plan.cores:
-      core = plan.cores[endpoint.core]
-      if core.forward is not None or core.params is not None or core.children:
-        out.skipped.append(
-          f'{endpoint.function}: core {endpoint.core!r} declares forward/params/children, '
-          'which the TypeScript backend does not compose yet'
-        )
-        continue
     class_name = class_by_child.get(tuple(endpoint.path), pascal_case(endpoint.path[-1]))
-    rendered = render_endpoint(plan, endpoint, class_name=class_name)
+    if endpoint.kind == 'stream':
+      rendered = render_stream(plan, endpoint, class_name=class_name)
+    else:
+      if 'http' in endpoint.transports and 'ws' in endpoint.transports:
+        out.skipped.append(
+          f'{endpoint.function}: an rpc endpoint with both transports is generated for HTTP only'
+        )
+      rendered = render_endpoint(plan, endpoint, class_name=class_name)
     endpoints[endpoint.function] = rendered
     out.files[rendered.file] = rendered.source
 
@@ -86,11 +82,15 @@ def render_package(plan: PackagePlan, project: Project | None = None) -> Rendere
     tuple(router.path): (root_class if not router.path else class_by_child[tuple(router.path)])
     for router in plan.routers
   }
+  shapes = core_shapes(plan, endpoints)
   for router in plan.routers:
     out.files[router_file(router.path)] = render_router(
       plan, router, class_name=routers[tuple(router.path)], endpoints=endpoints, routers=routers,
+      shapes=shapes,
     )
-  out.files[INDEX_FILE] = render_index(plan, root_class=root_class, has_meta=meta is not None)
+  out.files[INDEX_FILE] = render_index(
+    plan, root_class=root_class, has_meta=meta is not None, root_composite=shapes[()].composite,
+  )
   return out
 
 

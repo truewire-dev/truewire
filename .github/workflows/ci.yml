@@ -54,6 +54,9 @@ jobs:
 
   examples-ts:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        example: [kraken, github]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
@@ -70,18 +73,18 @@ jobs:
           yarn install --frozen-lockfile
           yarn build
       - name: Install the example
-        working-directory: examples/github
+        working-directory: examples/${{ matrix.example }}
         run: yarn install --frozen-lockfile
       - name: Generated code is current
-        working-directory: examples/github
-        run: |
-          ../../.venv/bin/truewire generate typescript
-          git diff --exit-code -- src/github
+        # A fresh checkout has no .truewire/ manifest; --check takes the plan as the owned
+        # file list and compares each file's content with what the plan renders.
+        working-directory: examples/${{ matrix.example }}
+        run: ../../.venv/bin/truewire generate typescript --check
       - name: Type-check
-        working-directory: examples/github
+        working-directory: examples/${{ matrix.example }}
         run: yarn typecheck
       - name: Test
-        working-directory: examples/github
+        working-directory: examples/${{ matrix.example }}
         run: yarn test
 
   runtime-ts:

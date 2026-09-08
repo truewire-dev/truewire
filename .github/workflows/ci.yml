@@ -69,7 +69,9 @@ jobs:
         run: yarn install --frozen-lockfile
       - name: Generated code is current
         working-directory: examples/github
-        run: ../../.venv/bin/truewire generate typescript --check
+        run: |
+          ../../.venv/bin/truewire generate typescript
+          git diff --exit-code -- src/github
       - name: Type-check
         working-directory: examples/github
         run: yarn typecheck

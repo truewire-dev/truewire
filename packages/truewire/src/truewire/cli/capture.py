@@ -208,8 +208,10 @@ class EndpointRoute:
   `path` is a method name carried inside the posted frame (matched by `rpc_method` at
   `selector`, every such call going to the one base URL with no path to tell it apart).
   """
-  method: str
-  """The declared HTTP method, upper-cased."""
+  method: str | None
+  """The declared HTTP method, upper-cased, or `None` where the endpoint declares none --
+  an HTTP-transported JSON-RPC API that is uniformly POST leaves it to the core (ADR 0006),
+  and a verb the spec never states cannot disqualify an exchange."""
   display: str
   """How the route reads in a report: `GET /pets/42`, or `POST pets_get` for a JSON-RPC
   method name. Built from the spec and the call's own parameters, never from the wire."""
@@ -230,18 +232,19 @@ def endpoint_route(endpoint: Endpoint, parameters: Mapping[str, Any]) -> Endpoin
     parameters: The call's API-named parameters, as `--request` gave them -- the same
       names the `path` template's `{slots}` use (authoring rule 0).
   """
-  method = (endpoint.method or 'GET').upper()
+  method = endpoint.method.upper() if endpoint.method else None
   template = endpoint.path or '/'
+  verb = method or 'any method'
   if not template.startswith('/'):
     # `path` is a JSON-RPC method name, not a URL path -- the same reading
     # `truewire.mock` makes of an endpoint whose path does not start with `/`.
     return EndpointRoute(
-      method=method, display=f'{method} {template} (JSON-RPC method)', pattern=None,
+      method=method, display=f'{verb} {template} (JSON-RPC method)', pattern=None,
       rpc_method=template, selector=rpc_selector(endpoint.envelope),
     )
   filled = filled_path(template, parameters)
   return EndpointRoute(
-    method=method, display=f'{method} {filled}', pattern=path_pattern(filled),
+    method=method, display=f'{verb} {filled}', pattern=path_pattern(filled),
     rpc_method=None, selector=rpc_selector(endpoint.envelope),
   )
 
@@ -316,18 +319,17 @@ def matches_route(exchange: 'Exchange', route: EndpointRoute) -> bool:
     exchange: One recorded request/response pair.
     route: The endpoint's declared route.
   """
-  if exchange.request.method.upper() != route.method:
+  if route.method is not None and exchange.request.method.upper() != route.method:
     return False
-  if route.rpc_method is not None:
-    try:
-      frame = json.loads(exchange.request.content)
-    except (ValueError, UnicodeDecodeError, RuntimeError):
-      # Not a JSON frame, or a streaming request body that was never read back
-      # (`httpx.RequestNotRead`, a `RuntimeError`): either way this is not the frame.
-      return False
-    return isinstance(frame, dict) and read_dotted_path(frame, route.selector) == route.rpc_method
-  assert route.pattern is not None
-  return route.pattern.search(unquote(exchange.request.url.path)) is not None
+  if route.pattern is not None:
+    return route.pattern.search(unquote(exchange.request.url.path)) is not None
+  try:
+    frame = json.loads(exchange.request.content)
+  except (ValueError, UnicodeDecodeError, RuntimeError):
+    # Not a JSON frame, or a streaming request body that was never read back
+    # (`httpx.RequestNotRead`, a `RuntimeError`): either way this is not the frame.
+    return False
+  return isinstance(frame, dict) and read_dotted_path(frame, route.selector) == route.rpc_method
 
 
 def exchange_lines(exchanges: 'Sequence[Exchange]') -> list[str]:

@@ -345,3 +345,14 @@ def test_an_unfilled_path_slot_matches_one_segment():
   assert pattern.search('/v1/pets/42/toys')
   assert not pattern.search('/v1/pets/42/7/toys')
   assert filled_path('/pets/{petId}', {'petId': 42}) == '/pets/42'
+
+
+def test_an_undeclared_method_does_not_disqualify_an_exchange():
+  """`spec.method` is optional -- a uniformly-POST JSON-RPC API leaves the verb to its core
+  (ADR 0006) -- and a verb the endpoint never states cannot decide a match."""
+  route = EndpointRoute(
+    method=None, display='any method /pets/42', pattern=path_pattern('/pets/42'),
+    rpc_method=None, selector='method',
+  )
+  assert matches_route(exchange('GET', 'https://petstore.example/v1/pets/42'), route)
+  assert matches_route(exchange('POST', 'https://petstore.example/v1/pets/42'), route)

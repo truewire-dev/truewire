@@ -89,3 +89,5 @@ What to change:
 ## Proving a core
 
 The core skill's gate applies to every template: `truewire generate python` (with a `pyrightconfig.json` in the project so it type-checks), then one `truewire capture` of the simplest public endpoint whose recording passes `truewire check`. The toolchain's own tests run every template through `init`, `check` and `generate` with pyright, call `bearer`, `hmac` and `jsonrpc` cores through `truewire mock`, and drive the `ws` core through a subscribe, push and unsubscribe round trip (`packages/truewire/test/test_init_templates.py`).
+
+A core that sends more than one request per call -- minting a token, refreshing an expired one, fetching a ticket, retrying after a 401 -- needs nothing special to capture: `truewire capture` records the exchange whose method and path (or JSON-RPC method name) the endpoint declares, names the ones it skipped, and refuses rather than record anything when none of them matches. A token endpoint's own response therefore never lands in another endpoint's example (authoring rule 6).

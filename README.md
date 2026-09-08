@@ -15,7 +15,7 @@ We start from the wire, not the document, because the wire is what your code act
 ```bash
 pip install truewire
 truewire init petstore                # --template hmac | jsonrpc | ws for a signed, JSON-RPC or WebSocket core
-cd petstore
+cd petstore                           # or `truewire init .` inside an existing empty directory
 truewire import openapi spec.yaml     # optional: seed spec/ from an OpenAPI 3.0/3.1 document
 truewire check                        # lint the spec: titles, enums, formats, pagination, envelopes
 truewire generate python              # write the typed client into src/petstore

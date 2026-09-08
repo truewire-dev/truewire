@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 
 import typer
 from typing_extensions import Annotated
@@ -170,6 +171,63 @@ def check_generated_manifest(
   return issues
 
 
+def expected_generated_content(
+  root: Path, output_root: Path, planned: Mapping[Path, str], *, config: Path,
+) -> dict[Path, str]:
+  """Render the plan the way `generate` writes it -- banner prepended, Python formatted
+  with the project's Ruff config -- into a scratch tree, and return each file's content.
+
+  `--check` compares this against the tree. The same `format_generated_files` runs over
+  the scratch copy, so a formatting difference never masquerades as stale output, and a
+  project generating without Ruff compares against what it would have written.
+  """
+  with tempfile.TemporaryDirectory(prefix='truewire-check-') as scratch:
+    scratch_root = Path(scratch)
+    scratch_output = scratch_root / output_root.relative_to(root)
+    write_planned_files(scratch_output, planned)
+    format_generated_files(scratch_root, scratch_output, planned, config=config)
+    return {relative: (scratch_output / relative).read_text() for relative in planned}
+
+
+def check_generated_output(
+  root: Path, output_root: Path, manifest_path: Path, expected: Mapping[Path, str], *,
+  client: str,
+):
+  """`--check`: compare the manifest and the tree against the plan, writing nothing.
+
+  Reports a planned file the manifest does not record, an owned file the plan no longer
+  emits, an owned file missing from the tree, and an owned file whose content is not what
+  the plan renders (`expected`, by relative path). Without a manifest -- a fresh clone,
+  `.truewire/` being gitignored -- the plan is the owned file list: it already names
+  every file `generate` would write, so the check is the same, less the one difference
+  only a manifest can show (a file an earlier plan owned and this one does not; the next
+  `generate` deletes it).
+
+  Raises:
+    CodegenError: The manifest is malformed.
+    typer.Exit: With code 1 and the list of differences on stderr.
+  """
+  planned = set(expected)
+  from_manifest = manifest_path.exists()
+  owned = load_generated_manifest(manifest_path) if from_manifest else planned
+  issues = check_generated_manifest(output_root, owned, planned)
+  for relative in sorted(planned):
+    destination = generated_destination(output_root, relative)
+    if destination.is_file() and destination.read_text() != expected[relative]:
+      issues.append(f'out of date: {relative}')
+  if issues:
+    typer.echo(f'Generated files for {client} differ from the plan:', err=True)
+    for issue in issues:
+      typer.echo(f'- {issue}', err=True)
+    raise typer.Exit(code=1)
+  typer.echo(f'Generated files match the plan for {client} ({len(planned)} files).')
+  if not from_manifest:
+    typer.echo(
+      f'No manifest at {manifest_path.relative_to(root)}; the plan stood in for it, so a '
+      f'file an earlier plan owned could not be checked.'
+    )
+
+
 def add_planned_file(planned: dict[Path, str], *, path: str, content: str):
   """Add one generated file to the plan, rejecting path collisions."""
   relative = generated_path(path)
@@ -261,7 +319,7 @@ def generate_typescript(
 
   Raises:
     CodegenError: The project declares no `[typescript]` section, or the manifest is
-      missing where `--delete`/`--check` need it, or the plan cannot be built.
+      missing where `--delete` needs it, or the plan cannot be built.
   """
   from truewire.codegen.typescript import render_package
   from truewire.plan.build import build_plan
@@ -305,22 +363,8 @@ def generate_typescript(
     typer.echo(f'skipped {note}', err=True)
 
   if check:
-    if not manifest_path.exists():
-      raise CodegenError(
-        f'Cannot check generated files: missing manifest {manifest_path.relative_to(root)}'
-      )
-    owned = load_generated_manifest(manifest_path)
-    issues = check_generated_manifest(output_root, owned, set(planned))
-    for relative in sorted(planned):
-      destination = generated_destination(output_root, relative)
-      if destination.is_file() and destination.read_text() != planned[relative]:
-        issues.append(f'out of date: {relative}')
-    if issues:
-      typer.echo(f'Codegen manifest mismatch for {client}:', err=True)
-      for issue in issues:
-        typer.echo(f'- {issue}', err=True)
-      raise typer.Exit(code=1)
-    typer.echo(f'Codegen manifest matches {client} ({len(planned)} files).')
+    # No banner and no formatter on this side: the tree holds the plan verbatim.
+    check_generated_output(root, output_root, manifest_path, planned, client=client)
     return
 
   bootstrapping = not manifest_path.is_file()
@@ -347,7 +391,7 @@ def generate(
   ] = False,
   check: Annotated[
     bool,
-    typer.Option('--check', help='Check the manifest against the current output plan.'),
+    typer.Option('--check', help='Check the manifest and every owned file\'s content against the current output plan.'),
   ] = False,
 ):
   """Generate the project's package from its spec, for the given language.
@@ -357,7 +401,7 @@ def generate(
     project: Project directory (holding `truewire.toml`); the nearest one by default.
     verbose: Repeat for more detail: `-v` logs per-stage progress, `-vv` logs every file written.
     delete: Delete manifest-owned files without loading the backend or spec.
-    check: Verify manifest ownership and file existence without writing.
+    check: Verify manifest ownership, file existence and file content without writing.
   """
   from truewire.generation.types import ExternalReference
 
@@ -848,18 +892,9 @@ def generate(
     progress_finish()
 
     if check:
-      if not manifest_path.exists():
-        raise CodegenError(
-          f'Cannot check generated files: missing manifest {manifest_path.relative_to(root)}'
-        )
-      owned = load_generated_manifest(manifest_path)
-      issues = check_generated_manifest(output_root, owned, set(planned))
-      if issues:
-        typer.echo(f'Codegen manifest mismatch for {client}:', err=True)
-        for issue in issues:
-          typer.echo(f'- {issue}', err=True)
-        raise typer.Exit(code=1)
-      typer.echo(f'Codegen manifest matches {client} ({len(planned)} files).')
+      log(f'[{client}] rendering the expected output')
+      expected = expected_generated_content(root, output_root, planned, config=loaded.ruff_config)
+      check_generated_output(root, output_root, manifest_path, expected, client=client)
       return
 
     bootstrapping = not manifest_path.is_file()

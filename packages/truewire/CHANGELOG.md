@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+- **`truewire capture` drops the stale `unverified` block.** The pair it writes is the
+  evidence the declaration said was missing (ADR 0001), and leaving the block in place
+  failed `truewire examples` on the next run. `capture` now removes it from
+  `endpoint.json`, every other key kept in place, and says so. The `examples` failure for
+  a stale declaration names the endpoints in the message itself instead of asking for
+  `--verbose`.
+- **`truewire generate python --check` compares content.** It reported only manifest
+  ownership and file existence, so an owned file whose body was stale passed; it now
+  renders the plan the way `generate` writes it (banner, Ruff formatting) and lists every
+  owned file that differs as `out of date`, exiting non-zero, the way the TypeScript path
+  already did.
+- **`truewire init .`** writes the project into the current directory and names the package
+  after it (`open-meteo` -> `open_meteo`); so does `truewire init <name>` run inside an
+  empty directory named `<name>` (a `.git` or `.venv` there does not count). Anywhere else
+  `truewire init <name>` still creates `./<name>`. An existing `.gitignore` gains the
+  lines `init` writes instead of being replaced.
+- **`generate --check` works without a manifest.** `.truewire/` is gitignored, so on a
+  fresh clone `--check` failed with `missing manifest` and CI could never run it. Both
+  backends now take the plan as the owned file list when `.truewire/<language>-files.json`
+  is absent -- the plan names every file `generate` would write -- and check existence
+  and content the same way, saying that the plan stood in; the one difference only a
+  manifest can show (a file an earlier plan owned and this one does not) waits for the
+  next `generate`. CI runs `truewire generate python --check` on both examples.
+
 ## 0.6.0 (2026-09-08)
 
 - **`truewire init --template bearer|hmac|jsonrpc|ws`** (`docs/cores.md`): a hand-written

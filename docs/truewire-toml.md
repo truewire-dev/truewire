@@ -99,6 +99,12 @@ parameter of `HttpEndpoint`.
 
 `generate` writes `.truewire/<language>-files.json` (`python-files.json`,
 `typescript-files.json`), the manifest of files it owns. Files not in the manifest are
-never deleted; `generate --check` compares the plan to it (and, for TypeScript, each
-owned file's content), and `generate --delete` removes only what it owns. Add
-`.truewire/` to `.gitignore`.
+never deleted; `generate --check` compares the plan to it and each owned file's content
+to what the plan renders (formatted the way `generate` writes it), and `generate --delete`
+removes only what it owns. Add `.truewire/` to `.gitignore` (`truewire init` does): the
+manifest is local state, not source. On a checkout without it, `generate --check` takes
+the plan as the owned file list -- it names every file `generate` would write -- and
+checks existence and content the same way; the one thing it cannot see without a manifest
+is a file an earlier plan owned that this one does not, which the next `generate` deletes.
+So CI runs `truewire generate python --check` on a fresh clone with nothing committed
+under `.truewire/`.

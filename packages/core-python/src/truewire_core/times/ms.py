@@ -35,13 +35,18 @@ class EpochConverter(TimeConverter[int]):
     """Create a converter for nanosecond epoch timestamps."""
     return cls(unit=1e9, tz=tz)
 
-  def parse(self, value: int | str) -> datetime:
-    """Parse an epoch timestamp into a `datetime`.
+  def parse(self, value: int | str | datetime) -> datetime:
+    """Parse an epoch timestamp into a `datetime`, or pass an already-parsed `datetime`
+    through unchanged (its `tzinfo` as given, not moved to `tz`).
 
     Args:
       value: The epoch timestamp. Some APIs serialize it as a numeral string rather
         than a bare number (`"timestamp": "1786302600000"`) -- coerced with `int()` first.
+        A `datetime` is returned as is, so a request that already holds one validates
+        through `BeforeValidator(parse)`.
     """
+    if isinstance(value, datetime):
+      return value
     micros = int(value) * 1_000_000 // int(self.unit)
     aware = EPOCH + timedelta(microseconds=micros)
     if self.tz is None:

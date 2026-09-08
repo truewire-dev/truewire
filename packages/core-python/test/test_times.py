@@ -7,6 +7,7 @@ from no fractional digits to nanoseconds (kraken's `post_trade`: `...123456789Z`
 3.11 on, one minor version above this package's declared floor (`>=3.10`).
 """
 from datetime import date, datetime, timezone, timedelta
+import pytest
 from pydantic import TypeAdapter
 
 from truewire_core.times.date import DateConverter
@@ -179,3 +180,75 @@ class TestEpochConverterPydantic:
     dt = adapter.validate_python(1717072496123)
     assert dt == datetime(2024, 5, 30, 12, 34, 56, 123000, tzinfo=timezone.utc)
     assert adapter.dump_json(dt) == b'1717072496123'
+
+
+class TestParseAcceptsAlreadyParsedValues:
+  """A request `TypedDict` holds the real `date`/`datetime` its generated signature asks
+  for, and `BeforeValidator(parse)` runs on it all the same -- so every converter's `parse`
+  returns a parsed value unchanged instead of failing on `strptime`/`endswith`/`int()`."""
+
+  def test_date_converter_returns_a_date_unchanged(self):
+    d = date(2024, 1, 1)
+    assert DateConverter().parse(d) is d
+    assert DateConverter(pattern='%Y%m%d').parse(d) is d
+
+  def test_date_converter_takes_a_midnight_datetime_as_its_date(self):
+    """`datetime` subclasses `date`; at midnight dropping the time loses nothing."""
+    assert DateConverter().parse(datetime(2024, 1, 1)) == date(2024, 1, 1)
+    assert DateConverter().parse(datetime(2024, 1, 1, tzinfo=timezone.utc)) == date(2024, 1, 1)
+
+  def test_date_converter_refuses_a_datetime_with_a_time_of_day(self):
+    """Truncating `2024-01-01T13:00` to a date silently would be a lie about the input."""
+    with pytest.raises(ValueError, match='no time of day'):
+      DateConverter().parse(datetime(2024, 1, 1, 13, 0))
+
+  def test_iso_converter_returns_a_datetime_unchanged(self):
+    aware = datetime(2024, 5, 30, 12, 34, 56, tzinfo=timezone.utc)
+    naive = datetime(2024, 5, 30, 12, 34, 56)
+    assert IsoConverter().parse(aware) is aware
+    assert IsoConverter().parse(naive) is naive
+
+  def test_epoch_converter_returns_a_datetime_unchanged(self):
+    """Not moved to the converter's `tz` either: the caller's value is the caller's."""
+    other = datetime(2024, 5, 30, 14, 34, 56, tzinfo=timezone(timedelta(hours=2)))
+    assert EpochConverter.milliseconds(tz=timezone.utc).parse(other) is other
+    assert EpochConverter.seconds().parse(other) is other
+
+  def test_dump_is_unchanged(self):
+    """Passing parsed values through `parse` changes nothing on the way out."""
+    assert DateConverter().dump(date(2024, 1, 1)) == '2024-01-01'
+    assert IsoConverter().dump(datetime(2024, 5, 30, 12, 34, 56)) == '2024-05-30T12:34:56Z'
+    dt = datetime(2024, 5, 30, 12, 34, 56, 123000, tzinfo=timezone.utc)
+    assert EpochConverter.milliseconds(tz=timezone.utc).dump(dt) == 1717072496123
+
+  def test_a_request_typed_dict_holding_parsed_values_validates_and_dumps(self):
+    """The Open-Meteo shape: `TypeAdapter(Request).validate_python(request)` before the
+    query is rendered, with `start_date` already a `date`. Serializing still renders the
+    wire form, and a wire string still parses."""
+    from typing_extensions import TypedDict
+    from truewire_core.types import DateIso, TimestampIso, TimestampMillis
+
+    class Request(TypedDict):
+      start_date: DateIso
+      since: TimestampIso
+      at: TimestampMillis
+
+    adapter = TypeAdapter(Request)
+    request = {
+      'start_date': date(2024, 1, 1),
+      'since': datetime(2024, 5, 30, 12, 34, 56, tzinfo=timezone.utc),
+      'at': datetime(2024, 5, 30, 12, 34, 56, 123000, tzinfo=timezone.utc),
+    }
+    assert adapter.validate_python(request) == request
+    assert adapter.dump_python(request, mode='json') == {
+      'start_date': '2024-01-01', 'since': '2024-05-30T12:34:56Z', 'at': 1717072496123,
+    }
+    assert adapter.validate_python({
+      'start_date': '2024-01-01', 'since': '2024-05-30T12:34:56Z', 'at': 1717072496123,
+    }) == request
+
+  def test_a_datetime_with_a_time_of_day_is_a_validation_error_on_a_date_field(self):
+    from pydantic import ValidationError
+    from truewire_core.types import DateIso
+    with pytest.raises(ValidationError, match='no time of day'):
+      TypeAdapter(DateIso).validate_python(datetime(2024, 1, 1, 13, 0))

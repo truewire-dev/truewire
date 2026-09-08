@@ -319,6 +319,16 @@ def test_generate_typescript_writes_checks_and_deletes(tmp_path: Path):
 
   check = runner.invoke(app, ['generate', 'typescript', '--project', str(root), '--check'])
   assert check.exit_code == 0, check.output
+  assert 'No manifest' not in check.output
+
+  # A fresh clone: no manifest, and the plan stands in for it.
+  manifest.unlink()
+  unmanifested = runner.invoke(app, ['generate', 'typescript', '--project', str(root), '--check'])
+  assert unmanifested.exit_code == 0, unmanifested.output
+  assert 'No manifest at .truewire/typescript-files.json; the plan stood in for it' in unmanifested.output
+  assert not manifest.exists()
+  assert runner.invoke(app, ['generate', 'typescript', '--project', str(root)]).exit_code == 0
+  assert manifest.is_file()
 
   (package / 'main.ts').write_text('// edited\n')
   drifted = runner.invoke(app, ['generate', 'typescript', '--project', str(root), '--check'])

@@ -84,3 +84,47 @@ def test_capture_rejects_an_unknown_function(tmp_path: Path, monkeypatch):
   result = CliRunner().invoke(app, ['capture', 'pets.no_such', '--project', str(project)])
   assert result.exit_code == 1
   assert 'no endpoint with function' in result.output
+
+
+def test_capture_drops_the_stale_unverified_declaration(tmp_path: Path, monkeypatch):
+  """The pair `capture` writes is the evidence `unverified` said was missing, so the block
+  goes with it; left behind it failed `truewire examples` unconditionally. Every other
+  key keeps its place."""
+  project = quickstart_project(tmp_path, monkeypatch)
+  endpoint_file = project / 'spec' / 'endpoints' / 'pets' / 'get_pet' / 'endpoint.json'
+  items = list(json.loads(endpoint_file.read_text()).items())
+  keys = [key for key, _ in items]
+  items.insert(1, ('unverified', {'reason': 'not_captured', 'detail': 'imported'}))
+  endpoint_file.write_text(json.dumps(dict(items), indent=2) + '\n')
+
+  with running_mock_servers(project) as servers:
+    result = CliRunner().invoke(app, [
+      'capture', 'pets.get_pet', '--request', '{"petId": 42}', '--id', 'captured',
+      '--new', f'base_url={servers.http_base_url}', '--project', str(project),
+    ])
+  assert result.exit_code == 0, result.output
+  assert 'removed the stale `unverified` declaration from spec/endpoints/pets/get_pet/endpoint.json' in result.output
+  assert 'Result: OK' in result.output
+  rewritten = json.loads(endpoint_file.read_text())
+  assert 'unverified' not in rewritten
+  assert list(rewritten) == keys
+  assert endpoint_file.read_text().startswith('{\n  "')
+  assert endpoint_file.read_text().endswith('}\n')
+
+  coverage = CliRunner().invoke(app, ['examples', '--project', str(project)])
+  assert coverage.exit_code == 0, coverage.output
+
+
+def test_capture_leaves_an_endpoint_without_unverified_alone(tmp_path: Path, monkeypatch):
+  project = quickstart_project(tmp_path, monkeypatch)
+  endpoint_file = project / 'spec' / 'endpoints' / 'pets' / 'get_pet' / 'endpoint.json'
+  before = endpoint_file.read_bytes()
+
+  with running_mock_servers(project) as servers:
+    result = CliRunner().invoke(app, [
+      'capture', 'pets.get_pet', '--request', '{"petId": 42}', '--id', 'captured',
+      '--new', f'base_url={servers.http_base_url}', '--project', str(project), '--no-check',
+    ])
+  assert result.exit_code == 0, result.output
+  assert 'unverified' not in result.output
+  assert endpoint_file.read_bytes() == before

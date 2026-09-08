@@ -118,10 +118,29 @@ def capture(
   typer.echo(f'{function}[{example_id}]: HTTP {status}, {len(exchange.response.content)} bytes')
   typer.echo(f'  {relative(request_file, loaded.root)}')
   typer.echo(f'  {relative(response_file, loaded.root)}')
+  if drop_unverified(record.path):
+    # The pair just written is the evidence `unverified` said was missing (ADR 0001);
+    # left in place it would fail `truewire examples` on the next run.
+    typer.echo(f'  removed the stale `unverified` declaration from {relative(record.path, loaded.root)}')
 
   if check:
     from .check import check as run_check
     run_check(project=str(loaded.root), path=str(record.path.parent), verbose=False)
+
+
+def drop_unverified(endpoint_file: Path) -> bool:
+  """Remove the `unverified` block from one `endpoint.json`, keeping every other key in
+  its place and the file in the two-space form the other writers use (`migrate`).
+
+  Returns:
+    Whether the file declared one.
+  """
+  data = json.loads(endpoint_file.read_text())
+  if not isinstance(data, dict) or 'unverified' not in data:
+    return False
+  del data['unverified']
+  endpoint_file.write_text(json.dumps(data, indent=2, ensure_ascii=False) + '\n')
+  return True
 
 
 def scrub_keys(value, keys: set[str]):

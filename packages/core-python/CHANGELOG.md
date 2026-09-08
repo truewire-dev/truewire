@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- `truewire_core.times`: every converter's `parse` returns an already-parsed value
+  unchanged -- a `date` to `DateConverter`, a `datetime` to `IsoConverter` and
+  `EpochConverter` -- so a request `TypedDict` holding the real `date`/`datetime` its
+  generated signature asks for validates through `BeforeValidator(parse)` instead of
+  failing in `strptime`/`endswith`/`int()`. `DateConverter` takes a `datetime` only at
+  midnight (its `date()`, nothing lost) and raises `ValueError` for any other time of day
+  rather than truncating silently, the rule pydantic applies to a `date` field. `dump` is
+  unchanged.
+
 ## 0.2.0 (2026-09-08)
 
 - `truewire_core.types`: the timestamp and date aliases generated code imports by name

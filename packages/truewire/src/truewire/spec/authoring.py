@@ -26,7 +26,7 @@ from truewire.generation.util import pascal_case
 from truewire.project import Project, resolve, spec_dir as project_spec_dir
 from .endpoint import (
   Endpoint, GrpcEndpointSpec, Pagination, PaginationParameter, RpcEndpointSpec,
-  StreamEndpointSpec, last_row_field, path_segments,
+  StreamEndpointSpec, directory_function, last_row_field, path_segments,
 )
 from .repo import load_endpoint, load_shared_schemas
 from .request import PLACEHOLDER
@@ -1828,7 +1828,11 @@ def function_tree(client_root: Path | Project) -> tuple[set[tuple[str, ...]], se
 
   Read through `Endpoint.resolved_function` rather than off the directory names, so a
   project that still authors `function` explicitly is judged on the tree it actually
-  generates -- the same source `report_authoring` names its own findings by.
+  generates -- the same source `report_authoring` names its own findings by. An
+  `endpoint.json` too malformed to load falls back to its directory position, so that a
+  caller reading the tree is never the first thing to raise on a broken file: whoever
+  validates that endpoint reports it, the same way `check_schema_cycles` leaves an
+  unparseable schema to whoever loads it.
 
   Args:
     client_root: Project (or project root).
@@ -1837,8 +1841,15 @@ def function_tree(client_root: Path | Project) -> tuple[set[tuple[str, ...]], se
   endpoints_root = spec_root / 'endpoints'
   if not endpoints_root.is_dir():
     return {()}, set()
+
+  def function(path: Path) -> str:
+    try:
+      return load_endpoint(path).resolved_function(path, spec_root)
+    except Exception:
+      return directory_function(path, spec_root)
+
   leaves = {
-    tuple(load_endpoint(path).resolved_function(path, spec_root).split('.'))
+    tuple(function(path).split('.'))
     for path in sorted(endpoints_root.rglob('endpoint.json'))
   }
   nodes: set[tuple[str, ...]] = {()}

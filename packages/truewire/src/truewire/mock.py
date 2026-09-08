@@ -30,6 +30,7 @@ from .spec import (
   RpcEnvelopeSpec,
   StreamEnvelopeSpec,
   read_dotted_path,
+  rpc_selector,
   write_dotted_path,
 )
 from .spec.request import PLACEHOLDER, split_request_by_location
@@ -333,13 +334,6 @@ def _flat_body_parameter_names(endpoint: SpecHttpExample) -> frozenset[str]:
   return frozenset(schema.properties.keys())
 
 
-def _selector_key(envelope: EnvelopeSpec | None) -> str:
-  """Dotted path naming an RPC-shaped frame's operation, declared or JSON-RPC's default."""
-  if isinstance(envelope, RpcEnvelopeSpec) and envelope.selector is not None:
-    return envelope.selector
-  return 'method'
-
-
 def _params_key(envelope: EnvelopeSpec | None) -> str:
   """Dotted path naming an RPC-shaped frame's arguments, declared or JSON-RPC's default."""
   if isinstance(envelope, RpcEnvelopeSpec) and envelope.params is not None:
@@ -506,7 +500,7 @@ def _request_match(
     `parameters`-recorded example claims either way.
   """
   if example.rpc_method is not None:
-    selector = _selector_key(example.envelope)
+    selector = rpc_selector(example.envelope)
     params = _params_key(example.envelope)
     actual_params = read_dotted_path(body, params) if isinstance(body, dict) else None
     expected_params = example.expected_body
@@ -844,7 +838,7 @@ class MockRegistry:
         route_candidates = [
           example
           for example in rpc_candidates
-          if read_dotted_path(body, _selector_key(example.envelope)) == example.rpc_method
+          if read_dotted_path(body, rpc_selector(example.envelope)) == example.rpc_method
         ]
 
     if not route_candidates:
@@ -1232,7 +1226,7 @@ class WsMockRegistry:
       example
       for example in self.examples
       if example.rpc_method is not None
-      and read_dotted_path(message, _selector_key(example.envelope))
+      and read_dotted_path(message, rpc_selector(example.envelope))
       == example.rpc_method
     ]
     if not candidates:
@@ -1240,7 +1234,7 @@ class WsMockRegistry:
 
     passing = []
     for example in candidates:
-      selector = _selector_key(example.envelope)
+      selector = rpc_selector(example.envelope)
       params = _params_key(example.envelope)
       # A genuine zero-arg command records no `payload` at all -- there is nothing to
       # compare against but the method name itself, so the expected frame is synthesized

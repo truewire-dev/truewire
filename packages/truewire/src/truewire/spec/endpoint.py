@@ -893,6 +893,21 @@ written in `endpoint.json`; `Endpoint.tag_envelope_kind` derives it from the sib
 """
 
 
+def rpc_selector(envelope: 'EnvelopeSpec | None') -> str:
+  """Dotted path naming an RPC-shaped frame's operation, declared or JSON-RPC's default.
+
+  The one canonical rule, read by the mock server when it routes an incoming frame to the
+  example that recorded it, and by `truewire capture` when it picks the exchange belonging
+  to the endpoint being captured out of everything the core sent.
+
+  Args:
+    envelope: The endpoint's `envelope` block, or `None` when it declares none.
+  """
+  if isinstance(envelope, RpcEnvelopeSpec) and envelope.selector is not None:
+    return envelope.selector
+  return 'method'
+
+
 def envelope_spec(data: dict[str, Any], *, spec_kind: str) -> RpcEnvelopeSpec | StreamEnvelopeSpec:
   """
   Validate a raw `envelope` object against the subtype implied by the sibling `spec.kind`.

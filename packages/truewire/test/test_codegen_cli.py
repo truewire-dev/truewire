@@ -369,6 +369,58 @@ def test_check_generated_manifest_reports_plan_and_existence_differences(
   ]
 
 
+def test_check_reports_an_owned_file_whose_content_differs_from_the_plan(
+  tmp_path: Path, monkeypatch, capsys,
+):
+  """`--check` compares content, not only ownership: a stale body is `out of date`."""
+  client_root = write_backend_project(tmp_path)
+  output_root = client_root / 'pkg' / 'src' / 'venue'
+  monkeypatch.setattr(codegen_module, 'format_generated_files', lambda *a, **k: None)
+  monkeypatch.setattr(codegen_module, 'typecheck_project', lambda project: None)
+  codegen_module.generate('python', project=str(client_root), verbose=0)
+  codegen_module.generate('python', project=str(client_root), verbose=0, check=True)
+  assert 'Generated files match the plan for venue (3 files).' in capsys.readouterr().out
+
+  stale = output_root / 'market' / 'time.py'
+  stale.write_text(stale.read_text() + '\nHAND_EDIT = True\n')
+  with pytest.raises(codegen_module.typer.Exit) as raised:
+    codegen_module.generate('python', project=str(client_root), verbose=0, check=True)
+
+  assert raised.value.exit_code == 1
+  err = capsys.readouterr().err
+  assert 'Generated files for venue differ from the plan:' in err
+  assert '- out of date: market/time.py' in err
+  assert 'main.py' not in err
+  assert stale.read_text().endswith('HAND_EDIT = True\n')  # check never writes
+
+
+def test_check_renders_the_plan_the_way_generate_writes_it(tmp_path: Path, monkeypatch):
+  """With the real formatter: what `generate` wrote (banner, Ruff-formatted) is exactly
+  what `--check` expects, so a clean tree passes and only a hand edit is reported."""
+  from typer.testing import CliRunner
+  from truewire.cli import app
+  from test_init import _seed_endpoint
+
+  runner = CliRunner()
+  monkeypatch.chdir(tmp_path)
+  assert runner.invoke(app, ['init', 'demo']).exit_code == 0
+  project = tmp_path / 'demo'
+  _seed_endpoint(project)
+  assert runner.invoke(app, ['generate', 'python', '--project', str(project)]).exit_code == 0
+  module = project / 'src' / 'demo' / 'pets' / 'get.py'
+  assert module.read_text().startswith(codegen_module.GENERATED_BANNER)
+
+  checked = runner.invoke(app, ['generate', 'python', '--check', '--project', str(project)])
+  assert checked.exit_code == 0, checked.output
+  assert 'Generated files match the plan for demo' in checked.output
+
+  module.write_text(module.read_text().replace('Get a pet.', 'Get a cat.'))
+  checked = runner.invoke(app, ['generate', 'python', '--check', '--project', str(project)])
+  assert checked.exit_code == 1
+  assert '- out of date: pets/get.py' in checked.output
+  assert 'main.py' not in checked.output
+
+
 def test_delete_and_check_are_mutually_exclusive():
   """The two non-default modes cannot describe one invocation together."""
   with pytest.raises(codegen_module.typer.Exit) as raised:
@@ -377,13 +429,9 @@ def test_delete_and_check_are_mutually_exclusive():
   assert raised.value.exit_code == 1
 
 
-def test_codegen_manifest_covers_every_output_and_drives_the_next_cleanup(
-  tmp_path: Path,
-  monkeypatch,
-):
-  """A real CLI run bootstraps ownership, preserves manual code, then removes owned stale code."""
+def write_backend_project(tmp_path: Path) -> Path:
+  """A one-endpoint project generating through a per-project backend module; returns its root."""
   client_root = tmp_path / 'venue'
-  root = client_root
   output_root = client_root / 'pkg' / 'src' / 'venue'
   endpoint_root = client_root / 'spec' / 'endpoints' / 'market' / 'time'
   endpoint_root.mkdir(parents=True)
@@ -427,15 +475,30 @@ generator = Backend()
       }
     )
   )
+  return client_root
+
+
+def test_codegen_manifest_covers_every_output_and_drives_the_next_cleanup(
+  tmp_path: Path,
+  monkeypatch,
+):
+  """A real CLI run bootstraps ownership, preserves manual code, then removes owned stale code."""
+  client_root = write_backend_project(tmp_path)
+  root = client_root
+  output_root = client_root / 'pkg' / 'src' / 'venue'
   handwritten = output_root / 'market' / 'manual.py'
   handwritten.parent.mkdir(parents=True)
   handwritten_bytes = b'manual\r\n'
   handwritten.write_bytes(handwritten_bytes)
   finalizers: list[str] = []
+  # `--check` formats its scratch render of the plan, never the project tree: the stub
+  # tells the two apart by where it was asked to run.
   monkeypatch.setattr(
     codegen_module,
     'format_generated_files',
-    lambda root, output_root, files, config: finalizers.append('ruff'),
+    lambda root, output_root, files, config: finalizers.append(
+      'ruff' if root == client_root else 'ruff(scratch)'
+    ),
   )
   monkeypatch.setattr(
     codegen_module,
@@ -466,13 +529,14 @@ generator = Backend()
     codegen_module.generate('python', project=str(client_root), verbose=0, check=True)
 
   assert raised.value.exit_code == 1
-  assert finalizers == ['ruff', 'pyright']
+  assert finalizers == ['ruff', 'pyright', 'ruff(scratch)']
   assert stale.read_text() == 'stale\n'
   assert manifest.read_bytes() == mismatched_manifest
 
   codegen_module.generate('python', project=str(client_root), verbose=0)
 
-  assert finalizers == ['ruff', 'pyright', 'ruff', 'pyright']
+  assert finalizers == ['ruff', 'pyright', 'ruff(scratch)', 'ruff', 'pyright']
+  finalizers.clear()
   assert not stale.exists()
   assert handwritten.read_bytes() == handwritten_bytes
 
@@ -482,7 +546,7 @@ generator = Backend()
 
   codegen_module.generate('python', project=str(client_root), verbose=0, check=True)
 
-  assert finalizers == ['ruff', 'pyright', 'ruff', 'pyright']
+  assert finalizers == ['ruff(scratch)']
   assert manifest.read_bytes() == manifest_bytes
   assert {
     path: (output_root / path).read_bytes() for path in generated
@@ -494,7 +558,7 @@ generator = Backend()
   (client_root / 'backend.py').unlink()
   codegen_module.generate('python', project=str(client_root), verbose=0, delete=True)
 
-  assert finalizers == ['ruff', 'pyright', 'ruff', 'pyright']
+  assert finalizers == ['ruff(scratch)']
   assert not manifest.exists()
   assert all(not (output_root / path).exists() for path in generated)
   assert handwritten.read_bytes() == handwritten_bytes

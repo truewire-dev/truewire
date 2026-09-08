@@ -8,6 +8,11 @@
   `endpoint.json`, every other key kept in place, and says so. The `examples` failure for
   a stale declaration names the endpoints in the message itself instead of asking for
   `--verbose`.
+- **`truewire generate python --check` compares content.** It reported only manifest
+  ownership and file existence, so an owned file whose body was stale passed; it now
+  renders the plan the way `generate` writes it (banner, Ruff formatting) and lists every
+  owned file that differs as `out of date`, exiting non-zero, the way the TypeScript path
+  already did.
 
 ## 0.6.0 (2026-09-08)
 

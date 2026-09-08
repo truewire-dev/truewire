@@ -13,6 +13,11 @@
   renders the plan the way `generate` writes it (banner, Ruff formatting) and lists every
   owned file that differs as `out of date`, exiting non-zero, the way the TypeScript path
   already did.
+- **`truewire init .`** writes the project into the current directory and names the package
+  after it (`open-meteo` -> `open_meteo`); so does `truewire init <name>` run inside an
+  empty directory named `<name>` (a `.git` or `.venv` there does not count). Anywhere else
+  `truewire init <name>` still creates `./<name>`. An existing `.gitignore` gains the
+  lines `init` writes instead of being replaced.
 
 ## 0.6.0 (2026-09-08)
 

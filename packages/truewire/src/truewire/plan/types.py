@@ -39,6 +39,15 @@ class Ref(TypedDict):
   """The referenced type's name, as its own `TypeSet` (or the shared scope) defines it."""
   package: NotRequired[str]
   """Where a backend imports it from; only a backend ever fills this in."""
+  forward: NotRequired[bool]
+  """Whether the referenced type is defined *after* the one referencing it.
+
+  True only on a reference cycle between records, which is where a name can be used
+  before it is bound: something has to be emitted first (`docs/spec/authoring.md` rule
+  17). A language that binds names lazily ignores this; one that does not renders the
+  reference as a forward reference. Only a backend ever fills this in -- it is a fact
+  about emission order, not about the spec.
+  """
 
 
 class Literal(TypedDict):

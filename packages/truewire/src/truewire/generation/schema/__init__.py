@@ -21,7 +21,7 @@ from .util import (
   body_json_schema, set_body_json_schema,
 )
 from .resolve import (
-  ResolutionError, Resolver, SchemaResolver,
+  ResolutionError, SchemaCycleError, Resolver, SchemaResolver,
   LocalResolver, OpenApiResolver,
   EmptyResolver,
 )

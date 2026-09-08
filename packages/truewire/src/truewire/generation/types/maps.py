@@ -1,8 +1,10 @@
 from typing_extensions import TypeVar, Generic, Iterable, Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from abc import ABC, abstractmethod
 
-from truewire.generation.schema import Schema, Reference, SchemaResolver
+from truewire.generation.schema import (
+  Schema, Reference, SchemaResolver, SchemaCycleError,
+)
 
 A = TypeVar('A')
 B = TypeVar('B')
@@ -240,6 +242,16 @@ class InlineSchemas(Map):
   """Inlines non-record schemas"""
   resolve: SchemaResolver
   nested: bool = True
+  expanding: tuple[str, ...] = field(default=(), init=False, repr=False)
+  """Ids currently being expanded, outermost first -- the chain `map` is partway down.
+
+  A stack rather than a plain `visited` set: an id is on it only while its own expansion
+  is unfinished, so the same schema inlined twice side by side is not mistaken for a
+  cycle. It is the only cycle guard in the pipeline that can see a real one, because this
+  is the only walk that follows a reference into the schema's *properties* and back out
+  through another reference (`LocalResolver` resolves one hop and reads no properties at
+  all).
+  """
 
   def map(self, schema: Reference|Schema) -> Reference|Schema:
     if (s := self.resolve(schema)) is None:
@@ -249,9 +261,20 @@ class InlineSchemas(Map):
       # this before recursing matters for a self-referential record -- a
       # `BasicOrder.children: BasicOrder[]` -- where resolving-then-recursing first would
       # walk back into this same reference forever; this reads only the schema `resolve`
-      # already returned, no recursion, so a self-referential record cannot loop.
+      # already returned, no recursion, so a self-referential record cannot loop. It is
+      # also what makes a cycle through a record legal: the chain below stops here, and
+      # the reference survives into the type tree, where a backend renders it as a
+      # forward reference.
       return schema
     if self.nested and isinstance(schema, Reference):
-      s = self(s)
+      if schema.ref in self.expanding:
+        raise SchemaCycleError(
+          self.expanding[self.expanding.index(schema.ref):]
+        )
+      self.expanding = (*self.expanding, schema.ref)
+      try:
+        s = self(s)
+      finally:
+        self.expanding = self.expanding[:-1]
     return s
     

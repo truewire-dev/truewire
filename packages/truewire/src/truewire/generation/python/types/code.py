@@ -1,4 +1,4 @@
-from typing_extensions import Callable, TypeVar, Generic, Protocol, Mapping, Iterable
+from typing_extensions import Callable, Collection, TypeVar, Generic, Protocol, Mapping, Iterable
 from dataclasses import dataclass, field
 import builtins
 import re
@@ -9,6 +9,7 @@ from truewire.generation.schema import Schema
 from truewire.generation.types import generation_order, RenderedTypes, Imports, merge_imports
 from truewire.generation.util import indent
 from truewire.generation.python.util import escape_docstring
+from truewire.plan.types import refs
 from .schema import Ref, Scalar, Literal, List, Tuple, Union, Dict, Record, Type
 from .parser import (
   BOOLEAN_STRING_FORMATS, DECIMAL_STRING_FORMATS, INTEGER_STRING_FORMATS, Parser,
@@ -65,9 +66,18 @@ def scalar(type: Scalar, recur: Callable[[Type], Code]) -> Code:
   return Code(iden=SCALAR_BASES[type['base']])
 
 def ref(type: Ref, recur: Callable[[Type], Code]) -> Code:
+  """Render a reference to a named type, quoted when it is a forward reference.
+
+  `forward` is set by `Renderer` for a record that is emitted before the record it
+  references, which only happens on a reference cycle. Generated code never uses `from
+  __future__ import annotations` (it breaks runtime type-checking libraries such as
+  Pydantic), so a class-body annotation naming a class further down the module has to be
+  a string -- the same reason a record's *own* name is quoted, done here rather than in
+  `quote_self_reference` because only the renderer knows the order.
+  """
   imports: Imports = {} if (pkg := type.get('package')) is None else {pkg: {type['id']}}
   return Code(
-    iden=type['id'],
+    iden=f"'{type['id']}'" if type.get('forward') else type['id'],
     imports=imports,
   )
 
@@ -205,6 +215,34 @@ def record(type: Record, recur: Callable[[Type], Code]) -> Code:
   )
   return code
 
+def mark_forward_references(
+  type: Type, *, defined: Collection[str], scope: Mapping[str, object]
+) -> None:
+  """Flag every reference in `type` that names a record this module has not emitted yet.
+
+  Only a record is marked, and only for a reference to *another* schema in the same
+  module: a record's own name is quoted by `quote_self_reference` (which reads the
+  rendered expression, and so covers a `CodeGenerator` used without a `Renderer`), and a
+  reference out of the module resolves to an `import` at the top of the file, bound long
+  before any class body runs.
+
+  A reference can only point forward on a cycle, so on an acyclic module this marks
+  nothing and the rendered source is byte-for-byte what it was. A cycle that reaches a
+  schema rendering inline never gets here -- `InlineSchemas` raises `SchemaCycleError`
+  during normalization.
+
+  Args:
+    type: One schema's parsed type tree, mutated in place.
+    defined: Ids already emitted into this module.
+    scope: Every schema this module renders, so a reference out of it can be told from
+      one that merely comes later.
+  """
+  if type['type'] != 'record':
+    return
+  for node in refs(type):
+    if node['id'] != type['id'] and node['id'] in scope and node['id'] not in defined:
+      node['forward'] = True
+
 T = TypeVar('T', bound=Type, contravariant=True)
 
 class GeneratorFn(Protocol, Generic[T]):
@@ -253,10 +291,12 @@ class Renderer:
     identifiers: builtins.dict[str, str] = {}
     imports: builtins.list[Imports] = []
     order: builtins.list[str] = []
+    emitted: builtins.set[str] = set()
 
     for id in generation_order(schemas):
       if (s := schemas.get(id)) is not None:
         ir = self.parser(s, id=id)
+        mark_forward_references(ir, defined=emitted, scope=schemas)
         code = self.code(ir)
         for type in code.reserved_keyword_types:
           order.append(type.iden)
@@ -284,7 +324,8 @@ class Renderer:
           identifiers[id] = code.iden
 
         imports.append(code.imports)
-    
+        emitted.add(id)
+
     return RenderedTypes(
       definitions=definitions,
       identifiers=identifiers,

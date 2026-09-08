@@ -38,7 +38,7 @@ from typer.testing import CliRunner
 
 from truewire.cli import app
 from truewire.generation.python.types import TypeGenerator
-from truewire.generation.schema import Schema
+from truewire.generation.schema import Schema, SchemaCycleError
 
 
 def generate(schemas: dict[str, dict], *, inline: bool = True):
@@ -126,26 +126,41 @@ class TestSupportedRecursion:
     rendered = generate(NODE_ARRAY)
     assert "children: NotRequired[list['Node']]" in rendered.definitions['Node']
 
-  @pytest.mark.xfail(
-    strict=True,
-    reason='reproduction: `toposort_flatten` raises CircularDependencyError on a cycle',
-  )
   def test_mutual_recursion(self):
     rendered = generate(MUTUAL)
     assert set(rendered.generation_order) == {'Node', 'Branch'}
+
+  def test_mutual_recursion_quotes_the_reference_that_points_forward(self):
+    """Whichever record is emitted first names the other before it is bound."""
+    rendered = generate(MUTUAL)
+    first, second = rendered.generation_order
+    assert f"NotRequired['{second}']" in rendered.definitions[first]
+    assert f'NotRequired[{first}]' in rendered.definitions[second]
+
+  def test_generation_order_is_unchanged_without_a_cycle(self):
+    """Collapsing cycles must not reorder a module that has none."""
+    acyclic = {
+      'Branch': MUTUAL['Branch'],
+      'Node': {**MUTUAL['Node'], 'properties': {'id': {'type': 'string'}}},
+    }
+    assert generate(acyclic).generation_order == ['Node', 'Branch']
 
 
 class TestUnsupportedRecursion:
   """A cycle among inline-rendered schemas is refused, not crashed on."""
 
-  @pytest.mark.xfail(
-    strict=True,
-    reason='reproduction: `InlineSchemas` expands the cycle until the stack runs out',
-  )
-  def test_inline_cycle_is_reported(self):
-    with pytest.raises(RecursionError):
+  def test_inline_cycle_raises_a_named_error(self):
+    with pytest.raises(SchemaCycleError) as raised:
       generate(INLINE_CYCLE)
-    pytest.fail('should raise a named cycle error, not RecursionError')
+    assert raised.value.cycle == ('Tree',)
+
+  def test_indirect_inline_cycle_names_every_schema_on_it(self):
+    with pytest.raises(SchemaCycleError) as raised:
+      generate({
+        'Leaves': {'type': 'array', 'items': {'$ref': 'Tree'}},
+        'Tree': {'anyOf': [{'type': 'string'}, {'$ref': 'Leaves'}]},
+      })
+    assert set(raised.value.cycle) == {'Leaves', 'Tree'}
 
 
 def write_project(tmp_path: Path, runner: CliRunner, schemas: dict[str, dict]) -> Path:
@@ -195,7 +210,6 @@ class TestEndToEnd:
     source = (project / 'src' / 'demo' / 'schemas.py').read_text()
     assert "child: NotRequired['Node']" in source
 
-  @pytest.mark.xfail(strict=True, reason='reproduction: generation raises on a record cycle')
   def test_mutual_recursion_generates(self, tmp_path: Path, monkeypatch):
     runner = CliRunner()
     monkeypatch.chdir(tmp_path)
@@ -203,6 +217,9 @@ class TestEndToEnd:
     assert runner.invoke(app, ['check', '--project', str(project)]).exit_code == 0
     result = runner.invoke(app, ['generate', 'python', '--project', str(project)])
     assert result.exit_code == 0, result.output
+    source = (project / 'src' / 'demo' / 'schemas.py').read_text()
+    assert source.index('class Branch') < source.index('class Node')
+    assert "node: NotRequired['Node']" in source
 
   @pytest.mark.xfail(strict=True, reason='reproduction: `truewire check` passes a spec that cannot render')
   def test_inline_cycle_fails_check(self, tmp_path: Path, monkeypatch):

@@ -60,7 +60,11 @@ name = "Petstore"            # root struct name; default: [python].name, else Pa
   example that leaked a real credential-shaped value.
 - **`[cores.<name>]`**: the JSON Schema every endpoint's `meta` must satisfy when its nearest
   `router.json` resolves to `<name>`. Omit `meta` for a core that reads nothing per call.
-- **`[python]`**: where the generated Python package goes and how it is finished.
+- **`[python]`**: where the generated Python package goes and how it is finished. `name`
+  is the root class, and it must not be the class one of the spec's own top-level router
+  groups renders -- a client called `Weather` over a `weather/` group has the root import
+  the class it then declares itself ([docs/spec/authoring.md](spec/authoring.md) rule 18).
+  The same holds for `[typescript].name` and `[rust].name` below.
 - **`[python.cores.<name>]`**: `base` is `module.path:Class`, the hand-written class every
   generated endpoint under that core subclasses. Nothing is imported during generation
   (ADR 0011); the three optional keys below say how a composite built on this base is

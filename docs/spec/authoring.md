@@ -339,3 +339,22 @@ A cycle where *no* schema is a record does not render, and is refused. Every sch
 The fix is to give one schema on the cycle `properties` and a `title`, so it becomes the record the cycle closes on, and to point the rest at it.
 
 Enforcement: `truewire check`, `error`, naming the schemas on the cycle. Generation refuses the same shape with a `SchemaCycleError` rather than a `RecursionError`.
+
+## 18. A router group's class name is not its parent's, and not a sibling's
+
+Every router node generates one class, and that class names each child it composes: a group by the class the child's own directory renders, an endpoint by the method it exposes. Two things claiming one name in that module is refused, in either of the two ways it happens.
+
+The first is a group whose class name is already the composing class's own. At the root that class is the client itself, named by `[python].name`, `[typescript].name` or `[rust].name` — so a client called `Weather` over a spec with a `weather/` group is refused:
+
+```
+spec/endpoints/weather/router.json   # renders `Weather`
+truewire.toml  [rust] name = "Weather"
+```
+
+There is nothing left for the root to be. Rust's `client.rs` writes `use crate::weather::Weather;` above `pub struct Weather`, so the root struct contains itself (`E0255`, then `E0072` and `E0391`); TypeScript's `main.ts` does the same by bare import (`TS2440`, `TS2395`). Python raises nothing at all, which is worse: the class shadows the import, `client.weather` returns another root client, and every endpoint under the group drops off the surface with no diagnostic anywhere. The same shape recurs one level down — `alpha/beta/beta/` renders `Beta` into the module that already declares `Beta`.
+
+The second is two siblings that render one name. Directory names are unique but rendered class names are not: `list-orders/` and `list_orders/` both render `ListOrders`, and the module composing them binds that name twice, so only whichever is written second is reachable.
+
+The fix is a rename, and which one is the author's: choose a different `name` in the backend's section, or rename the group directory. It is never done for you — the root class name and every group attribute are the public surface of somebody's client, and a generator that quietly picked `Weather2` would change what a caller writes without saying so.
+
+Enforcement: `truewire check`, `error`, naming the client, the group and the `router.json` the group comes from. `truewire generate python`, `typescript` and `rust` refuse the same condition before writing a file, each judging its own declared client name, so skipping the gate cannot produce the broken tree.

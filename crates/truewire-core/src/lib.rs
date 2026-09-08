@@ -8,26 +8,34 @@
 //!   newtypes for every narrowed scalar format; [`times`] and [`decimal`] the converters.
 //! - [`paging`]: [`PaginatedResponse`], the resumable, retry-safe walk generated
 //!   `<method>_paged` methods return.
-//! - [`ws`]: `Socket` over `tokio-tungstenite` with request/reply correlation, channel
-//!   subscriptions and serial acknowledgements.
+//! - [`ws`]: [`Socket`](ws::Socket) over `tokio-tungstenite` with request/reply
+//!   correlation, channel subscriptions and serial acknowledgements.
 //! - [`errors`]: the one [`Error`] enum every function here returns.
 //!
 //! See `docs/rust.md` in the repository for what a core must implement.
 
+pub mod contract;
 pub mod decimal;
 pub mod errors;
+pub mod http;
+pub mod paging;
 pub mod times;
 pub mod types;
 pub mod validation;
+pub mod ws;
 
 pub use chrono;
 pub use rust_decimal;
 pub use serde_json;
 
+pub use contract::{CallOptions, CommandCall, CommandEndpoint, HttpCall, HttpEndpoint, StreamEndpoint, SubscribeCall};
 pub use errors::{ApiError, ApiKind, Error, Issue, LogicError, NetworkError, Result, ValidationError};
+pub use http::{Exchange, HttpClient, HttpClientOptions, Recording, RequestOptions, Response};
+pub use paging::{Page, PaginatedResponse};
 pub use times::{DateConverter, EpochConverter, IsoConverter};
 pub use types::{
     BooleanString, DateIso, DecimalString, IntegerString, TimestampIso, TimestampMicros, TimestampMillis,
     TimestampNanos, TimestampSeconds,
 };
 pub use validation::{decode, decode_ref, dump, dump_json, parse_json, parse_slice, parse_value};
+pub use ws::Stream;

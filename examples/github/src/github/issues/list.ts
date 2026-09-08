@@ -121,6 +121,8 @@ export type ListPagedRequest = Omit<Request, 'page'>
 export class List {
   constructor(readonly core: HttpEndpoint<DefaultMeta>) {}
 
+  /** With `validate: false`: the parsed body as it came, typed `unknown`. */
+  listPaged(request: ListPagedRequest, options: CallOptions & { validate: false }): PaginatedResponse<unknown, number>
   /**
    * List issues in a repository. GitHub returns pull requests here too; a row with `pull_request` set is one.
    *
@@ -128,6 +130,7 @@ export class List {
    *
    * @see https://docs.github.com/en/rest/issues/issues#list-repository-issues
    */
+  listPaged(request: ListPagedRequest, options?: CallOptions): PaginatedResponse<Issue, number>
   listPaged(request: ListPagedRequest, options?: CallOptions): PaginatedResponse<Issue, number> {
     const next = async (page: number): Promise<[Issue[], number | null]> => {
       const response = await this.list({ ...request, page }, options)
@@ -138,11 +141,14 @@ export class List {
     return new PaginatedResponse(1, next)
   }
 
+  /** With `validate: false`: the parsed body as it came, typed `unknown`. */
+  list(request: Request, options: CallOptions & { validate: false }): Promise<unknown>
   /**
    * List issues in a repository. GitHub returns pull requests here too; a row with `pull_request` set is one.
    *
    * @see https://docs.github.com/en/rest/issues/issues#list-repository-issues
    */
+  list(request: Request, options?: CallOptions): Promise<Issues>
   async list(request: Request, options?: CallOptions): Promise<Issues> {
     return this.core.request({
       method: 'GET',

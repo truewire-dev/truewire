@@ -101,11 +101,14 @@ export const Repository: Codec<Repository> = t.object({
 export class Get {
   constructor(readonly core: HttpEndpoint<DefaultMeta>) {}
 
+  /** With `validate: false`: the parsed body as it came, typed `unknown`. */
+  get(request: Request, options: CallOptions & { validate: false }): Promise<unknown>
   /**
    * Get a repository. Metadata, counts and the license as GitHub reports them.
    *
    * @see https://docs.github.com/en/rest/repos/repos#get-a-repository
    */
+  get(request: Request, options?: CallOptions): Promise<Repository>
   async get(request: Request, options?: CallOptions): Promise<Repository> {
     return this.core.request({
       method: 'GET',

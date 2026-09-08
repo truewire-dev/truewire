@@ -102,11 +102,14 @@ export const CommitDetail: Codec<CommitDetail> = t.object({
 export class GetCommit {
   constructor(readonly core: HttpEndpoint<DefaultMeta>) {}
 
+  /** With `validate: false`: the parsed body as it came, typed `unknown`. */
+  getCommit(request: Request, options: CallOptions & { validate: false }): Promise<unknown>
   /**
    * Get one commit with its diff statistics and changed files.
    *
    * @see https://docs.github.com/en/rest/commits/commits#get-a-commit
    */
+  getCommit(request: Request, options?: CallOptions): Promise<CommitDetail>
   async getCommit(request: Request, options?: CallOptions): Promise<CommitDetail> {
     return this.core.request({
       method: 'GET',

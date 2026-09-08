@@ -48,6 +48,8 @@ export type ListCommitsPagedRequest = Omit<Request, 'page'>
 export class ListCommits {
   constructor(readonly core: HttpEndpoint<DefaultMeta>) {}
 
+  /** With `validate: false`: the parsed body as it came, typed `unknown`. */
+  listCommitsPaged(request: ListCommitsPagedRequest, options: CallOptions & { validate: false }): PaginatedResponse<unknown, number>
   /**
    * List commits reachable from a branch or sha, newest first. Pages are joined by `page`/`per_page`; the generated `list_commits_paged` walks them until a short page.
    *
@@ -55,6 +57,7 @@ export class ListCommits {
    *
    * @see https://docs.github.com/en/rest/commits/commits#list-commits
    */
+  listCommitsPaged(request: ListCommitsPagedRequest, options?: CallOptions): PaginatedResponse<Commit, number>
   listCommitsPaged(request: ListCommitsPagedRequest, options?: CallOptions): PaginatedResponse<Commit, number> {
     const next = async (page: number): Promise<[Commit[], number | null]> => {
       const response = await this.listCommits({ ...request, page }, options)
@@ -65,11 +68,14 @@ export class ListCommits {
     return new PaginatedResponse(1, next)
   }
 
+  /** With `validate: false`: the parsed body as it came, typed `unknown`. */
+  listCommits(request: Request, options: CallOptions & { validate: false }): Promise<unknown>
   /**
    * List commits reachable from a branch or sha, newest first. Pages are joined by `page`/`per_page`; the generated `list_commits_paged` walks them until a short page.
    *
    * @see https://docs.github.com/en/rest/commits/commits#list-commits
    */
+  listCommits(request: Request, options?: CallOptions): Promise<Commits>
   async listCommits(request: Request, options?: CallOptions): Promise<Commits> {
     return this.core.request({
       method: 'GET',

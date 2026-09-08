@@ -5,7 +5,7 @@ import re
 from collections import defaultdict
 from keyword import iskeyword
 
-from truewire.generation.schema import Schema
+from truewire.generation.schema import Schema, SchemaCycleError
 from truewire.generation.types import generation_order, RenderedTypes, Imports, merge_imports
 from truewire.generation.util import indent
 from truewire.generation.python.util import escape_docstring
@@ -296,7 +296,24 @@ class Renderer:
     for id in generation_order(schemas):
       if (s := schemas.get(id)) is not None:
         ir = self.parser(s, id=id)
-        mark_forward_references(ir, defined=emitted, scope=schemas)
+        if ir['type'] == 'record':
+          mark_forward_references(ir, defined=emitted, scope=schemas)
+        else:
+          # A schema that renders as an expression (`X = dict[str, Y]`, `X = list[Y]`)
+          # has no class body to quote a name in: its right-hand side is evaluated the
+          # moment the module is imported, so every name in it must already be bound.
+          # `generation_order` guarantees that off a cycle; on one it cannot, and a
+          # quoted forward reference is no help either -- a bare alias carries no module
+          # to resolve it against later, so `pydantic` refuses the type at runtime.
+          # `truewire check` reports the same shape as a `schema-cycle` violation
+          # (`docs/spec/authoring.md` rule 17); this is the generator refusing to write
+          # a module that would raise `NameError` on import if the gate were skipped.
+          unbound = sorted(
+            node['id'] for node in refs(ir)
+            if node['id'] in schemas and node['id'] not in emitted
+          )
+          if unbound:
+            raise SchemaCycleError([id, *(name for name in unbound if name != id)])
         code = self.code(ir)
         for type in code.reserved_keyword_types:
           order.append(type.iden)

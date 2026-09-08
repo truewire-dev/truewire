@@ -2,9 +2,11 @@ from typing_extensions import Iterator, Mapping
 from dataclasses import dataclass
 
 from truewire.generation.schema import (
-  LocalResolver, ResolutionError, Schema, Reference, SchemaCycleError,
+  LocalResolver, ResolutionError, Schema, Reference,
 )
-from .maps import FlattenAllOf, InlineSchemas, MapReduce, MergeAnyOf, RemoveOneOf
+from .maps import (
+  FlattenAllOf, MapReduce, MergeAnyOf, RemoveOneOf, renders_as_record,
+)
 
 @dataclass
 class dependencies(MapReduce[set[str]]):
@@ -149,22 +151,30 @@ def external_references(schemas: Mapping[str, Schema]) -> set[str]:
   return out
 
 
-def inline_cycles(schemas: Mapping[str, Schema]) -> list[list[str]]:
+def unrenderable_cycles(schemas: Mapping[str, Schema]) -> list[list[str]]:
   """Every reference cycle in `schemas` that no backend can render, name-sorted.
 
-  A cycle is renderable when at least one schema on it has a name in the generated
-  module -- a record, which becomes a class other schemas point at. A cycle where every
-  schema renders *inline* has no such anchor: each one is an expression substituted at
-  its use sites, so expanding one expands the next forever.
+  A cycle is renderable when at least one schema on it renders as a record: a record has
+  a name in the generated module, and a reference back to that name is a forward
+  reference every target language can state. A cycle where every schema renders as an
+  expression instead -- `Tree` = a string or an array of `Tree`, or `Node` =
+  `dict[str, Node]` -- has nothing to close on. Expanding one either expands the next
+  forever, or emits an alias whose right-hand side names itself, which is a `NameError`
+  the moment the module is imported.
 
-  Found by running the same normalization a backend runs and collecting what it refuses,
-  rather than by reimplementing "renders inline" against raw JSON. The two could
-  otherwise drift, and a `truewire check` that passes a spec `truewire generate` then
-  cannot render is the whole defect this exists to close.
+  A self-reference counts as a cycle here, unlike in `cycles`: `Node = dict[str, Node]`
+  is one name, and one name is enough to be unrenderable even though it is not enough to
+  need an ordering broken.
+
+  The graph is read after the normalizing rewrites that change what a schema *is*
+  (`oneOf` -> `anyOf`, `allOf` flattened into properties, `anyOf` merged), because those
+  both create records and delete the references between them: two schemas that only
+  `allOf` each other end up as two empty records with no cycle left. Reading raw JSON
+  would report that as unrenderable.
 
   A spec that is broken some other way -- a `$ref` to nothing, an external reference
-  inside an `allOf` -- reports nothing here: those have their own checks, and guessing
-  past them would report a cycle that is really a typo.
+  inside an `allOf` -- reports nothing: those have their own checks, and guessing past
+  them would report a cycle that is really a typo.
 
   Args:
     schemas: Every shared schema in one project, id to schema.
@@ -176,16 +186,9 @@ def inline_cycles(schemas: Mapping[str, Schema]) -> list[list[str]]:
       prepared = {id: step(schema) for id, schema in prepared.items()}
   except (ValueError, ResolutionError):
     return []
-  inline = InlineSchemas(LocalResolver(prepared))
-  out: list[list[str]] = []
-  seen: set[frozenset[str]] = set()
-  for schema in prepared.values():
-    try:
-      inline(schema)
-    except SchemaCycleError as cycle:
-      if (key := frozenset(cycle.cycle)) not in seen:
-        seen.add(key)
-        out.append(sorted(cycle.cycle))
-    except (ValueError, ResolutionError):
-      continue
-  return out
+  graph = {id: deps & set(prepared) for id, deps in dependencies.all(prepared).items()}
+  groups = cycles(graph) + [[id] for id, deps in graph.items() if id in deps]
+  return sorted(
+    (group for group in groups if not any(renders_as_record(prepared[id]) for id in group)),
+    key=lambda group: group[0],
+  )

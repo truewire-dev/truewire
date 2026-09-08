@@ -21,7 +21,7 @@ from typing_extensions import Any, Iterator, Literal, TypedDict
 from jsonschema import Draft202012Validator
 
 from truewire.generation.schema import Schema
-from truewire.generation.types import inline_cycles
+from truewire.generation.types import unrenderable_cycles
 from truewire.project import Project, resolve, spec_dir as project_spec_dir
 from .endpoint import (
   Endpoint, GrpcEndpointSpec, Pagination, PaginationParameter, RpcEndpointSpec,
@@ -1863,7 +1863,7 @@ def check_schema_cycles(client_root: Path | Project) -> list[Violation]:
     # An unparseable schema is reported where the schema is loaded, not here.
     return []
   out: list[Violation] = []
-  for cycle in inline_cycles(schemas):
+  for cycle in unrenderable_cycles(schemas):
     if len(cycle) == 1:
       subject = f'{cycle[0]} references itself, and it is not a record'
       fix = f'Give {cycle[0]} `properties`'

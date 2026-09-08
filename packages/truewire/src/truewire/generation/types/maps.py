@@ -18,6 +18,25 @@ def unzip(xs: Iterable[tuple[A, B]]) -> tuple[list[A], list[B]]:
     out_b.append(b)
   return out_a, out_b
 
+def renders_as_record(schema: Schema) -> bool:
+  """Whether `schema` renders as its own named class rather than as an expression.
+
+  `properties` alone is not the test, because a parser dispatches on `type` first: a
+  schema declaring `type: 'array'` renders as a `list[...]` however many `properties` it
+  also carries, and one declaring `type: 'object'` with no `properties` renders as a
+  `dict[...]`. Both are expressions pasted at each use site, with no name of their own.
+
+  Two callers need exactly this question, for the same underlying reason -- a name is
+  what a reference can point at. `Unnest.records` asks it of a nested schema, to decide
+  whether extracting it to the top level would define anything; `unrenderable_cycles`
+  asks it of a schema on a reference cycle, to decide whether the cycle has a name to
+  close on at all.
+
+  Args:
+    schema: The schema to judge.
+  """
+  return schema.properties is not None and schema.type in (None, 'object')
+
 class MapReduce(ABC, Generic[A]):
   """Map-reduce operation for schemas.
   

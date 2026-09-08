@@ -115,6 +115,17 @@ INLINE_CYCLE = {
 }
 """Rule 4: a cycle among schemas that render inline, which cannot be expressed at all."""
 
+DICT_CYCLE = {
+  'Node': {
+    'title': 'Node',
+    'type': 'object',
+    'description': 'A tree of trees.',
+    'additionalProperties': {'$ref': 'Node'},
+  },
+}
+"""A record-shaped cycle that still renders as an expression: `properties` is absent, so
+`Node` is a `dict[str, Node]` alias, not a class, and the alias names itself."""
+
 
 class TestSupportedRecursion:
   """A cycle that passes through a record renders, with the forward reference quoted."""
@@ -154,6 +165,12 @@ class TestUnsupportedRecursion:
     with pytest.raises(SchemaCycleError) as raised:
       generate(INLINE_CYCLE)
     assert raised.value.cycle == ('Tree',)
+
+  def test_alias_cycle_raises_rather_than_emitting_an_unbound_name(self):
+    """`Node = dict[str, Node]` would raise `NameError` the moment it is imported."""
+    with pytest.raises(SchemaCycleError) as raised:
+      generate(DICT_CYCLE)
+    assert raised.value.cycle == ('Node',)
 
   def test_indirect_inline_cycle_names_every_schema_on_it(self):
     with pytest.raises(SchemaCycleError) as raised:
@@ -275,6 +292,23 @@ class TestCycleAudit:
     assert len(violations) == 1
     assert violations[0]['rule'] == 'schema-cycle'
     assert violations[0]['location'] == 'Leaves -> Tree -> Leaves'
+
+  def test_an_alias_cycle_is_a_violation(self, tmp_path: Path, monkeypatch):
+    runner = CliRunner()
+    monkeypatch.chdir(tmp_path)
+    project = write_project(tmp_path, runner, DICT_CYCLE)
+    assert [v['location'] for v in check_schema_cycles(project)] == ['Node -> Node']
+    assert runner.invoke(app, ['check', '--project', str(project)]).exit_code != 0
+
+  def test_an_all_of_pair_is_not_a_cycle_once_flattened(self, tmp_path: Path, monkeypatch):
+    """`allOf` is flattened into properties, which deletes the references it read."""
+    runner = CliRunner()
+    monkeypatch.chdir(tmp_path)
+    project = write_project(tmp_path, runner, {
+      'A': {'title': 'A', 'description': 'A.', 'allOf': [{'$ref': 'B'}]},
+      'B': {'title': 'B', 'description': 'B.', 'allOf': [{'$ref': 'A'}]},
+    })
+    assert check_schema_cycles(project) == []
 
   def test_a_project_with_no_shared_schemas_reports_nothing(self, tmp_path: Path, monkeypatch):
     runner = CliRunner()

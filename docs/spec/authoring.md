@@ -328,11 +328,13 @@ A comment thread, a file tree and a nested JSON value are all recursive, and a s
 
 The rule is that at least one schema on the cycle is a **record** — an object schema with `properties`, which renders as its own named type. A name is what lets the cycle close: whichever record is emitted first names the other as a forward reference (`children: NotRequired[list['Node']]`), which a `TypedDict` accepts. Mutual recursion (`Node.branch` → `Branch`, `Branch.node` → `Node`) works for the same reason, in either order.
 
-A cycle where *no* schema is a record does not render, and is refused. Every schema on it is an expression pasted at each use site rather than a named type, so pasting one pastes the next forever:
+A cycle where *no* schema is a record does not render, and is refused. Every schema on it is an expression pasted at each use site rather than a named type, so there is nothing for the cycle to close on:
 
 ```jsonc
 {"Tree": {"title": "Tree", "anyOf": [{"type": "string"}, {"type": "array", "items": {"$ref": "Tree"}}]}}
 ```
+
+`properties` is what makes a record, not `type: "object"`: an object schema declaring only `additionalProperties` renders as a `dict[...]`, an expression, and `{"Node": {"type": "object", "additionalProperties": {"$ref": "Node"}}}` is refused for the same reason as `Tree`.
 
 The fix is to give one schema on the cycle `properties` and a `title`, so it becomes the record the cycle closes on, and to point the rest at it.
 

@@ -2,7 +2,7 @@ from typing_extensions import Mapping
 from abc import abstractmethod
 
 from truewire.generation.schema import Schema, Reference
-from .maps import MapReduce
+from .maps import MapReduce, renders_as_record
 
 class Unnest(MapReduce[dict[str, Schema]]):
   
@@ -16,18 +16,16 @@ class Unnest(MapReduce[dict[str, Schema]]):
       def unnest(self, schema: Schema) -> bool:
         """Report whether a nested schema is the kind that renders as its own class.
 
-        `properties` alone is not the test, because the parser dispatches on `type` first:
-        a schema declaring `type: 'array'` renders as a `list[...]` however many
-        `properties` it also carries. Unnesting such a schema replaces it with a reference
-        to a name that renders inline and so defines nothing, and the module ends up
-        annotating a field with an undefined name — which no other check catches, since the
-        name never reaches `generation_order`. One real subscription has exactly one such
-        schema, an array of aliases carrying an empty `properties`.
+        Unnesting a schema that renders inline replaces it with a reference to a name
+        that defines nothing, and the module ends up annotating a field with an undefined
+        name — which no other check catches, since the name never reaches
+        `generation_order`. One real subscription has exactly one such schema, an array
+        of aliases carrying an empty `properties`. `renders_as_record` states the test.
 
         Args:
           schema: A schema found nested inside another one.
         """
-        return schema.properties is not None and schema.type in (None, 'object')
+        return renders_as_record(schema)
     return UnnestRecords()
 
   @staticmethod

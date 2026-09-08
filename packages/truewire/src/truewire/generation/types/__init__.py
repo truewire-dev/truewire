@@ -10,7 +10,7 @@ from .maps import (
 )
 from .unnest import Unnest
 from .references import (
-  cycles, dependencies, generation_order, external_references, inline_cycles,
+  cycles, dependencies, generation_order, external_references, unrenderable_cycles,
 )
 from .transforms import IterativeNormalizer
 from .main import TypeGenerator, ExternalReference, Disambiguator

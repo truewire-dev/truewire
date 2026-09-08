@@ -5,10 +5,11 @@
  */
 import { describe, expect, it } from 'vitest'
 import { LogicError, NetworkError } from '../src/errors.js'
+import { Stream as RootStream, Subscription as RootSubscription } from '../src/index.js'
 import { Rpc } from '../src/ws/rpc.js'
 import { SerialReplies } from '../src/ws/serial.js'
 import { type Data } from '../src/ws/socket.js'
-import { Streams, Subscription, type ChannelMessage } from '../src/ws/streams.js'
+import { Stream, Streams, Subscription, type ChannelMessage } from '../src/ws/streams.js'
 import { StreamsRpc, type Message } from '../src/ws/streamsRpc.js'
 import { FakeServer, FakeWebSocket, sentJson, tick } from './fakeWebSocket.js'
 
@@ -251,6 +252,11 @@ describe('Streams', () => {
     expect(feed.subscriptions.size).toBe(0)
     await feed.subscribe('forbidden').then(() => { throw new Error('unreachable') }, () => {})
     await feed.close()
+  })
+
+  it('Stream and Subscription are the classes the package root exports', () => {
+    expect(RootSubscription).toBe(Subscription)
+    expect(RootStream).toBe(Stream)
   })
 
   it('map and filter on Subscription and Stream', async () => {

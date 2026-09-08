@@ -7,11 +7,12 @@ pagination walkers. The runtime it depends on is `@truewire/core` (`packages/cor
 
 Status: `@truewire/core` publishes to npm from `packages/core-ts` (a merged
 `release/core-ts` pull request, see [Releasing](../CONTRIBUTING.md#releasing)); a generated
-project depends on it as an ordinary `package.json` dependency. `examples/github` in this
-repository links it with a relative `file:` dependency instead, so the example always
-tests the runtime at the same commit. HTTP `rpc` endpoints are generated; stream endpoints
-(WebSocket subscriptions, `examples/kraken`) are not yet, and neither are composite cores
-(`forward`/`params`/`children` in `truewire.toml`). See the end of this page for the list.
+project depends on it as an ordinary `package.json` dependency. `examples/github` and `examples/kraken` in
+this repository link it with a relative `file:` dependency instead, so the examples always
+test the runtime at the same commit. `rpc` endpoints over HTTP and over a WebSocket, `stream`
+endpoints and composite cores (`forward`/`children` in `truewire.toml`) are generated;
+`examples/github` is the HTTP case and `examples/kraken` the WebSocket and composite one.
+See the end of this page for what is still left out.
 
 ## Using it
 
@@ -45,7 +46,20 @@ const raw = await client.repos.get({ owner: 'truewire-dev', repo: 'truewire' }, 
 ```
 
 `examples/github` is the reference: its `truewire.toml`, `src/github/core/index.ts`,
-`package.json`, `tsconfig.json` and `test/` are what a project copies.
+`package.json`, `tsconfig.json` and `test/` are what a project copies. `examples/kraken` is
+the same shape for an API with a REST half and a WebSocket half behind one root:
+
+```ts
+import { Kraken } from 'kraken'
+import { Core } from 'kraken/core'
+
+const client = new Kraken(new Core({ credentials: { apiKey, privateKey } }))
+
+const time = await client.spot.marketData.time()
+await using ticker = client.streams.marketData.ticker({ symbol: ['BTC/USD'] })
+for await (const message of ticker) message.data[0].timestamp   // a Date
+const order = await client.tradingWs.addOrder({ symbol: 'BTC/USD', side: 'buy', order_type: 'market', order_qty: 1 })
+```
 
 ## What is generated
 
@@ -54,9 +68,9 @@ One file per spec node, beside the Python package when both are declared:
 | file | contents |
 | --- | --- |
 | `types/index.ts`, `types/<scope>.ts` | the shared `schemas.json` types, one module per scope |
-| `<router>/<endpoint>.ts` | the endpoint's `Request`, its response types, their codecs, and a class with the method |
-| `<router>/index.ts` | a router class delegating to its endpoints and holding its child routers |
-| `main.ts` | the root class, `new GitHub(core)` |
+| `<router>/<endpoint>.ts` | the endpoint's `Request` (a stream's `Parameters`), its response or message types, their codecs, and a class with the method |
+| `<router>/index.ts` | a router class delegating to its endpoints and holding its child routers; under a composite core, the `<Class>Core` fields interface it takes |
+| `main.ts` | the root class, `new GitHub(core)`; `new Kraken({ spot_client, market_client, private_client })` for a composite root |
 | `meta.ts` | one interface per `[cores.<name>]` with a `meta` schema (`DefaultMeta`) |
 | `index.ts` | re-exports the root class, the shared types and `meta.ts` |
 
@@ -126,9 +140,23 @@ HttpEndpoint<DefaultMeta>) {} }` and calls `this.core.request({ method: 'GET', p
 '/repos/{owner}/{repo}', request, requestCodec: Request, responseCodec: Repository, meta: {
 public: true }, ...options })`. A router's constructor takes the intersection of its
 endpoints' core types and hands the same object to every child; the root class is the same
-shape under the project's name. `CommandEndpoint<Meta>` (a WebSocket command: `request({
-path, ... })`) and `StreamEndpoint<Meta>` (`subscribe({ channel, parameters, ... })`
-returning a `Subscription`) are declared for the shapes the backend will emit next.
+shape under the project's name. An `rpc` endpoint whose transport is `ws` takes a
+`CommandEndpoint<Meta>` and calls `request({ path, ... })`, `path` being the wire method
+name; a `stream` endpoint takes a `StreamEndpoint<Meta>` and calls `subscribe`:
+
+```ts
+interface SubscribeCall<Params, Message, Meta> extends CallOptions {
+  channel: string                          // the wire channel template; {name} placeholders are filled from parameters
+  parameters: Params | undefined           // the generated Parameters value (wire keys), or undefined
+  parametersCodec: Codec<Params> | undefined
+  messageCodec: Codec<Message> | undefined // codec of each pushed message
+  meta: Meta
+}
+
+interface StreamEndpoint<Meta = Record<string, never>> {
+  subscribe<Params, Message>(call: SubscribeCall<Params, Message, Meta>): Subscription<Message>
+}
+```
 
 The hand-written core is an object satisfying that interface by shape. `examples/github`'s
 does four things in `request`: `requestCodec.dump(request)` to get the wire values, fill
@@ -137,6 +165,82 @@ through `HttpClient`, map a non-2xx reply to `ApiError`/`AuthError`/`BadRequest`
 `RateLimited`, and `parseJson(responseCodec, text)` when validation is on. Envelope
 unwrapping (`envelope.payload`), signing and headers are the core's business, as in Python;
 the plan's `meta` tells it what each endpoint needs.
+
+## Streams
+
+A `stream` endpoint's class has one method, named after the endpoint, whose parameter is
+the endpoint's `Parameters` interface (the subscribe frame's own fields, verbatim) and whose
+return value is the core's `Subscription<Message>`:
+
+```ts
+export class Ticker {
+  constructor(readonly core: StreamEndpoint) {}
+
+  ticker(parameters: Parameters, options: CallOptions & { validate: false }): Subscription<unknown>
+  ticker(parameters: Parameters, options?: CallOptions): Subscription<TickerMessage>
+  ticker(parameters: Parameters, options?: CallOptions): Subscription<TickerMessage> {
+    return this.core.subscribe({
+      channel: 'ticker',
+      parameters,
+      parametersCodec: Parameters,
+      messageCodec: TickerMessage,
+      meta: {},
+      ...options,
+    })
+  }
+}
+```
+
+The call is not async: `Subscription` (`@truewire/core`) subscribes when awaited, iterated
+or opened, and is `AsyncDisposable`, so `await using stream = client.streams.marketData.ticker(...)`
+unsubscribes on scope exit; awaiting it gives the `Stream`, whose `reply` is the ack and
+whose `unsubscribe()` ends it. Each pushed message is what `messageCodec.parse` makes of the
+frame -- `validate: false` yields the frame as it came, typed `unknown`, the same overload
+rule as a call. What the method hands the core is what the Python backend hands
+`self.subscribe(...)` ([docs/plan.md](plan.md)): the channel template, the parameters object
+and its codec for the general shape; for a direct-channel stream (the parameters are exactly
+the channel's placeholders, `/ticker/{symbol}`) or a connect-only one (the channel *is* the
+one parameter), the module declares the `Parameters` interface itself, fills the template
+from it -- `` channel: `/ticker/${parameters.symbol}` `` -- and passes no parameters
+object, as the Python method fills the channel from its own locals. The hand-written core
+fills `{name}` placeholders from `parameters` otherwise, as `docs/cores.md`'s `ws` template
+does, and validates each push against `messageCodec` unless told not to;
+`examples/kraken/src/kraken/core/socket.ts` is one over `ws.StreamsRpc`, serving `request`
+and `subscribe` on the same connection.
+
+## Composite cores
+
+A router whose core declares `children` or `forward` in `truewire.toml` (Kraken's `root`
+and `streams`, [docs/truewire-toml.md](truewire-toml.md)) is built from more than one
+transport. In Python that is a base class with a field per transport and a `new()`; in
+TypeScript it is a *fields object*, and the generated router exports the interface it takes:
+
+```ts
+export interface KrakenCore {
+  market_client: CommandEndpoint & StreamEndpoint
+  private_client: CommandEndpoint & StreamEndpoint
+  spot_client: HttpEndpoint<SpotMeta>
+}
+
+export class Kraken {
+  constructor(readonly core: KrakenCore) {
+    this.spot = new Spot(core.spot_client)
+    this.streams = new Streams(core)
+    this.tradingWs = new TradingWs(core.private_client)
+  }
+}
+```
+
+The fields are the ones the declarations name, verbatim, each typed by the intersection of
+what the endpoints reached through it need. A child endpoint or plain router receives the
+field its `children` entry maps it to (`client` when unmapped); a child that is itself a
+composite receives the whole object, since `forward` says its fields are the parent's
+same-named ones (`Streams` reads `market_client` and `private_client` off the object
+`Kraken` was given). `params` has no rendering: the hand-written core takes its parameters
+when it is built, and generated code never builds a core. The core is still never imported
+(ADR 0011): `examples/kraken/src/kraken/core/index.ts`'s `Core` declares `implements
+KrakenCore` and holds the three transports, and the root's interface is re-exported from
+`index.ts` for it.
 
 ## Pagination
 
@@ -157,28 +261,29 @@ the plan's `meta` tells it what each endpoint needs.
 ## Testing
 
 `examples/github/test` is the pattern. `setup.ts` is a vitest `globalSetup` that spawns
-`truewire mock --http-port 0` and provides its base URL to every test through
-`inject('httpBaseUrl')`; `replay.test.ts` walks `spec/endpoints/**/examples/*.request.json`
-and calls, for each, the method its function path names with the recorded request
-(validation on, so the codec accepts the recorded response); `paging.test.ts` walks the same
-recorded multi-page captures as `test/test_paging.py`; `codecs.test.ts` round-trips recorded
-bodies through `parse` and `dump` without the mock. CI (`examples-ts`) builds
-`@truewire/core`, installs the example, runs `truewire generate typescript --check`, `tsc
---noEmit` and `vitest run`.
+`truewire mock --http-port 0 --ws-port 0` and provides its URLs to every test through
+`inject('httpBaseUrl')` (and `inject('wsUrl')`); `replay.test.ts` walks
+`spec/endpoints/**/examples/*.request.json` and calls, for each, the method its function
+path names with the recorded request (validation on, so the codec accepts the recorded
+response); `paging.test.ts` walks the same recorded multi-page captures as
+`test/test_paging.py`; `codecs.test.ts` round-trips recorded bodies through `parse` and
+`dump` without the mock. `examples/kraken/test` adds the WebSocket half: `streams.test.ts`
+subscribes to a public and a private channel and calls the trading methods against the
+mock, the way `test/test_streams.py` does, and `codecs.test.ts` decodes every recorded
+`*.messages.json` capture through its message codec. Its replay parses each recording
+through the endpoint's `Request` codec first, since a recording holds wire values and the
+method takes typed ones. CI (`examples-ts`) builds `@truewire/core`, installs each example,
+runs `truewire generate typescript --check`, `tsc --noEmit` and `vitest run`.
 
 After a change to `packages/core-ts`, rebuild it (`yarn build`) and reinstall the example
 (`yarn install --force`): a `file:` dependency is copied at install time.
 
 ## Not generated yet
 
-- Stream endpoints (`kind: stream`): reported as skipped. The WebSocket runtime
-  (`@truewire/core/ws`) and `StreamEndpoint` exist; the emitter and `examples/kraken`'s
-  core are the next step, and what proves the WebSocket half of roadmap item 10.
-- Composite cores: a core declaring `forward`, `params` or `children` in
-  `[python.cores.<name>]` is skipped (`examples/kraken`'s `root`/`streams`).
 - `window` walks, `seek` walks with `overlap`, and the `unchanged` terminator: the plain
   method is generated with a note; no walker.
-- A `rpc` endpoint with both `http` and `ws` transports is generated for HTTP only.
+- A `rpc` endpoint with both `http` and `ws` transports is generated for HTTP only, and
+  reported as skipped for the `ws` half.
 - `truewire docs check` for ```ts blocks, and `truewire surface` for the camelCase rule.
 - A `@truewire/testing` package with the replay helpers (`examples/github/test` is
   hand-written for now).

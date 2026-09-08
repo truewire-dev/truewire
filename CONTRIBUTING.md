@@ -116,7 +116,10 @@ Each package releases from its own pull request, merged into `main`:
    public --provenance`, pushes the `core-ts-v<version>` tag and creates the GitHub release.
    A version already on npm is skipped, so re-merging is safe.
 
-npm has no trusted publisher here: the workflow authenticates with the `NPM_TOKEN` repository
-secret, a granular access token for the `@truewire` org with publish rights on
-`@truewire/core` (bypassing 2FA, since the workflow cannot answer a prompt). Without the
-secret the publish step fails and nothing is tagged.
+npm has no trusted publisher here yet: the workflow authenticates with `NPM_TOKEN`, a
+granular access token for the `@truewire` org with publish rights on `@truewire/core`
+(bypassing 2FA, since the workflow cannot answer a prompt). The token lives on the `npm`
+environment rather than loose in the repository's secrets, so only the release job reaches
+it and it can be gated on top of that, the same arrangement the crate release uses with
+`crates-io`. Without it the publish step fails and nothing is tagged. Once the first
+version is out, npm's trusted publishing can replace the token entirely.

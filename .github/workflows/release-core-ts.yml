@@ -46,6 +46,9 @@ jobs:
     needs: check
     if: needs.check.outputs.published == 'false'
     runs-on: ubuntu-latest
+    # The npm token lives on this environment rather than loose in the repository's
+    # secrets, so it is reachable from this one job and can be gated on top of that.
+    environment: npm
     defaults:
       run:
         working-directory: packages/core-ts

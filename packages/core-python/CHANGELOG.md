@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.1 (2026-09-08)
 
 - `truewire_core.times`: every converter's `parse` returns an already-parsed value
   unchanged -- a `date` to `DateConverter`, a `datetime` to `IsoConverter` and

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.8.2 (2026-09-08)
 
 - **`truewire capture` recorded the wrong exchange, and it could be a credential.** It
   wrote `exchanges[-1]`, the *last* request that went through `truewire_core.http.HttpClient`

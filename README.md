@@ -96,14 +96,15 @@ A cell reads `?` where we have not verified the claim ourselves. We publish what
 | Verified-coverage gate | Yes | No | No | No | No |
 | Docs type-checking | Yes | No | No | No | No |
 | MCP server | Yes (`truewire mcp`) | No | Yes (Gram) | ? | ? |
-| TypeScript | In the repository, not on npm yet | Yes | Yes | Yes | Yes |
+| TypeScript | Yes (`npm install @truewire/core`) | Yes | Yes | Yes | Yes |
 | Python | Yes | Yes | Yes | Yes | Experimental |
+| Rust | Yes (generator and runtime in the repository; crates.io pending) | No | No | No | No |
 
 We build Truewire for API consumers first: people integrating an API they do not control. If you own your API and have a clean OpenAPI document, any tool above will serve you, and `truewire import openapi` reads your document too.
 
 ## Status
 
-Alpha. Python is the shipped target; a TypeScript generator and runtime (`@truewire/core`, `packages/core-ts`) are in the repository and prove the same spec through the same mock on `examples/github`, but are not published to npm yet (see [docs/typescript.md](docs/typescript.md)). We extracted it from a private system that generates 14 production API clients covering 3,638 endpoints (3,272 request/reply, 316 streams, 50 gRPC) with 2,404 recorded HTTP example pairs and 384 WebSocket captures. Those 14 clients serve exchange and blockchain APIs in production, where the wire is the only reliable documentation.
+Alpha. Three languages come off one spec. Python is the most exercised; the TypeScript runtime is published as [`@truewire/core`](https://www.npmjs.com/package/@truewire/core) and its generator is in the repository (see [docs/typescript.md](docs/typescript.md)); the Rust generator and runtime are in the repository, with the crate not yet on crates.io (see [docs/rust.md](docs/rust.md)). `examples/github` generates in all three and replays the same recordings through the same mock. We extracted it from a private system that generates 14 production API clients covering 3,638 endpoints (3,272 request/reply, 316 streams, 50 gRPC) with 2,404 recorded HTTP example pairs and 384 WebSocket captures. Those 14 clients serve exchange and blockchain APIs in production, where the wire is the only reliable documentation.
 
 We will change the spec format in small ways before 1.0, and we record each change in `docs/adr/`. We ship when the gate is green, and we publish the gate: every item in [ROADMAP.md](ROADMAP.md) ends with a "done when" line.
 

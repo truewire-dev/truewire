@@ -188,3 +188,18 @@ The tests in `packages/truewire/test/test_plan.py` pin the GitHub example's plan
   (`Issue.state_reason` becomes `IssueStateReason`). A name on the plan, chosen once from
   the schema's `title` or its position, would let every backend that needs one agree on
   it. Found while writing the Rust generator.
+- **An endpoint class named like a shared type it imports.** `docs/spec/authoring.md`
+  rule 18 covers the names a *router* module binds; the endpoint module has a second,
+  separate collision. A leaf directory `widget/` under a scope whose `schemas.json`
+  declares `Widget` renders `export class Widget` beneath `import { Widget } from
+  '../types/index.js'` (`TS2440`/`TS2395`), and `pub struct Widget` beneath `use
+  crate::types::Widget;` (`E0255`). The Python backend already resolves it, by renaming
+  the class to `WidgetEndpoint` -- which is the right answer rather than a refusal, since
+  an endpoint class is not part of the public surface (a caller reaches it through the
+  router's method, never by name), so nothing an author wrote changes. The fix is to
+  teach the TypeScript and Rust backends the same disambiguation, and the place for the
+  decision is the plan: the plan already carries each endpoint's class name
+  (`RouterChildPlan.class_`) and each scope's type names, so it can choose one
+  non-colliding name that all three backends agree on rather than three separate
+  renames. Refusing the spec instead would break specs the Python backend generates
+  correctly today. Found while writing rule 18's check.

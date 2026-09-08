@@ -35,6 +35,12 @@ async with Petstore.new() as client:
   print(pet['created_at'])            # a real datetime, parsed from the wire
 ```
 
+Validation is on by default and `validate=False` turns it off for one call. That call returns the body as the wire sent it, and its return type says so: `Any` in Python, `unknown` in TypeScript, through an overload on every generated method, so the record's type cannot be claimed for a reply nothing checked ([docs/generated.md](docs/generated.md#validatefalse-returns-the-raw-body)).
+
+```python
+raw = await client.pets.get_pet(pet_id=42, validate=False)   # the parsed JSON as it came, typed Any
+```
+
 An endpoint with a declared `pagination` block gets a `_paged` variant. It walks pages for you and works both as an iterator and as an awaitable:
 
 ```python
@@ -67,7 +73,7 @@ truewire mcp --project petstore --new base_url=https://petstore.example.com/v1
 | Spec format | One directory per endpoint: `endpoint.json` (JSON Schema 2020-12 request and response), `upstream.md`, and `examples/`. Declared blocks for `pagination`, `envelope`, `push`, `redacted`, `unverified`, `meta`. Not OpenAPI, but imports from it. |
 | Checks | `truewire check` runs 19 lint rules over the spec (titles, enums, timestamp formats, positional rows, unions, descriptions, pagination references, envelope selectors, stream verbs). A response schema describes the wire body as recorded; `envelope.payload` selects what the generated method returns (ADR 0010). `truewire examples --require-verified` fails when an endpoint has neither a recorded example nor a stated reason. `truewire surface` fails when a spec'd endpoint has no reachable method. |
 | Examples and mock server | Recorded request/response pairs (`truewire capture` records a live call through your own client and core, so the pair carries the real headers, signing and envelope) and WebSocket captures, replayed by `truewire mock` over real HTTP and WS: subscribe/unsubscribe lifecycle, push-on-connect, push-after-RPC, correlation ids, declared redaction, and a 409 when two examples match one request. |
-| Python generator and `truewire-core` | `truewire generate python` emits async endpoint methods with typed `TypedDict` responses, `validate` and `transport` keywords, `_paged` walkers, and router classes with docstrings. Your hand-written core (transport, signing, envelope, errors) is declared, not introspected: `truewire.toml` says how routers compose it, `truewire_core.contract` says what it provides, and the generator never imports your package (ADR 0011). `truewire-core` is the small MIT runtime: HTTP, WebSocket streams and RPC, validation, paging, timestamp types, errors, the core contract. |
+| Python generator and `truewire-core` | `truewire generate python` emits async endpoint methods with typed `TypedDict` responses, `validate` and `transport` keywords (`validate=False` returns the raw body, typed `Any`), `_paged` walkers, and router classes with docstrings. Your hand-written core (transport, signing, envelope, errors) is declared, not introspected: `truewire.toml` says how routers compose it, `truewire_core.contract` says what it provides, and the generator never imports your package (ADR 0011). `truewire-core` is the small MIT runtime: HTTP, WebSocket streams and RPC, validation, paging, timestamp types, errors, the core contract. |
 | Plan | `truewire plan --json` prints the language-neutral plan the generators render from: types as a tree, request fields, the returned type, stream facts and every pagination decision, per endpoint ([docs/plan.md](docs/plan.md)). A second backend reads it instead of the spec. |
 | Standards | `truewire standards` runs the checks that guard a client's public surface: docstring shape, duplicate schemas, secret placeholders in examples, router coverage, no `__call__` classes. |
 | Docs | `truewire docs check` type-checks every code block in your README and docs against the generated package, so an example that no longer compiles fails CI. |

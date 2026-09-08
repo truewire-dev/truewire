@@ -115,6 +115,7 @@ Questions, bugs and spec corrections: open an issue, or write to hello@truewire.
 - [TypeScript](docs/typescript.md): the second backend, the core contract, and codecs.
 - [Generated code](docs/generated.md): what `truewire generate` writes, quoted from `examples/github`, and what stays hand-written.
 - [Core templates](docs/cores.md): the four cores `truewire init --template` writes (`bearer`, `hmac`, `jsonrpc`, `ws`), what each does and what to change.
+- [Truewire for coding agents](docs/agents.md): what to hand an agent, the gates, `capture`, `mcp` versus the CLI, and three prompts to paste.
 - [Architecture decisions](docs/adr/README.md): why things are the way they are.
 - [Contributing](CONTRIBUTING.md): dev setup, adding a check, adding a pagination strategy.
 

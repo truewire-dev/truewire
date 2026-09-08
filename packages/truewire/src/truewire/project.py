@@ -61,7 +61,7 @@ class Project:
   spec_dir: Path
   """`root / [spec].dir`, `spec` by default -- holds `endpoints/` and `schemas.json`."""
   config: 'CodegenConfig'
-  """The `[cores.*]` and `[python]` sections, validated."""
+  """The `[cores.*]`, `[python]` and `[typescript]` sections, validated."""
   python_src: Path
   """`root / [python].src`, `src` by default -- the directory the generated package lives
   under. Meaningful only when `[python]` is declared."""
@@ -102,6 +102,26 @@ class Project:
       NotAProject: When `truewire.toml` declares no `[python]` section.
     """
     return self.python_src / self.package_name
+
+  @property
+  def typescript(self):
+    """The `[typescript]` section, or `None` when the project generates no TypeScript package."""
+    return self.config.typescript
+
+  @property
+  def typescript_package_dir(self) -> Path:
+    """`root / [typescript].src / [typescript].package` -- the directory every generated
+    TypeScript file is written under.
+
+    Raises:
+      NotAProject: When `truewire.toml` declares no `[typescript]` section.
+    """
+    typescript = self.config.typescript
+    if typescript is None:
+      raise NotAProject(
+        f'{self.root / PROJECT_FILE}: no [typescript] section, so no TypeScript package to generate'
+      )
+    return self.root / typescript.src / (typescript.package or self.name)
 
   @property
   def state_dir(self) -> Path:
@@ -173,12 +193,14 @@ def load_project_data(data: dict[str, Any], *, root: Path) -> Project:
   secrets = data.get('secrets') or {}
   if not isinstance(secrets, dict):
     raise NotAProject(f'{root / PROJECT_FILE}: [secrets] must be a table')
-  known = {'project', 'spec', 'secrets', 'cores', 'python'}
+  known = {'project', 'spec', 'secrets', 'cores', 'python', 'typescript'}
   unknown = sorted(set(data) - known)
   if unknown:
     raise NotAProject(f'{root / PROJECT_FILE}: unknown top-level section(s): {", ".join(unknown)}')
   try:
-    config = load_codegen_config({key: data[key] for key in ('cores', 'python') if key in data})
+    config = load_codegen_config(
+      {key: data[key] for key in ('cores', 'python', 'typescript') if key in data}
+    )
   except ValidationError as exc:
     raise NotAProject(f'{root / PROJECT_FILE}: {exc}') from exc
   python_src = root / (config.python.src if config.python is not None else 'src')

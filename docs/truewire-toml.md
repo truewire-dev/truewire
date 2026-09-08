@@ -35,6 +35,11 @@ base = "petstore.core:StreamsBase"
 forward = ["market_client"]  # passed from the composing class's own same-named field
 params = { network = "petstore.core:Network" }   # exposed to the caller, typed by import
 children = { market_data = "market_client", private = "private_client" }
+
+[typescript]
+package = "petstore"         # default: [project].name; the package lives at <src>/<package>
+src = "src"                  # default "src"
+name = "Petstore"            # root class name; default: [python].name, else PascalCase of [project].name
 ```
 
 ## Sections
@@ -48,8 +53,7 @@ children = { market_data = "market_client", private = "private_client" }
   example that leaked a real credential-shaped value.
 - **`[cores.<name>]`**: the JSON Schema every endpoint's `meta` must satisfy when its nearest
   `router.json` resolves to `<name>`. Omit `meta` for a core that reads nothing per call.
-- **`[python]`**: where the generated package goes and how it is finished. Only `python` is a
-  target today.
+- **`[python]`**: where the generated Python package goes and how it is finished.
 - **`[python.cores.<name>]`**: `base` is `module.path:Class`, the hand-written class every
   generated endpoint under that core subclasses. Nothing is imported during generation
   (ADR 0011); the three optional keys below say how a composite built on this base is
@@ -73,6 +77,12 @@ children = { market_data = "market_client", private = "private_client" }
   protocols a base satisfies are in `truewire_core.contract`.
 - **`[[python.extras."<router node>"]]`**: hand-written classes folded into a generated
   router node (`file`, `class`, optional `replaces`).
+- **`[typescript]`**: where `truewire generate typescript` writes the TypeScript package
+  (`<src>/<package>/`) and what its root class is called. There is no per-core table: a
+  generated class takes its core as a constructor argument typed by the `@truewire/core`
+  contract (`HttpEndpoint<Meta>`), and the hand-written `<package>/core/index.ts`
+  satisfies it by shape, so nothing is imported or resolved at generation. See
+  [docs/typescript.md](typescript.md).
 
 ## Generated state
 
@@ -81,6 +91,12 @@ declares a `meta` schema (`SpotMeta` for `spot`); the hand-written core annotate
 `meta` parameter with it. `truewire init` writes the first one so the core template can
 import it before the first `generate`.
 
-`generate` writes `.truewire/python-files.json`, the manifest of files it owns. Files not in
-the manifest are never deleted; `generate --check` compares the plan to it, and
-`generate --delete` removes only what it owns. Add `.truewire/` to `.gitignore`.
+`generate typescript` writes `<src>/<package>/meta.ts`, one interface per core with a `meta`
+schema (`DefaultMeta` for `default`), which the hand-written core names as the `Meta`
+parameter of `HttpEndpoint`.
+
+`generate` writes `.truewire/<language>-files.json` (`python-files.json`,
+`typescript-files.json`), the manifest of files it owns. Files not in the manifest are
+never deleted; `generate --check` compares the plan to it (and, for TypeScript, each
+owned file's content), and `generate --delete` removes only what it owns. Add
+`.truewire/` to `.gitignore`.

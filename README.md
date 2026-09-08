@@ -90,14 +90,14 @@ A cell reads `?` where we have not verified the claim ourselves. We publish what
 | Verified-coverage gate | Yes | No | No | No | No |
 | Docs type-checking | Yes | No | No | No | No |
 | MCP server | Yes (`truewire mcp`) | No | Yes (Gram) | ? | ? |
-| TypeScript | Planned | Yes | Yes | Yes | Yes |
+| TypeScript | In the repository, not on npm yet | Yes | Yes | Yes | Yes |
 | Python | Yes | Yes | Yes | Yes | Experimental |
 
 We build Truewire for API consumers first: people integrating an API they do not control. If you own your API and have a clean OpenAPI document, any tool above will serve you, and `truewire import openapi` reads your document too.
 
 ## Status
 
-Alpha. Python only. We extracted it from a private system that generates 14 production API clients covering 3,638 endpoints (3,272 request/reply, 316 streams, 50 gRPC) with 2,404 recorded HTTP example pairs and 384 WebSocket captures. Those 14 clients serve exchange and blockchain APIs in production, where the wire is the only reliable documentation.
+Alpha. Python is the shipped target; a TypeScript generator and runtime (`@truewire/core`, `packages/core-ts`) are in the repository and prove the same spec through the same mock on `examples/github`, but are not published to npm yet (see [docs/typescript.md](docs/typescript.md)). We extracted it from a private system that generates 14 production API clients covering 3,638 endpoints (3,272 request/reply, 316 streams, 50 gRPC) with 2,404 recorded HTTP example pairs and 384 WebSocket captures. Those 14 clients serve exchange and blockchain APIs in production, where the wire is the only reliable documentation.
 
 We will change the spec format in small ways before 1.0, and we record each change in `docs/adr/`. We ship when the gate is green, and we publish the gate: every item in [ROADMAP.md](ROADMAP.md) ends with a "done when" line.
 
@@ -112,6 +112,7 @@ Questions, bugs and spec corrections: open an issue, or write to hello@truewire.
 - [Concepts](docs/concepts.md): the five ideas behind the tool.
 - [Spec authoring](docs/spec/authoring.md): the rules `truewire check` enforces.
 - [The plan](docs/plan.md): what a backend renders from, and its JSON shape.
+- [TypeScript](docs/typescript.md): the second backend, the core contract, and codecs.
 - [Architecture decisions](docs/adr/README.md): why things are the way they are.
 - [Contributing](CONTRIBUTING.md): dev setup, adding a check, adding a pagination strategy.
 

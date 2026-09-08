@@ -14,15 +14,19 @@ this package targets `>=3.10`)."""
 class IsoConverter(TimeConverter[str]):
   """Converter for RFC 3339 timestamps, always UTC and `Z`-suffixed on the wire."""
 
-  def parse(self, value: str) -> datetime:
-    """Parse a `Z`-suffixed, possibly non-microsecond-precision ISO 8601 timestamp.
+  def parse(self, value: str | datetime) -> datetime:
+    """Parse a `Z`-suffixed, possibly non-microsecond-precision ISO 8601 timestamp, or
+    pass an already-parsed `datetime` through unchanged (naive or aware, as given).
 
     Args:
       value: The wire timestamp. `Z` is normalized to `+00:00` and the fractional
         part, if any, is padded or truncated to exactly 6 digits, so parsing behaves
         the same on every Python version this package supports -- both are 3.11+-only
-        otherwise.
+        otherwise. A `datetime` is returned as is, so a request that already holds one
+        validates through `BeforeValidator(parse)`.
     """
+    if isinstance(value, datetime):
+      return value
     if value.endswith('Z'):
       value = value[:-1] + '+00:00'
     if m := _FRACTION.search(value):

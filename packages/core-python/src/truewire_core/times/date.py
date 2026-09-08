@@ -20,12 +20,27 @@ class DateConverter:
   `core_package` supplies, not something this converter should special-case per format.
   """
 
-  def parse(self, value: str) -> date:
-    """Parse a wire calendar date.
+  def parse(self, value: str | date) -> date:
+    """Parse a wire calendar date, or pass an already-parsed one through.
+
+    A `date` comes back unchanged, so a request `TypedDict` that holds the real `date` its
+    generated signature asks for validates through `BeforeValidator(parse)` the same way a
+    wire string does. A `datetime` (a `date` subclass) is accepted only at midnight, when
+    dropping its time loses nothing; any other time of day raises rather than truncating
+    silently -- the same rule pydantic applies when a `datetime` meets a `date` field.
 
     Args:
-      value: The wire date, e.g. `'2026-08-03'` for the default pattern.
+      value: The wire date, e.g. `'2026-08-03'` for the default pattern, or a `date`.
+
+    Raises:
+      ValueError: `value` is a `datetime` with a non-midnight time.
     """
+    if isinstance(value, datetime):
+      if (value.hour, value.minute, value.second, value.microsecond) != (0, 0, 0, 0):
+        raise ValueError(f'a date has no time of day; got {value.isoformat()} -- call .date() to choose')
+      return value.date()
+    if isinstance(value, date):
+      return value
     return datetime.strptime(value, self.pattern).date()
 
   def dump(self, d: date) -> str:

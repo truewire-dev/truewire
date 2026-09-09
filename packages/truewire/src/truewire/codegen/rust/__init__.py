@@ -111,15 +111,28 @@ def render_package(plan: PackagePlan, project: Project | None = None) -> Rendere
       out.files[rendered.file] = rendered.source
 
   # A module nothing declares would be written but never compiled: drop every router and
-  # endpoint under a router that was skipped.
+  # endpoint under a router that was skipped. The drop is reported rather than silent --
+  # skipping one router takes everything beneath it, and a caller who reads `skipped` as a
+  # list of endpoints would otherwise see a successful `Generated` line and a library with
+  # no client in it.
   reachable = {path for path in routers if all(path[:depth] in routers for depth in range(len(path)))}
+  dropped_routers, dropped_endpoints = [], []
   for path, rendered in routers.items():
     if path not in reachable:
       out.files.pop(rendered.file, None)
+      dropped_routers.append('.'.join(path) or '(root)')
   for function, module in list(endpoints.items()):
     if tuple(function.split('.')[:-1]) not in reachable:
       out.files.pop(module.file, None)
       del endpoints[function]
+      dropped_endpoints.append(function)
+  if dropped_endpoints or dropped_routers:
+    lost = ', '.join(sorted(dropped_routers) + sorted(dropped_endpoints))
+    out.skipped.append(
+      f'{len(dropped_endpoints)} endpoint(s) and {len(dropped_routers)} router(s) under a '
+      f'skipped router: nothing declares them, so they were rendered and then dropped -- '
+      f'{lost}'
+    )
 
   root = routers.get(()) if () in reachable else None
   root_modules = sorted(

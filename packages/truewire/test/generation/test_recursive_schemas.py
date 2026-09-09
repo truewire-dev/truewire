@@ -41,6 +41,7 @@ from typer.testing import CliRunner
 
 from truewire.cli import app
 from truewire.generation.python.types import TypeGenerator
+from truewire.generation.python.types.code import quote_self_reference
 from truewire.generation.schema import Schema, SchemaCycleError
 from truewire.spec.authoring import check_schema_cycles
 
@@ -290,6 +291,74 @@ class TestEndToEnd:
     assert result.exit_code == 0, result.output
     source = (project / 'src' / 'demo' / 'schemas.py').read_text()
     assert "children: NotRequired[list['Node']]" in source
+
+
+ENUM_NAMED_AFTER_ITSELF = {
+  'Alert': {
+    'title': 'Alert',
+    'type': 'object',
+    'description': 'One alert.',
+    'required': ['id', 'messageType'],
+    'properties': {
+      'id': {'type': 'string', 'description': 'Alert id.'},
+      'messageType': {
+        'type': 'string',
+        'enum': ['Alert', 'Update', 'Cancel'],
+        'description': 'Whether this issues, updates or cancels.',
+      },
+      'supersedes': {'$ref': 'Alert', 'description': 'The alert this one replaces.'},
+    },
+  },
+}
+"""A record whose own enum carries a member spelled exactly like the record.
+
+`api.weather.gov` really does this: a CAP alert's `messageType` is one of
+`Alert`/`Update`/`Cancel`, inside the record named `Alert`.
+"""
+
+
+class TestSelfReferenceQuotingSkipsStringLiterals:
+  """`quote_self_reference` quotes bare type names, never text inside a string literal.
+
+  The substitution is textual, over an already-rendered type expression, so it has to know
+  what in that expression is a name and what is a value. It did not: `\\bAlert\\b` matched the
+  member of `Literal['Alert', 'Update', 'Cancel']` inside the record named `Alert` and
+  rewrote it to `''Alert''` -- a syntax error, from a value that was never a reference.
+  """
+
+  def test_a_bare_reference_is_quoted(self):
+    assert quote_self_reference('list[Alert]', 'Alert') == "list['Alert']"
+
+  def test_an_enum_member_spelled_like_the_record_is_left_alone(self):
+    expr = "Literal['Alert', 'Update', 'Cancel']"
+    assert quote_self_reference(expr, 'Alert') == expr
+
+  def test_an_already_quoted_reference_is_not_quoted_twice(self):
+    assert quote_self_reference("list['Alert']", 'Alert') == "list['Alert']"
+
+  def test_a_bare_reference_beside_an_enum_member_is_still_quoted(self):
+    assert (
+      quote_self_reference("Literal['Alert'] | list[Alert]", 'Alert')
+      == "Literal['Alert'] | list['Alert']"
+    )
+
+  def test_a_longer_name_containing_the_record_is_untouched(self):
+    assert quote_self_reference('AlertReference', 'Alert') == 'AlertReference'
+
+  def test_the_generated_module_parses_and_validates(self, tmp_path: Path, monkeypatch):
+    """The end of the bug: the module was a syntax error, so nothing downstream ran."""
+    runner = CliRunner()
+    monkeypatch.chdir(tmp_path)
+    project = write_project(tmp_path, runner, ENUM_NAMED_AFTER_ITSELF)
+    assert runner.invoke(app, ['check', '--project', str(project)]).exit_code == 0
+    result = runner.invoke(app, ['generate', 'python', '--project', str(project)])
+    assert result.exit_code == 0, result.output
+    source = (project / 'src' / 'demo' / 'schemas.py').read_text()
+    assert "Literal['Alert', 'Update', 'Cancel']" in source
+    assert "''Alert''" not in source
+    module = import_generated(project / 'src' / 'demo' / 'schemas.py')
+    payload = {'id': 'a', 'messageType': 'Alert', 'supersedes': {'id': 'b', 'messageType': 'Cancel'}}
+    assert TypeAdapter(module.Alert).validate_python(payload) == payload
 
 
 class TestCycleAudit:

@@ -95,9 +95,17 @@ jobs:
           console.log(`${shipped.size} files in the tarball; every entry point is present`)
           EOF
       - name: Publish
+        # Two ways in, so this works whichever is configured: npm's OIDC trusted publishing
+        # (which needs `id-token: write`, above, and a recent npm -- the one bundled with
+        # Node 22 is too old for it), or the `NPM_TOKEN` secret on this environment. npm
+        # prefers the token when one is present, so removing the secret is what completes
+        # the move to trusted publishing.
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public --provenance
+        run: |
+          npm install -g npm@latest
+          npm --version
+          npm publish --access public --provenance
       - id: previous_tag
         run: |
           previous=$(git tag -l 'core-ts-v*' | sort -V | tail -1)

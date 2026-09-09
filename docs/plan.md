@@ -182,6 +182,18 @@ The tests in `packages/truewire/test/test_plan.py` pin the GitHub example's plan
   at the union's own path. An OpenAPI `discriminator` is dropped by `truewire import
   openapi` and has no node here; with one, a backend could render a tagged union and give
   an exact error. Found while writing the Rust runtime.
+- **A union cannot be declared open.** An `anyOf` renders as a closed union, so a wire
+  shape the spec does not list fails the *whole* value it arrived in. Bluesky shipped a
+  sixth `app.bsky.embed.*#view` after the showcase's spec was written, and one post
+  carrying it rejected the fifty-post feed it came in. There is no way to say the union is
+  extensible, so the author hand-writes a last member (`{"$type": string}` with
+  `additionalProperties: true`) whose behaviour depends on pydantic preferring a member
+  whose `Literal` matches -- correct today, unstated in the schema, and not portable to a
+  backend with different union semantics. An `"open": true` on an `anyOf` would render the
+  fallback and say so in the generated docs; `truewire check` should also warn on a union
+  of `$type`-tagged members with no fallback, which is the same hazard rule 2 already warns
+  about for a bare string ("a guessed `enum` becomes a `Literal` that rejects values the
+  API later sends"). Found while recording the Bluesky showcase.
 - **Inline literals and unions have no name.** A `literal` or `union` node inside a
   field carries no `id`; TypeScript and Python spell it inline (`'open' | 'closed'`), but
   Rust needs a named `enum` for it, so the Rust backend invents one from the position

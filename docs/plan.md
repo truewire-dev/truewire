@@ -182,6 +182,17 @@ The tests in `packages/truewire/test/test_plan.py` pin the GitHub example's plan
   at the union's own path. An OpenAPI `discriminator` is dropped by `truewire import
   openapi` and has no node here; with one, a backend could render a tagged union and give
   an exact error. Found while writing the Rust runtime.
+- **The Rust backend renders only a simple root.** A router whose core is composite -- one
+  that hands different children different transports -- has no Rust rendering, and skipping
+  the root takes the whole client with it: pointing the backend at the Bluesky showcase
+  rendered eleven HTTP endpoints and four group routers, then dropped every one of them
+  because nothing reachable declared them, and wrote three files (`lib.rs`, `meta.rs`,
+  `types/mod.rs`). Python and TypeScript both render it (24 and 21 files from the same
+  spec). A composite root is not an exotic shape: it is what any client that speaks both
+  HTTP and WebSocket needs, which is the combination Truewire exists to handle, so this is
+  the gap that decides whether Rust is a supported backend or a demo. The stream endpoint
+  itself is the second half of the same hole. The drop is at least reported now rather than
+  silent. Found by generating the Bluesky showcase in all three languages.
 - **A union cannot be declared open.** An `anyOf` renders as a closed union, so a wire
   shape the spec does not list fails the *whole* value it arrived in. Bluesky shipped a
   sixth `app.bsky.embed.*#view` after the showcase's spec was written, and one post

@@ -21,6 +21,12 @@ from dataclasses import dataclass, field
 
 from typing_extensions import Mapping
 
+from truewire.codegen.shapes import (
+  DEFAULT_FIELD,
+  CoreShape,
+  is_composite,
+)
+from truewire.codegen.shapes import core_shapes as shared_core_shapes
 from truewire.plan.model import PackagePlan, RouterPlan
 
 from .endpoint import META_FILE, EndpointModule, emit_signatures, render_params, render_return
@@ -30,9 +36,6 @@ from .types import Module, scope_file
 
 MAIN_FILE = 'main.ts'
 INDEX_FILE = 'index.ts'
-
-DEFAULT_FIELD = 'client'
-"""The field a composite hands a child its `children` table does not name."""
 
 
 def router_file(path: list[str]) -> str:
@@ -45,25 +48,6 @@ def core_class_name(class_name: str) -> str:
   return f'{class_name}Core'
 
 
-@dataclass
-class CoreShape:
-  """What a router's constructor takes: one transport (`types`, the contract interfaces
-  its endpoints need, intersected), or a fields object (`fields`, each field's
-  transport types) when the router or one of its descendants is a composite."""
-  types: set[str] = field(default_factory=set)
-  fields: dict[str, set[str]] | None = None
-
-  @property
-  def composite(self) -> bool:
-    return self.fields is not None
-
-
-def is_composite(plan: PackagePlan, core: str | None) -> bool:
-  """Whether `core` declares `children` or `forward`: built from a fields object."""
-  declared = plan.cores.get(core) if core is not None else None
-  return declared is not None and (declared.children is not None or declared.forward is not None)
-
-
 def endpoint_core_type(module: EndpointModule) -> str:
   return f'{module.core_type}<{module.meta_type}>' if module.meta_type is not None else module.core_type
 
@@ -71,47 +55,12 @@ def endpoint_core_type(module: EndpointModule) -> str:
 def core_shapes(
   plan: PackagePlan, endpoints: Mapping[str, EndpointModule],
 ) -> dict[tuple[str, ...], CoreShape]:
-  """The `CoreShape` of every router, leaves first.
+  """The `CoreShape` of every router, in TypeScript's spelling of a contract."""
+  def contract(function: str) -> str | None:
+    module = endpoints.get(function)
+    return None if module is None else endpoint_core_type(module)
 
-  A composite's fields are the union of what its children need under the field each is
-  mapped to; a composite child contributes its own fields by name (`forward`). A router
-  under a plain core whose child is a composite takes a fields object too, its own
-  endpoints under `client`: the fields have to come from somewhere.
-  """
-  routers = {tuple(router.path): router for router in plan.routers}
-  shapes: dict[tuple[str, ...], CoreShape] = {}
-
-  def shape(path: tuple[str, ...]) -> CoreShape:
-    if path in shapes:
-      return shapes[path]
-    router = routers[path]
-    mapping = (plan.cores[router.core].children if router.core in plan.cores else None) or {}
-    kids: list[tuple[str, CoreShape]] = []
-    for child in router.children:
-      if child.kind == 'endpoint':
-        module = endpoints.get('.'.join([*path, child.name]))
-        if module is not None:
-          kids.append((child.name, CoreShape(types={endpoint_core_type(module)})))
-      elif (*path, child.name) in routers:
-        kids.append((child.name, shape((*path, child.name))))
-    result = CoreShape()
-    if is_composite(plan, router.core) or any(kid.composite for _, kid in kids):
-      result.fields = {}
-      for name, kid in kids:
-        if kid.fields is not None:
-          for field_name, types in kid.fields.items():
-            result.fields.setdefault(field_name, set()).update(types)
-        else:
-          result.fields.setdefault(mapping.get(name, DEFAULT_FIELD), set()).update(kid.types)
-    else:
-      for _, kid in kids:
-        result.types.update(kid.types)
-    shapes[path] = result
-    return result
-
-  for path in routers:
-    shape(path)
-  return shapes
+  return shared_core_shapes(plan, contract)
 
 
 def _intersection(module: Module, types: set[str]) -> str:

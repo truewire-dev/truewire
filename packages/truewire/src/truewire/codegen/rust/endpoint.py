@@ -489,7 +489,14 @@ def _paged(
   kind = str(done)
   zero_is_absent = strategy in ('token', 'seek') and not pagination.driver_required
   w.line('let endpoint = self.clone();')
-  size = _size(w, module, endpoint, pagination, request_fields, plan_fields)
+  # Only the `page` and `seek` terminators read the page size; a `token` walk stops on the
+  # cursor the response carries, so binding one there is dead code and a warning on
+  # every clean build of every cursor-paged client.
+  size = (
+    _size(w, module, endpoint, pagination, request_fields, plan_fields)
+    if strategy in ('page', 'seek')
+    else 'None'
+  )
   total_walk = strategy == 'page' and kind == 'total'
   if total_walk:
     module.imports.add('std::sync', 'Arc')

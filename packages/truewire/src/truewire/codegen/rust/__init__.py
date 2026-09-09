@@ -22,6 +22,7 @@ transports is rendered for HTTP only.
 """
 from dataclasses import dataclass, field
 
+from truewire.codegen.shapes import core_shapes
 from truewire.plan.model import PackagePlan
 from truewire.project import Project
 
@@ -46,12 +47,6 @@ def root_struct_name(plan: PackagePlan, project: Project | None) -> str:
   if project is not None and project.rust is not None and project.rust.name:
     return project.rust.name
   return plan.root_class
-
-
-def is_composite(plan: PackagePlan, core: str | None) -> bool:
-  """Whether `core` declares `children` or `forward`: built from more than one transport."""
-  declared = plan.cores.get(core) if core is not None else None
-  return declared is not None and (declared.children is not None or declared.forward is not None)
 
 
 def render_package(plan: PackagePlan, project: Project | None = None) -> Rendered:
@@ -98,14 +93,14 @@ def render_package(plan: PackagePlan, project: Project | None = None) -> Rendere
     endpoints[endpoint.function] = rendered
     out.files[rendered.file] = rendered.source
 
+  shapes_by_router = core_shapes(plan, lambda function: endpoints[function].bound if function in endpoints else None)
   routers: dict[tuple[str, ...], RouterModule] = {}
   for router in sorted(plan.routers, key=lambda r: -len(r.path)):
-    if is_composite(plan, router.core):
-      name = '.'.join(router.path) or '(root)'
-      out.skipped.append(f'{name}: a router under a composite core has no Rust rendering yet')
-      continue
     struct_name = root_name if not router.path else class_by_child[tuple(router.path)]
-    rendered = render_router(plan, router, struct_name=struct_name, endpoints=endpoints, routers=routers)
+    rendered = render_router(
+      plan, router, struct_name=struct_name, endpoints=endpoints, routers=routers,
+      shapes=shapes_by_router,
+    )
     if rendered is not None:
       routers[tuple(router.path)] = rendered
       out.files[rendered.file] = rendered.source

@@ -361,19 +361,36 @@ def test_fixture_routers_delegate_with_qualified_types(fixture_rendered):
   assert 'pub deposits: deposits::Deposits,' in account and 'pub mod deposits;\npub mod withdrawals;' in account
 
 
-def test_composite_and_ws_only_shapes_are_skipped():
-  """A router under a composite core, and everything beneath it, is left out with a
-  note; a `ws`-only rpc endpoint too; an rpc endpoint with both transports is HTTP only."""
+def test_a_composite_root_renders_and_ws_only_endpoints_are_skipped():
+  """A router under a composite core takes one parameter per declared field, so the
+  subtrees that *can* render do, and only the endpoints that cannot are left out.
+
+  Kraken's root is composite (`spot` on HTTP, `streams`/`trading_ws` on a socket). Before
+  the composite constructor existed the whole client vanished behind one skip; now the
+  HTTP half is a real client and the socket half is skipped endpoint by endpoint, which
+  is what the skip list should have said all along.
+  """
   root = _example('kraken')
   rendered = render_package(build_plan(root))
   notes = '\n'.join(rendered.skipped)
-  assert '(root): a router under a composite core has no Rust rendering yet' in notes
-  assert 'streams: a router under a composite core has no Rust rendering yet' in notes
+  assert 'a router under a composite core' not in notes
+  assert 'a stream endpoint has no Rust rendering yet' in notes
   assert 'an rpc endpoint over a WebSocket has no Rust rendering yet' in notes
-  assert 'client.rs' not in rendered.files and 'streams/mod.rs' not in rendered.files
+
+  # The HTTP subtree is rendered and reachable from the root.
+  assert 'client.rs' in rendered.files and 'spot/mod.rs' in rendered.files
+  assert 'pub use client::' in rendered.files['lib.rs']
+  # Nothing that could not render is declared: a module `lib.rs` names but never wrote
+  # would not compile.
   assert not any(path.startswith('streams/') or path.startswith('trading_ws/') for path in rendered.files)
-  assert 'lib.rs' in rendered.files and 'pub use client::' not in rendered.files['lib.rs']
-  assert 'meta.rs' in rendered.files and 'types/mod.rs' in rendered.files
+  assert 'pub mod streams;' not in rendered.files['lib.rs']
+
+  # The root's own constructor names the field its HTTP children are handed, and not the
+  # socket field, which nothing rendered can be built from.
+  client = rendered.files['client.rs']
+  assert 'pub fn new(spot_client: Arc<dyn HttpEndpoint<SpotMeta>>) -> Self {' in client or \
+    'pub fn new(client: Arc<dyn HttpEndpoint<SpotMeta>>) -> Self {' in client, client
+  assert 'Arc<dyn >' not in client
 
 
 def test_root_struct_name_prefers_the_rust_section(tmp_path: Path):

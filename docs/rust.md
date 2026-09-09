@@ -47,11 +47,11 @@ truewire-core = "0.1"
 ```
 
 ```rust
-use github::core::{Core, CoreOptions};
+use github::core::CoreOptions;
 use github::repos::get::Request;
 use github::{CallOptions, GitHub};
 
-let client = GitHub::new(Arc::new(Core::new(CoreOptions::default())));
+let client = GitHub::new(CoreOptions::default());
 let repo = client.repos.get(Request { owner: "truewire-dev".into(), repo: "truewire".into(), ..Default::default() }, CallOptions::default()).await?;
 repo.created_at                                    // a TimestampIso, deref to DateTime<Utc>
 let raw = client.repos.get_raw(request, CallOptions::default()).await?;   // the serde_json::Value as it came
@@ -70,7 +70,7 @@ One file per spec node, beside the Python and TypeScript packages when all are d
 | `types/mod.rs`, `types/<scope>.rs` | the shared `schemas.json` types, one module per scope |
 | `<router>/<endpoint>.rs` | the endpoint's `Request`, its response types, the enums hoisted out of them, and a struct with the method, its `_raw` twin and the walker |
 | `<router>/mod.rs` | a router struct delegating to its endpoints and holding its child routers as `pub` fields |
-| `client.rs` | the root struct, `GitHub::new(core)` |
+| `client.rs` | the root struct, `GitHub::from_core(core)` |
 | `meta.rs` | one struct per `[cores.<name>]` with a `meta` schema (`DefaultMeta`) |
 | `lib.rs` | the crate root: `pub mod` for every module above and for the hand-written `core`, `pub use client::GitHub` and `CallOptions` |
 
@@ -197,13 +197,21 @@ what Rust can type:
   request type or codec and validates itself; in Rust that would make every trait generic
   in two types the core does not care about, and `dyn` dispatch impossible.
 - **There is no `ClientRoot` or `Composite` trait.** The root is a struct the generator
-  writes, and the hand-written code builds it: `GitHub::new(Arc::new(core))`. A router
-  whose endpoints all hold the same contract takes that `Arc<dyn HttpEndpoint<Meta>>` and
-  hands a clone to every child; one whose subtree needs several `meta` shapes is generic
-  in the core, `new<C>(core: Arc<C>) where C: HttpEndpoint<DefaultMeta> +
-  HttpEndpoint<FuturesMeta> + 'static`, and the `Arc<C>` coerces to each child's trait
-  object. Nothing needs a `new(...)` protocol; `params` are what the hand-written core
-  takes when it is built.
+  writes, and the hand-written code builds it: `GitHub::from_core(core)`. A router whose
+  endpoints all hold the same contract hands a clone of one `Arc<dyn HttpEndpoint<Meta>>`
+  to every child; one whose subtree needs several `meta` shapes is generic in the core,
+  `from_core<C>(core: C) where C: HttpEndpoint<DefaultMeta> + HttpEndpoint<FuturesMeta> +
+  'static`, and the `Arc<C>` it wraps coerces to each child's trait object. Nothing needs
+  a `new(...)` protocol; `params` are what the hand-written core takes when it is built.
+- **The root's constructor is `from_core`, not `new`, and it takes the core by value.**
+  Both halves are about the call site. `new` is left free for the hand-written core to
+  define as an inherent impl on the generated type -- the Rust answer to the base class
+  `[python.cores.root]` names -- so a client reads `GitHub::new(CoreOptions::default())`
+  rather than `GitHub::new(Arc::new(Core::new(CoreOptions::default())))`. And the `Arc` is
+  the generator's storage decision, not the caller's, so the root wraps what it is given;
+  `truewire-core` implements the endpoint traits for `Arc<T>`, so a core already shared
+  between two clients satisfies the same bound and goes through the same door. A composite
+  root takes one parameter per declared field and is named `from_cores`.
 
 A hand-written HTTP core does four things in `request`, as `examples/github`'s
 `src/github/core/mod.rs` does: fill the `{placeholders}` from the request object and send

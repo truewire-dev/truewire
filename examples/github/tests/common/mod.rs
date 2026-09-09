@@ -6,9 +6,8 @@
 
 use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, Stdio};
-use std::sync::Arc;
 
-use github::core::{Core, CoreOptions};
+use github::core::CoreOptions;
 use github::GitHub;
 
 pub struct Mock {
@@ -58,11 +57,10 @@ impl Mock {
 
     /// The generated client against the mock's base URL.
     pub fn client(&self) -> GitHub {
-        let core = Core::new(CoreOptions {
+        GitHub::new(CoreOptions {
             base_url: Some(self.http_base_url.clone()),
             ..CoreOptions::default()
-        });
-        GitHub::new(Arc::new(core))
+        })
     }
 }
 

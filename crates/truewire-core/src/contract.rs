@@ -37,6 +37,7 @@
 //! writes with one field per transport the `truewire.toml` core declares, and the
 //! hand-written code builds it (`Client::new(core)`); nothing needs a `new(...)` protocol.
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -118,4 +119,46 @@ pub trait CommandEndpoint<Meta = ()>: Send + Sync {
 pub trait StreamEndpoint<Meta = ()>: Send + Sync {
     /// Subscribe to `channel` with `parameters`; each pushed payload is one item.
     async fn subscribe(&self, call: SubscribeCall<'_, Meta>) -> Result<Stream<Value>>;
+}
+
+// A shared core is a core.
+//
+// Generated roots take their core by value (`Weather::from_core(Core::new(...))`), which is
+// the common case and the one that should read well. These impls make the shared case work
+// through the same door: an `Arc<dyn HttpEndpoint<Meta>>` handed to two clients satisfies
+// the same bound as the value it wraps, so there is one constructor rather than one per
+// ownership story. `?Sized` is what admits the `dyn` form; without it these would cover
+// only `Arc<Core>`.
+
+#[async_trait]
+impl<Meta, T> HttpEndpoint<Meta> for Arc<T>
+where
+    Meta: Send + Sync,
+    T: HttpEndpoint<Meta> + ?Sized,
+{
+    async fn request(&self, call: HttpCall<'_, Meta>) -> Result<Value> {
+        (**self).request(call).await
+    }
+}
+
+#[async_trait]
+impl<Meta, T> CommandEndpoint<Meta> for Arc<T>
+where
+    Meta: Send + Sync,
+    T: CommandEndpoint<Meta> + ?Sized,
+{
+    async fn request(&self, call: CommandCall<'_, Meta>) -> Result<Value> {
+        (**self).request(call).await
+    }
+}
+
+#[async_trait]
+impl<Meta, T> StreamEndpoint<Meta> for Arc<T>
+where
+    Meta: Send + Sync,
+    T: StreamEndpoint<Meta> + ?Sized,
+{
+    async fn subscribe(&self, call: SubscribeCall<'_, Meta>) -> Result<Stream<Value>> {
+        (**self).subscribe(call).await
+    }
 }

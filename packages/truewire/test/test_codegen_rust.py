@@ -288,9 +288,15 @@ def test_fixture_package_layout(fixture_rendered):
   assert 'types/mod.rs' in files and 'types/futures.rs' in files
   assert 'market/mod.rs' in files and 'market/order_list.rs' in files
   assert 'token/nfts/list.rs' in files and 'token/nfts/mod.rs' in files
+  # This fixture's stream names its channel with a template the parameters fill
+  # (`/ticker/{symbol}`), which is the one stream shape Rust does not render yet; a stream
+  # with a literal channel does (see the kraken test below).
   assert 'market/ticker_stream.rs' not in files
   assert all(content.startswith(BANNER + '\n') for content in files.values())
-  assert fixture_rendered.skipped == ['market.ticker_stream: a stream endpoint has no Rust rendering yet']
+  assert fixture_rendered.skipped == [
+    'market.ticker_stream: a stream whose parameters only fill its channel template '
+    'has no Rust rendering yet'
+  ]
   assert 'pub struct FixtureClient' in files['client.rs']
   assert files['lib.rs'].split('\n\n')[1] == (
     'pub mod account;\npub mod client;\npub mod core;\npub mod futures;\npub mod market;\n'
@@ -374,22 +380,29 @@ def test_a_composite_root_renders_and_ws_only_endpoints_are_skipped():
   rendered = render_package(build_plan(root))
   notes = '\n'.join(rendered.skipped)
   assert 'a router under a composite core' not in notes
-  assert 'a stream endpoint has no Rust rendering yet' in notes
+  assert 'a stream endpoint has no Rust rendering yet' not in notes
   assert 'an rpc endpoint over a WebSocket has no Rust rendering yet' in notes
 
   # The HTTP subtree is rendered and reachable from the root.
   assert 'client.rs' in rendered.files and 'spot/mod.rs' in rendered.files
   assert 'pub use client::' in rendered.files['lib.rs']
-  # Nothing that could not render is declared: a module `lib.rs` names but never wrote
-  # would not compile.
-  assert not any(path.startswith('streams/') or path.startswith('trading_ws/') for path in rendered.files)
-  assert 'pub mod streams;' not in rendered.files['lib.rs']
+  # The stream subtree renders too; only the ws-only rpc endpoints cannot, and nothing
+  # that could not render is declared -- a module `lib.rs` names but never wrote would not
+  # compile.
+  assert 'streams/market_data/book.rs' in rendered.files
+  assert not any(path.startswith('trading_ws/') for path in rendered.files)
+  assert 'pub mod trading_ws;' not in rendered.files['lib.rs']
 
-  # The root's own constructor names the field its HTTP children are handed, and not the
-  # socket field, which nothing rendered can be built from.
+  # The root takes one parameter per field its `[cores.*] children` declare, and a child
+  # that is itself composite is handed its own fields rather than one core.
   client = rendered.files['client.rs']
-  assert 'pub fn new(spot_client: Arc<dyn HttpEndpoint<SpotMeta>>) -> Self {' in client or \
-    'pub fn new(client: Arc<dyn HttpEndpoint<SpotMeta>>) -> Self {' in client, client
+  assert (
+    'pub fn new(market_client: Arc<dyn StreamEndpoint>, '
+    'private_client: Arc<dyn StreamEndpoint>, '
+    'spot_client: Arc<dyn HttpEndpoint<SpotMeta>>) -> Self {'
+  ) in client, client
+  assert 'streams: Streams::new(market_client, private_client)' in client
+  assert 'spot: Spot::new(spot_client)' in client
   assert 'Arc<dyn >' not in client
 
 

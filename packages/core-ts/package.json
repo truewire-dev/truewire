@@ -1,6 +1,6 @@
 {
   "name": "@truewire/core",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Runtime for Truewire-generated TypeScript clients: HTTP and WebSocket transport, codecs, paging, timestamps, errors.",
   "keywords": [
     "truewire",

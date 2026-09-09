@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.1 (2026-09-09)
+
+- **`HttpClient` was unusable in a browser.** It held `globalThis.fetch` unbound and called
+  it as `this.fetch(...)`, which makes the receiver the client; a browser refuses that with
+  `TypeError: Failed to execute 'fetch' on 'Window': Illegal invocation`, while Node's
+  `fetch` does not care. So every generated TypeScript client failed on its first call in a
+  browser, and no test caught it: the runtime's 147 and a showcase client's eleven all run
+  on Node. The default is bound to the global now. The regression test stubs a `fetch` as
+  picky as a browser is, and reverting the bind makes it fail with the browser's own
+  message. Found by loading a generated client into Chromium rather than reasoning about
+  whether it would work.
+
 ## 0.1.0 (2026-09-08)
 
 - `Stream` and `Subscription` are exported from the package root beside `PaginatedResponse`,

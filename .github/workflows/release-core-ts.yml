@@ -1,9 +1,9 @@
 name: Release @truewire/core
 
 # Merge a pull request from branch `release/core-ts` into main. If the version in
-# packages/core-ts/package.json is not on npm yet, this builds, publishes (npm token from
-# the NPM_TOKEN repository secret, with a provenance attestation), tags
-# `core-ts-v<version>` and creates the GitHub release.
+# packages/core-ts/package.json is not on npm yet, this builds, publishes through npm
+# trusted publishing (which mints its own short-lived credential from this job's OIDC
+# token and attests provenance), tags `core-ts-v<version>` and creates the GitHub release.
 on:
   pull_request:
     types: [closed]
@@ -95,9 +95,19 @@ jobs:
           console.log(`${shipped.size} files in the tarball; every entry point is present`)
           EOF
       - name: Publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public --provenance
+        # Trusted publishing: npm mints a short-lived credential from this job's OIDC token
+        # (`id-token: write`, above), so there is no npm token anywhere -- nothing to leak,
+        # nothing to rotate, and nothing to revoke by hand. It requires npm 11.5.1 or newer,
+        # which the version bundled with Node 22 is not, and it publishes provenance by
+        # itself, so `--provenance` is not passed.
+        #
+        # npm prefers a token when `NODE_AUTH_TOKEN` is set, so this step deliberately sets
+        # none: a leftover `NPM_TOKEN` secret would silently take precedence and put us back
+        # where we started.
+        run: |
+          npm install -g npm@latest
+          npm --version
+          npm publish --access public
       - id: previous_tag
         run: |
           previous=$(git tag -l 'core-ts-v*' | sort -V | tail -1)

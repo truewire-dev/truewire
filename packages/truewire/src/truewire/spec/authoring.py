@@ -157,7 +157,7 @@ RULE_HEADINGS: dict[Rule, str] = {
     '17. A schema may reference itself, through a record'
   ),
   'router-name-collision': (
-    "18. A router group's class name is not its parent's, and not a sibling's"
+    "18. A router group's class name is not its parent's, a sibling's, or a shared schema's"
   ),
 }
 """Contract heading each check is derived from, for reporting."""
@@ -1876,6 +1876,10 @@ def check_router_names(
   - **A sibling.** A node composes each child under the name its own segment renders, so
     two children rendering the same name (`list-orders` and `list_orders` both render
     `ListOrders`) claim one name twice.
+  - **A shared schema.** The same module also imports the shared types, so a group whose
+    class name equals a `schemas.json` title declares and imports one name. `forecast`
+    beside a shared `Forecast` is the case this found: the group renders the class,
+    the schema renders the type, and TypeScript's router module wants both.
 
   `error`-severity, and never a heuristic: two rendered strings are equal or they are
   not. Refused rather than auto-renamed, because the root class name and every group
@@ -1890,6 +1894,10 @@ def check_router_names(
   returns another root client and the endpoints under it become unreachable. A spec is
   refused on the first of those, not on each backend's own tolerance, so that one spec
   means one answer.
+
+  The shared-schema shape is the same discipline arrived at the hard way: it was found by
+  a spec that passed this check, generated valid Python, and then failed `tsc`. One
+  backend's silence is not evidence a name is free.
 
   Args:
     client_root: Project (or project root).
@@ -1909,6 +1917,14 @@ def check_router_names(
   endpoints_root = project.endpoints_dir
   nodes, leaves = function_tree(project)
   names = client_class_names(project)
+  # Every scope's ids together rather than each scope's own visibility: a false positive
+  # here costs a rename, and a false negative costs a backend that does not compile.
+  try:
+    shared = set(load_shared_schemas(project))
+  except Exception:
+    # A project whose `schemas.json` cannot be loaded has a louder problem than this
+    # check, reported by whichever check owns it.
+    shared = set()
   if language is not None:
     names = {language: names[language]} if language in names else {}
 
@@ -1955,6 +1971,22 @@ def check_router_names(
           'the module composing the group imports that class and declares its own under '
           'the same name, so the composing class ends up holding itself. '
           f'Fix: {fix}.'
+        ),
+      ))
+
+    for segment in groups:
+      rendered = class_name(segment)
+      if rendered not in shared:
+        continue
+      group = '.'.join((*node, segment))
+      violations.append(Violation(
+        rule='router-name-collision',
+        location=location((*node, segment)),
+        message=(
+          f'the router group {group!r} renders the class {rendered!r}, and a shared schema '
+          f'is already called {rendered!r} -- the module composing the group imports the '
+          'shared types and declares its own class, so both want that one name. '
+          f'Fix: rename the {rendered!r} schema, or rename the {segment!r} group directory.'
         ),
       ))
 

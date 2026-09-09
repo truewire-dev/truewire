@@ -342,7 +342,7 @@ The fix is to give one schema on the cycle `properties` and a `title`, so it bec
 
 Enforcement: `truewire check`, `error`, naming the schemas on the cycle. Generation refuses the same shape with a `SchemaCycleError` rather than a `RecursionError`.
 
-## 18. A router group's class name is not its parent's, and not a sibling's
+## 18. A router group's class name is not its parent's, a sibling's, or a shared schema's
 
 Every router node generates one class, and that class names each child it composes: a group by the class the child's own directory renders, an endpoint by the method it exposes. Two things claiming one name in that module is refused, in either of the two ways it happens.
 
@@ -356,6 +356,10 @@ truewire.toml  [rust] name = "Weather"
 There is nothing left for the root to be. Rust's `client.rs` writes `use crate::weather::Weather;` above `pub struct Weather`, so the root struct contains itself (`E0255`, then `E0072` and `E0391`); TypeScript's `main.ts` does the same by bare import (`TS2440`, `TS2395`). Python raises nothing at all, which is worse: the class shadows the import, `client.weather` returns another root client, and every endpoint under the group drops off the surface with no diagnostic anywhere. The same shape recurs one level down — `alpha/beta/beta/` renders `Beta` into the module that already declares `Beta`.
 
 The second is two siblings that render one name. Directory names are unique but rendered class names are not: `list-orders/` and `list_orders/` both render `ListOrders`, and the module composing them binds that name twice, so only whichever is written second is reachable.
+
+The third is a group whose class name is a shared schema's. The same module imports the shared types alongside the classes it composes, so a `forecast/` group beside a `Forecast` in `schemas.json` wants one name for two things — `api.weather.gov` really is shaped that way, since the endpoint is `/gridpoints/{office}/{x},{y}/forecast` and the thing it returns is a forecast. TypeScript's router `index.ts` imports the type and declares the class (`TS2440`, `TS2395`); Python's group `__init__.py` never imports the shared types, so it compiles and the collision goes unseen. One backend's silence is not evidence a name is free, so the spec is refused on the first.
+
+The title's rename here is the fix that usually reads better anyway: `GridpointForecast` is the service's own term for what that endpoint returns.
 
 The fix is a rename, and which one is the author's: choose a different `name` in the backend's section, or rename the group directory. It is never done for you — the root class name and every group attribute are the public surface of somebody's client, and a generator that quietly picked `Weather2` would change what a caller writes without saying so.
 

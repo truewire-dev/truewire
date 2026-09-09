@@ -4,7 +4,13 @@ name: Release truewire
 # packages/truewire/pyproject.toml is not on PyPI yet, this builds, publishes
 # (PyPI Trusted Publishing; the pending publisher names this workflow file),
 # tags `truewire-v<version>` and creates the GitHub release.
+#
+# Also runnable by hand, for when the version bump reached `main` some other way -- a
+# release must not be hostage to which branch happened to carry it. The version in
+# `pyproject.toml` is the single source either way, and an already-published version is a
+# no-op, so a manual run can only ever publish what a merge would have.
 on:
+  workflow_dispatch:
   pull_request:
     types: [closed]
     branches: [main]
@@ -16,7 +22,7 @@ permissions:
 
 jobs:
   check:
-    if: github.event.pull_request.merged == true && github.head_ref == 'release/truewire'
+    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.merged == true && github.head_ref == 'release/truewire')
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}

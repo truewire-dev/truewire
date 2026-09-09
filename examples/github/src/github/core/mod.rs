@@ -154,3 +154,16 @@ fn map_error(method: &str, path: &str, response: &Response) -> Error {
     };
     error.with_status(response.status).with_body(body)
 }
+
+impl crate::GitHub {
+    /// A client over this core.
+    ///
+    /// `truewire generate rust` names the generated constructor `from_core` and leaves
+    /// `new` for a core to define; this is that. It is the Rust answer to the base class
+    /// `[python.cores.root]` names in the Python backend -- an inherent impl on the
+    /// generated type, in the same crate -- and it is what keeps `Arc::new(Core::new(...))`
+    /// out of the first line a reader sees.
+    pub fn new(options: CoreOptions) -> Self {
+        Self::from_core(Core::new(options))
+    }
+}

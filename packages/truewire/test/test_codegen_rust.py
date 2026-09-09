@@ -361,7 +361,11 @@ def test_fixture_routers_delegate_with_qualified_types(fixture_rendered):
   assert ') -> PaginatedResponse<order_list::OrderListItem, String> {\n        self.order_list.order_list_paged(request, options)\n    }' in market
   assert ') -> Result<OrderSide> {\n        self.order_last_side.order_last_side(request, options).await' in market
   root = files['client.rs']
-  assert 'pub fn new<C>(core: Arc<C>) -> Self\n    where\n        C: HttpEndpoint + HttpEndpoint<DefaultMeta> + HttpEndpoint<FuturesMeta> + \'static,\n    {' in root
+  # The root takes its core by value and wraps it itself, and is named `from_core` so the
+  # hand-written core can define `new`. A grouping (`market/mod.rs`, above) keeps `new`
+  # with the `Arc` its parent already holds.
+  assert 'pub fn from_core<C>(core: C) -> Self\n    where\n        C: HttpEndpoint + HttpEndpoint<DefaultMeta> + HttpEndpoint<FuturesMeta> + \'static,\n    {' in root
+  assert '        let core = Arc::new(core);\n' in root
   assert '    pub market: Market,\n' in root and 'token: Token::new(core),' in root
   account = files['account/mod.rs']
   assert 'pub deposits: deposits::Deposits,' in account and 'pub mod deposits;\npub mod withdrawals;' in account
@@ -397,10 +401,12 @@ def test_a_composite_root_renders_and_ws_only_endpoints_are_skipped():
   # that is itself composite is handed its own fields rather than one core.
   client = rendered.files['client.rs']
   assert (
-    'pub fn new(market_client: Arc<dyn StreamEndpoint>, '
-    'private_client: Arc<dyn StreamEndpoint>, '
-    'spot_client: Arc<dyn HttpEndpoint<SpotMeta>>) -> Self {'
+    "pub fn from_cores(market_client: impl StreamEndpoint + 'static, "
+    "private_client: impl StreamEndpoint + 'static, "
+    "spot_client: impl HttpEndpoint<SpotMeta> + 'static) -> Self {"
   ) in client, client
+  # Each field is wrapped once, by the root, so the caller writes no `Arc::new`.
+  assert 'let market_client: Arc<dyn StreamEndpoint> = Arc::new(market_client);' in client
   assert 'streams: Streams::new(market_client, private_client)' in client
   assert 'spot: Spot::new(spot_client)' in client
   assert 'Arc<dyn >' not in client

@@ -130,18 +130,42 @@ def render_router(
   w.blank()
   with w.block(f'impl {struct_name} {{'):
     if shape.composite:
-      _emit_composite_new(plan, w, router, kids, shape, child_type)
+      _emit_composite_new(plan, w, router, kids, shape, child_type, is_root=is_root)
     else:
-      if len(bounds) == 1:
+      prelude: list[str] = []
+      if not is_root:
+        # A grouping is plumbing: its parent already holds the core and hands it down, so
+        # it takes what the parent has rather than taking ownership again.
+        if len(bounds) == 1:
+          (bound,) = bounds
+          w.line(f'pub fn new(core: Arc<dyn {bound}>) -> Self {{')
+        else:
+          w.line('pub fn new<C>(core: Arc<C>) -> Self')
+          w.line('where')
+          with w.indented():
+            w.line(f'C: {" + ".join(sorted(bounds))} + \'static,')
+          w.line('{')
+      elif len(bounds) == 1:
+        # The root is the one struct a caller constructs, so `new` is left for the
+        # hand-written core to define -- an inherent impl on the generated type, in the
+        # same crate, which is the Rust answer to the base class `[python.cores.root]`
+        # names. It can then read `Weather::new("you@example.com")` instead of the
+        # plumbing. Taking `impl Trait` rather than `Arc<dyn Trait>` is the other half:
+        # the `Arc` is our storage decision, not the caller's, and `truewire-core`
+        # implements the endpoint traits for `Arc<T>` so a shared core still fits.
         (bound,) = bounds
-        w.line(f'pub fn new(core: Arc<dyn {bound}>) -> Self {{')
+        w.line(f'pub fn from_core(core: impl {bound} + \'static) -> Self {{')
+        prelude.append(f'let core: Arc<dyn {bound}> = Arc::new(core);')
       else:
-        w.line('pub fn new<C>(core: Arc<C>) -> Self')
+        w.line('pub fn from_core<C>(core: C) -> Self')
         w.line('where')
         with w.indented():
           w.line(f'C: {" + ".join(sorted(bounds))} + \'static,')
         w.line('{')
+        prelude.append('let core = Arc::new(core);')
       with w.indented():
+        for line in prelude:
+          w.line(line)
         entries: list[str] = []
         for index, (name, module_name, endpoint, child_router) in enumerate(kids):
           handed = 'core' if index == len(kids) - 1 else 'core.clone()'
@@ -163,31 +187,37 @@ def render_router(
 
 
 def _emit_composite_new(
-  plan: PackagePlan, w, router: RouterPlan, kids, shape: CoreShape, child_type,
+  plan: PackagePlan, w, router: RouterPlan, kids, shape: CoreShape, child_type, *, is_root: bool,
 ) -> None:
-  """`new` for a router built from more than one transport: one parameter per field.
+  """The constructor for a router built from more than one transport: one parameter per field.
 
   `[cores.<name>] children` maps a child to the field it is handed, so the constructor
-  takes the fields themselves rather than one core -- `Bluesky::new(client, socket)` --
-  and each child is built from the one it was mapped to. A child that is itself composite
+  takes the fields themselves rather than one core -- `Bluesky::from_cores(client, socket)`
+  -- and each child is built from the one it was mapped to. A child that is itself composite
   takes its own fields, in the same order it declares them, so the parameters pass
   straight through.
 
   A field handed to several children is cloned for all but its last use; a field handed to
   none is still a parameter, because the shape is a fact about the declarations rather
   than about what happens to be reachable.
+
+  The root takes its fields by value and wraps them itself; a grouping takes what its
+  parent already holds. See `emit_router` for why the root's is named `from_cores`.
   """
   fields = sorted(shape.fields or {})
   params = []
+  prelude: list[str] = []
   for name in fields:
     held = sorted((shape.fields or {})[name])
-    if len(held) == 1:
-      params.append(f'{name}: Arc<dyn {held[0]}>')
+    # More than one contract on one field: keep it one value so every bound is satisfied
+    # by the same core, the way a single-transport router does.
+    bound = ' + '.join(held)
+    if is_root:
+      params.append(f"{name}: impl {bound} + 'static")
+      prelude.append(f'let {name}: Arc<dyn {bound}> = Arc::new({name});')
     else:
-      # More than one contract on one field: keep it concrete so every bound is satisfied
-      # by the same value, the way a single-transport router does.
-      params.append(f'{name}: Arc<dyn {" + ".join(held)}>')
-  w.line(f'pub fn new({", ".join(params)}) -> Self {{')
+      params.append(f'{name}: Arc<dyn {bound}>')
+  w.line(f'pub fn {"from_cores" if is_root else "new"}({", ".join(params)}) -> Self {{')
 
   def handed_fields(child_name: str, child_router: 'RouterModule | None') -> list[str]:
     """The fields a child is constructed from, in the order its own `new` takes them."""
@@ -202,6 +232,8 @@ def _emit_composite_new(
 
   seen: dict[str, int] = {}
   with w.indented():
+    for line in prelude:
+      w.line(line)
     entries: list[str] = []
     for name, module_name, endpoint, child_router in kids:
       args = []

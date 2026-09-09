@@ -20,7 +20,8 @@ pub struct GitHub {
 }
 
 impl GitHub {
-    pub fn new(core: Arc<dyn HttpEndpoint<DefaultMeta>>) -> Self {
+    pub fn from_core(core: impl HttpEndpoint<DefaultMeta> + 'static) -> Self {
+        let core: Arc<dyn HttpEndpoint<DefaultMeta>> = Arc::new(core);
         Self {
             issues: Issues::new(core.clone()),
             repos: Repos::new(core),

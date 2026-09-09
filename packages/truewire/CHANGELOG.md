@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.10.0 (2026-09-09)
+
+**Breaking, Rust backend only.** The generated root struct's constructor is renamed and
+takes its core by value. Regenerate, and change the one line that builds the client.
+
+- **The generated root is constructed with `from_core`, not `new`.** The root is the one
+  struct a caller ever constructs, and it had the good name, so a hand-written core had
+  nowhere to put a better one -- two inherent `new`s on one type collide. `new` is now
+  left free, and a core defines it as an inherent impl on the generated type, in the same
+  crate: the Rust answer to the base class `[python.cores.root]` names in the Python
+  backend. A composite root is `from_cores`, one parameter per declared field, as before.
+- **It takes `impl HttpEndpoint<Meta> + 'static` rather than `Arc<dyn ...>`.** The `Arc`
+  is the generator's storage decision, not the caller's, so the root wraps what it is
+  given. `truewire-core` 0.1.1 implements the endpoint traits for `Arc<T>`, so a core
+  already shared between clients still fits the same parameter.
+
+Together those turn the first line of every Rust client from
+
+```rust
+let client = GitHub::new(Arc::new(Core::new(CoreOptions::default())));
+```
+
+into
+
+```rust
+let client = GitHub::new(CoreOptions::default());
+```
+
+with the core supplying that `new`. `examples/github` shows the impl; `docs/rust.md` says
+why it is shaped this way.
+
 ## 0.9.1 (2026-09-09)
 
 Both findings come from building the weather.gov showcase, which is the point of building

@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.9.0 (2026-09-09)
+
+- **The Rust backend renders a composite root, and stream endpoints.** A router whose core
+  hands different children different transports had no Rust rendering, and skipping the
+  root took every descendant with it: a client that speaks both HTTP and a WebSocket -- the
+  combination Truewire exists for -- produced its types and nothing else. A composite `new`
+  now takes one parameter per declared field (`Bluesky::new(client, socket)`), handing each
+  child the field `[cores.<name>] children` maps it to; a child that is itself composite
+  takes its own fields, so they pass straight through. `kind: "stream"` endpoints render as
+  `subscribe`, typed and `_raw`, over the runtime's `StreamEndpoint`. The Bluesky showcase
+  went from 3 generated files to 22, compiles with warnings as errors, and replays its
+  recordings over a real WebSocket.
+- **A skipped Rust router said so; the eleven endpoints it took with it did not.** Modules
+  that rendered and were then dropped as unreachable are now reported, with their names, so
+  the size of a hole is visible rather than inferred from a file count.
+- **`_size` was bound for every Rust walk and read only by two of them.** Every
+  cursor-paged endpoint carried two dead lines and a `unused variable: size` warning -- six
+  on a clean build of one client. It is bound where it is read.
+- **`truewire mock` can serve a browser.** It sent no `Access-Control-Allow-Origin` and
+  answered `OPTIONS` with 501, so a generated client running in a browser could not be
+  tested against it at all: the preflight failed before the request was made. It now sends
+  the headers and answers the preflight.
+- The core-shape computation that decides what a router's constructor takes moved to
+  `truewire.codegen.shapes`, shared by the TypeScript and Rust backends rather than
+  duplicated. A subtree a backend rendered nothing for no longer contributes a field, which
+  used to render as `Arc<dyn >`.
+
 ## 0.8.2 (2026-09-08)
 
 - **`truewire capture` recorded the wrong exchange, and it could be a credential.** It

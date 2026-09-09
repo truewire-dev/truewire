@@ -26,7 +26,7 @@ from truewire.codegen.shapes import core_shapes
 from truewire.plan.model import PackagePlan
 from truewire.project import Project
 
-from .endpoint import EndpointModule, render_endpoint
+from .endpoint import EndpointModule, _Skipped, render_endpoint, render_stream_endpoint
 from .meta import META_FILE, meta_module, meta_shapes
 from .names import pascal_case, snake_ident
 from .printer import BANNER
@@ -80,7 +80,17 @@ def render_package(plan: PackagePlan, project: Project | None = None) -> Rendere
   endpoints: dict[str, EndpointModule] = {}
   for endpoint in plan.endpoints:
     if endpoint.kind == 'stream':
-      out.skipped.append(f'{endpoint.function}: a stream endpoint has no Rust rendering yet')
+      struct_name = class_by_child.get(tuple(endpoint.path), pascal_case(endpoint.path[-1]))
+      try:
+        rendered, notes = render_stream_endpoint(
+          plan, endpoint, struct_name=struct_name, meta=shapes.get(endpoint.core),
+        )
+      except _Skipped as skipped:
+        out.skipped.append(f'{endpoint.function}: {skipped.reason}')
+        continue
+      out.skipped.extend(notes)
+      endpoints[endpoint.function] = rendered
+      out.files[rendered.file] = rendered.source
       continue
     if 'http' not in endpoint.transports:
       out.skipped.append(f'{endpoint.function}: an rpc endpoint over a WebSocket has no Rust rendering yet')

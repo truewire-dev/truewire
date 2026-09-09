@@ -156,6 +156,112 @@ class _Skipped(Exception):
   reason: str
 
 
+def render_stream_endpoint(
+  plan: PackagePlan, endpoint: EndpointPlan, *, struct_name: str, meta: MetaShape | None,
+) -> tuple[EndpointModule, list[str]]:
+  """Render one `stream` endpoint's module: `subscribe`, typed and raw.
+
+  The shape mirrors the HTTP path -- a typed method that decodes each pushed frame and a
+  `_raw` twin that hands them over as they came -- because a subscription is the same
+  contract as a call, spread over time. `Stream::map` is what turns one into the other.
+  """
+  file = endpoint_file(endpoint.path)
+  request = endpoint.request
+  module = Module(plan, file, local=dict(endpoint.types), visible=visible_scopes(plan, endpoint.path))
+  module.define_all(endpoint.types)
+  w = module.writer
+  notes: list[str] = []
+
+  channel = endpoint.wire.channel or ''
+  if request.type is None and request.fields:
+    raise _Skipped('a stream whose parameters only fill its channel template has no Rust rendering yet')
+
+  meta_type = meta.name if meta is not None else None
+  bound = f'StreamEndpoint<{meta_type}>' if meta_type is not None else 'StreamEndpoint'
+  module.core('StreamEndpoint')
+  module.core('SubscribeCall')
+  module.core('CallOptions')
+  module.core('Result')
+  module.core('Stream')
+  module.core('decode')
+  module.serde_json()
+  module.imports.add('std::sync', 'Arc')
+  if meta_type is not None:
+    module.imports.add(f'crate::{META_FILE[:-3]}', meta_type)
+  if request.type is not None:
+    module.core('dump')
+
+  method = snake_ident(endpoint.path[-1], fallback='subscribe')
+  message = endpoint.response.payload
+  docs = method_docs(endpoint)
+
+  params: list[tuple[str, Tokens]] = []
+  if request.type is not None:
+    params.append(('parameters', tokenize(module, request.type)))
+  params.append(('options', core_tokens('CallOptions')))
+  message_tokens: Tokens = tokenize(module, message) if message else [('json', 'serde_json::Value')]
+  returns: Tokens = [
+    ('core', 'Result'), ('text', '<'), ('core', 'Stream'), ('text', '<'), *message_tokens, ('text', '>>'),
+  ]
+  raw_returns: Tokens = [
+    ('core', 'Result'), ('text', '<'), ('core', 'Stream'), ('text', '<'),
+    ('json', 'serde_json::Value'), ('text', '>>'),
+  ]
+  main = Method(method, params, returns, is_async=True, doc=docs, deprecated=endpoint.deprecated)
+  raw = Method(
+    f'{method}{RAW_SUFFIX}', params, raw_returns, is_async=True,
+    doc=[f'`{method}` without validation: the frames as they came.'], deprecated=endpoint.deprecated,
+  )
+  methods = [main] if message is None else [main, raw]
+
+  w.blank()
+  w.doc(endpoint.docs.description)
+  w.line('#[derive(Clone)]')
+  with w.block(f'pub struct {struct_name} {{'):
+    w.line(f'core: Arc<dyn {bound}>,')
+  w.blank()
+  with w.block(f'impl {struct_name} {{'):
+    w.line(f'pub fn new(core: Arc<dyn {bound}>) -> Self {{')
+    with w.indented():
+      w.line('Self { core }')
+    w.line('}')
+    args = ', '.join(name for name, _ in params)
+    if message is not None:
+      w.blank()
+      emit_method(module, main, qualifier=None, body=[
+        f'let stream = self.{raw.name}({args}).await?;',
+        'Ok(stream.map(decode))',
+      ])
+      w.blank()
+      emit_method(module, raw, qualifier=None, body=_subscribe_body(module, endpoint, meta, channel))
+    else:
+      w.blank()
+      emit_method(module, main, qualifier=None, body=_subscribe_body(module, endpoint, meta, channel))
+
+  return EndpointModule(
+    file=file, struct_name=struct_name, bound=bound, meta_type=meta_type, methods=methods,
+    source=module.render(BANNER),
+  ), notes
+
+
+def _subscribe_body(module: Module, endpoint: EndpointPlan, meta: MetaShape | None, channel: str) -> list[str]:
+  """The `SubscribeCall` one subscription is made from."""
+  w = Writer(1)
+  meta_expr = '&()'
+  if meta is not None:
+    w.struct_literal('let meta = ', meta.name, meta.literal_fields(endpoint.meta), ';')
+    meta_expr = '&meta'
+  parameters = 'Some(dump(&parameters)?)' if endpoint.request.type is not None else 'None'
+  w.struct_literal('let call = ', 'SubscribeCall', [
+    f'channel: {string(channel)}',
+    f'parameters: {parameters}',
+    f'meta: {meta_expr}',
+    'options',
+  ], ';')
+  w.line('self.core.subscribe(call).await')
+  return [line[4:] if line else line for line in w.render().rstrip('\n').split('\n')]
+
+
 def render_endpoint(
   plan: PackagePlan, endpoint: EndpointPlan, *, struct_name: str, meta: MetaShape | None,
 ) -> tuple[EndpointModule, list[str]]:
@@ -621,5 +727,6 @@ def _seek_cursor(module: Module, pagination: PaginationPlan, rows_type: Type | N
 
 __all__ = [
   'PAGED_SUFFIX', 'RAW_SUFFIX', 'EndpointModule', 'Method', 'Read', 'Tokens', 'core_tokens',
-  'emit_method', 'endpoint_file', 'method_docs', 'read_path', 'render_endpoint', 'render_tokens', 'tokenize',
+  'emit_method', 'endpoint_file', 'method_docs', 'read_path', 'render_endpoint',
+  'render_stream_endpoint', 'render_tokens', 'tokenize',
 ]

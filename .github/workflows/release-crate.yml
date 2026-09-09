@@ -3,16 +3,23 @@ name: Release a crate (crates.io)
 # Manual: publishes one crate under `crates/` at the version in its own Cargo.toml,
 # skipping a version already on crates.io so a re-run is a no-op rather than an error.
 #
-# Authentication takes whichever of the two is available, in that order:
+# Authentication tries Trusted Publishing (OIDC) first and falls back to the
+# `CARGO_REGISTRY_TOKEN` secret on the `crates-io` environment.
 #
-# 1. `CARGO_REGISTRY_TOKEN` on the `crates-io` environment. Needed for a crate's *first*
-#    publish, because crates.io Trusted Publishing can only publish a crate that already
-#    exists -- unlike PyPI, it has no pending-publisher concept.
-# 2. Trusted Publishing (OIDC), once the crate exists and a publisher is configured: owner
-#    `truewire-dev`, repository `truewire`, workflow `release-crate.yml`, environment
-#    `crates-io`.
+# That order, and not the other one, because a stale or narrowly scoped token must not be
+# able to shadow a working publisher: 0.1.1 of `truewire-core` failed with `403 this token
+# does not have the required permissions` while a perfectly good trusted publisher sat
+# unused behind it. Preferring the token is the same trap npm has, where a leftover
+# `NODE_AUTH_TOKEN` silently wins over OIDC.
 #
-# So the token can be removed the moment every crate here has been published once.
+# The token is still needed for a crate's *first* publish: crates.io Trusted Publishing can
+# only publish a crate that already exists, having no pending-publisher concept as PyPI
+# does. The auth step is `continue-on-error` for exactly that case -- no publisher yet
+# means no token minted, and the secret takes over. So the secret can be deleted once every
+# crate has shipped once, and until then it does no harm sitting there.
+#
+# Trusted publisher settings, per crate: owner `truewire-dev`, repository `truewire`,
+# workflow `release-crate.yml`, environment `crates-io`.
 on:
   workflow_dispatch:
     inputs:
@@ -54,20 +61,32 @@ jobs:
         run: |
           cargo build
           cargo test
-      - name: Is a registry token configured?
-        id: token
+      - name: Trusted Publishing token
+        # Tried first, and allowed to fail: the action errors when the crate has no
+        # trusted publisher configured, which is every crate's first publish and is
+        # exactly when the token is meant to take over.
+        if: steps.check.outputs.published == 'false'
+        id: auth
+        continue-on-error: true
+        uses: rust-lang/crates-io-auth-action@v1
+      - name: Which credential
+        id: creds
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: echo "present=$([ -n "$CARGO_REGISTRY_TOKEN" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-      - name: Trusted Publishing token
-        if: steps.check.outputs.published == 'false' && steps.token.outputs.present == 'false'
-        id: auth
-        uses: rust-lang/crates-io-auth-action@v1
+        run: |
+          if [ -n "${{ steps.auth.outputs.token }}" ]; then
+            echo "using=trusted publishing" >> "$GITHUB_OUTPUT"
+          elif [ -n "$CARGO_REGISTRY_TOKEN" ]; then
+            echo "using=the CARGO_REGISTRY_TOKEN secret" >> "$GITHUB_OUTPUT"
+          else
+            echo "using=nothing" >> "$GITHUB_OUTPUT"
+          fi
+          echo "publishing with ${{ steps.auth.outputs.token && 'trusted publishing' || 'the token' }}"
       - name: Publish
         if: steps.check.outputs.published == 'false'
         working-directory: crates/${{ inputs.crate }}
         env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN || steps.auth.outputs.token }}
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token || secrets.CARGO_REGISTRY_TOKEN }}
         run: cargo publish --allow-dirty
       - name: Summary
         run: |
@@ -75,5 +94,5 @@ jobs:
           if [ "${{ steps.check.outputs.published }}" = "true" ]; then
             echo "Already on crates.io; nothing to do." >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "Published to [crates.io](https://crates.io/crates/${{ inputs.crate }})." >> "$GITHUB_STEP_SUMMARY"
+            echo "Published to [crates.io](https://crates.io/crates/${{ inputs.crate }}) with ${{ steps.creds.outputs.using }}." >> "$GITHUB_STEP_SUMMARY"
           fi

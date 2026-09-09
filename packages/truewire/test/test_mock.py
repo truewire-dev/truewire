@@ -1262,3 +1262,25 @@ class TestQueryMatching:
 
   def test_a_renamed_key_is_a_mismatch(self):
     assert not query_matches([('a', 'x')], [('b', 'x')])
+
+
+def test_http_server_answers_a_browser():
+  """A generated client running in a browser can reach the mock.
+
+  Without `Access-Control-Allow-Origin` the browser discards the response before the
+  client sees it, and without an `OPTIONS` handler the preflight fails before the request
+  is even sent -- so a browser client could not be tested against the mock at all. Both
+  were true until a real Chromium was pointed at it.
+  """
+  import httpx
+
+  with running_server(root=ROOT) as server:
+    host, port = server.server_address
+    origin = {'Origin': 'http://localhost:5173'}
+    preflight = httpx.options(f'http://{host}:{port}/widgets/w1', headers=origin)
+    response = httpx.get(f'http://{host}:{port}/widgets/w1', headers=origin)
+
+  assert preflight.status_code == 204
+  assert preflight.headers['access-control-allow-origin'] == '*'
+  assert 'GET' in preflight.headers['access-control-allow-methods']
+  assert response.headers['access-control-allow-origin'] == '*'

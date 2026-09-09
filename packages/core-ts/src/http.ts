@@ -60,7 +60,10 @@ export class HttpClient {
   private readonly hooks = new Set<(exchange: Exchange) => void>()
 
   constructor(options: HttpClientOptions = {}) {
-    this.fetch = options.fetch ?? globalThis.fetch
+    // Bound to the global: a browser's `fetch` requires its own receiver, and calling it
+    // as a method of this object throws `Illegal invocation`. Node's is tolerant, so an
+    // unbound reference passes every test that does not run in a browser.
+    this.fetch = options.fetch ?? globalThis.fetch.bind(globalThis)
     this.timeout = options.timeout
     if (options.onExchange) this.hooks.add(options.onExchange)
   }

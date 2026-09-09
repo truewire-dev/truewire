@@ -1403,11 +1403,26 @@ class MockRequestHandler(BaseHTTPRequestHandler):
       return dict(parse_qsl(raw.decode()))
     return raw.decode()
 
+  def _send_cors(self):
+    """Allow any origin, so a browser client can be tested against the mock.
+
+    A generated client that runs in a browser cannot reach a mock that answers without
+    `Access-Control-Allow-Origin`: the fetch is blocked before the response is read, and
+    a preflight that 501s blocks it before the request is even made. The mock serves
+    recordings on loopback to whoever asks, so there is nothing here to protect with a
+    narrower policy.
+    """
+    self.send_header('Access-Control-Allow-Origin', '*')
+    self.send_header('Access-Control-Allow-Methods', 'DELETE, GET, OPTIONS, PATCH, POST, PUT')
+    self.send_header('Access-Control-Allow-Headers', '*')
+    self.send_header('Access-Control-Max-Age', '86400')
+
   def _write_json(self, status: int, payload: Any):
     body = json.dumps(payload).encode()
     self.send_response(status)
     self.send_header('Content-Type', 'application/json')
     self.send_header('Content-Length', str(len(body)))
+    self._send_cors()
     self.end_headers()
     self.wfile.write(body)
 
@@ -1454,6 +1469,13 @@ class MockRequestHandler(BaseHTTPRequestHandler):
 
     payload = serve_response(match.response.payload, body, match.envelope)
     self._write_json(match.response.status, payload)
+
+  def do_OPTIONS(self):
+    """Answer the preflight a browser sends before a cross-origin call."""
+    self.send_response(204)
+    self.send_header('Content-Length', '0')
+    self._send_cors()
+    self.end_headers()
 
   def do_DELETE(self):
     self._handle()

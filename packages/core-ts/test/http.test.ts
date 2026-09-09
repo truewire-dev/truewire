@@ -20,6 +20,33 @@ function fakeFetch(reply: (request: Request) => Response | Promise<Response>) {
 
 const ok = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
 
+describe('the default fetch is bound to the global', () => {
+  it('is called with the global as its receiver', async () => {
+    // A browser's `fetch` throws `Illegal invocation` unless its receiver is the global,
+    // and `HttpClient` calls its copy as `this.fetch(...)`, which makes the receiver the
+    // client. Node's `fetch` does not care, so an unbound reference passed every test
+    // that did not run in a browser -- and every generated client was unusable in one.
+    // This stub is as picky as a browser is.
+    const real = globalThis.fetch
+    const receivers: unknown[] = []
+    globalThis.fetch = function (this: unknown): Promise<Response> {
+      receivers.push(this)
+      if (this !== globalThis && this !== undefined) {
+        throw new TypeError("Failed to execute 'fetch' on 'Window': Illegal invocation")
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }))
+    } as typeof fetch
+    try {
+      const client = new HttpClient()
+      const response = await client.request('GET', 'http://example.invalid/')
+      expect(response.status).toBe(200)
+      expect(receivers).toEqual([globalThis])
+    } finally {
+      globalThis.fetch = real
+    }
+  })
+})
+
 describe('HttpClient.request', () => {
   it('appends query parameters, skipping null and undefined, and uppercases the method', async () => {
     const { fetch, requests } = fakeFetch(() => ok({}))

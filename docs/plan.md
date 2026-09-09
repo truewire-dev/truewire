@@ -182,18 +182,20 @@ The tests in `packages/truewire/test/test_plan.py` pin the GitHub example's plan
   at the union's own path. An OpenAPI `discriminator` is dropped by `truewire import
   openapi` and has no node here; with one, a backend could render a tagged union and give
   an exact error. Found while writing the Rust runtime.
-- **Only the Python backend lets a project extend the generated client.** `[python.cores.root]
-  base = "pkg.core:ClientBase"` renders `class Bluesky(ClientBase)`, so a factory
-  (`Bluesky.new(...)`) and a lifecycle (`async with`) are the hand-written base's and the
-  generated client inherits them. TypeScript takes its core by shape and has no `base`, so
-  a project that wants those two things must subclass the generated class from outside and
-  remap the package's `exports` so callers get the subclass rather than the generated class
-  of the same name -- a name shadow and a packaging trick every generated TypeScript project
-  will pay. Rust will want the same for `impl` blocks. The transports are right to be
-  structural (ADR 0011); a constructor and a `Dispose` are not transports. A `base` for the
-  other backends, rendering `extends`/`impl` the way Python renders inheritance, would make
-  the same client read the same in every language. Found by a reviewer asking why the
-  TypeScript constructor did not look like the Python one.
+- **A project extends its generated client by subclassing, not by a declared base** --
+  settled, not a gap. Python names the base in `truewire.toml` and renders
+  `class Bluesky(ClientBase)`, so the *generated code* imports the project's own package;
+  TypeScript and Rust take their core structurally and import nothing from it, which is
+  what `packages/core-ts/src/contract.ts` and `crates/truewire-core/src/contract.rs` both
+  state as the rule. Adding a `[typescript] base` to render `extends ClientBase` would put
+  that import back and buy nothing a subclass does not already give: a project that wants a
+  factory and a lifecycle on its root writes `class Bluesky extends Generated` in its own
+  `core/`, adds whatever constructor it likes, and points the package's `exports` at it --
+  and a caller sees the same `Bluesky.new()` either way. The declared base is the
+  *narrower* mechanism: it forces a no-argument base constructor, since the generator must
+  not know the base's signature. What is worth doing instead is scaffolding: `truewire init`
+  emitting that subclass so every generated TypeScript project starts with it, which is
+  templates rather than codegen.
 - **The Rust backend renders only a simple root.** A router whose core is composite -- one
   that hands different children different transports -- has no Rust rendering, and skipping
   the root takes the whole client with it: pointing the backend at the Bluesky showcase

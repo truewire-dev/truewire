@@ -125,3 +125,102 @@ def test_renaming_the_client_makes_every_backend_generate(tmp_path: Path):
   assert 'class OpenMeteo' in (project / 'src' / 'weather' / 'main.py').read_text()
   assert 'export class OpenMeteo' in (project / 'src' / 'weather' / 'main.ts').read_text()
   assert 'pub struct OpenMeteo' in (project / 'src' / 'weather' / 'client.rs').read_text()
+
+
+def shared_schema_collision(root: Path) -> Path:
+  """Create the second reported shape: a router group `forecast` beside a shared schema
+  titled `Forecast`, which both render as the class/type `Forecast`.
+
+  `api.weather.gov` really is shaped that way -- `/gridpoints/{office}/{x},{y}/forecast`
+  wants a `forecast` group, and the thing it returns wants to be called a forecast. The
+  spec passed `truewire check`, generated valid Python, and then failed `tsc`.
+  """
+  runner = CliRunner()
+  assert runner.invoke(app, ['init', 'nws', '--dir', str(root / 'nws')]).exit_code == 0
+  project = root / 'nws'
+  (project / 'truewire.toml').write_text(
+    (project / 'truewire.toml').read_text()
+    + '\n[typescript]\npackage = "nws"\nsrc = "src"\nname = "Nws"\n'
+  )
+  (project / 'spec' / 'schemas.json').write_text(json.dumps({
+    'Forecast': {
+      'title': 'Forecast', 'type': 'object', 'description': 'A forecast for one place.',
+      'required': ['temperature'],
+      'properties': {'temperature': {'type': 'number', 'description': 'Degrees celsius.'}},
+    },
+  }))
+  group = project / 'spec' / 'endpoints' / 'forecast'
+  (group / 'get_forecast').mkdir(parents=True)
+  (group / 'router.json').write_text(json.dumps({
+    'description': 'Forecasts for one place.',
+    'upstream': 'https://example.com/docs/forecast',
+    'core': 'default',
+  }))
+  (group / 'get_forecast' / 'endpoint.json').write_text(json.dumps({
+    'docs': 'https://example.com/docs/forecast',
+    'meta': {'public': True},
+    'spec': {
+      'kind': 'rpc', 'transports': ['http'], 'path': '/forecast', 'method': 'GET',
+      'description': 'Get a forecast for one place.',
+      'request': {
+        'title': 'GetForecastRequest', 'type': 'object', 'description': 'Where to forecast.',
+        'required': ['latitude'],
+        'properties': {'latitude': {'type': 'number', 'description': 'Degrees north.'}},
+      },
+      'response': {'$ref': 'Forecast', 'description': 'The forecast.'},
+    },
+  }))
+  return project
+
+
+class TestAGroupThatCollidesWithASharedSchema:
+  """Rule 18's third shape: the module composing a group also imports the shared types."""
+
+  def test_check_refuses_it(self, tmp_path: Path):
+    """The gate that let this through is the one that has to catch it -- the whole point
+    is that a spec is refused before a backend discovers it."""
+    project = shared_schema_collision(tmp_path)
+
+    result = CliRunner().invoke(app, ['check', '--project', str(project)])
+
+    assert result.exit_code != 0, result.output
+    assert "18. A router group" in result.output, result.output
+    assert "'forecast'" in result.output
+    assert "'Forecast'" in result.output
+
+  def test_the_message_names_both_ways_out(self, tmp_path: Path):
+    """Either name can move, and the spec's author is the one who knows which should."""
+    project = shared_schema_collision(tmp_path)
+
+    result = CliRunner().invoke(app, ['check', '--project', str(project)])
+
+    assert 'rename the' in result.output
+    assert 'schema' in result.output
+    assert 'group directory' in result.output
+
+  def test_renaming_the_schema_clears_it(self, tmp_path: Path):
+    """The fix taken by the showcase that found this: the schema became
+    `GridpointForecast`, which is the service's own term for it."""
+    project = shared_schema_collision(tmp_path)
+    schemas = project / 'spec' / 'schemas.json'
+    schemas.write_text(schemas.read_text().replace('Forecast', 'GridpointForecast'))
+    endpoint = project / 'spec' / 'endpoints' / 'forecast' / 'get_forecast' / 'endpoint.json'
+    endpoint.write_text(
+      endpoint.read_text().replace('"$ref": "Forecast"', '"$ref": "GridpointForecast"')
+    )
+
+    result = CliRunner().invoke(app, ['check', '--project', str(project)])
+
+    assert result.exit_code == 0, result.output
+
+  def test_a_schema_no_group_is_named_after_is_fine(self, tmp_path: Path):
+    """A guard on the guard: the check must not refuse every shared schema in sight."""
+    project = shared_schema_collision(tmp_path)
+    schemas = project / 'spec' / 'schemas.json'
+    schemas.write_text(schemas.read_text().replace('Forecast', 'Reading'))
+    endpoint = project / 'spec' / 'endpoints' / 'forecast' / 'get_forecast' / 'endpoint.json'
+    endpoint.write_text(endpoint.read_text().replace('"$ref": "Forecast"', '"$ref": "Reading"'))
+
+    result = CliRunner().invoke(app, ['check', '--project', str(project)])
+
+    assert result.exit_code == 0, result.output

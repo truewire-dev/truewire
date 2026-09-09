@@ -128,6 +128,14 @@ def dict(type: Dict, recur: Callable[[Type], Code]) -> Code:
     reserved_keyword_types=key.reserved_keyword_types + val.reserved_keyword_types
   )
 
+STRING_LITERAL = re.compile(r"'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\"")
+"""A string literal already inside a rendered type expression.
+
+Two things put one there: a `Literal[...]` member, and a reference `ref` already quoted as
+a forward reference. Both are text that names a value or is already quoted, never a bare
+type name for `quote_self_reference` to quote again.
+"""
+
 def quote_self_reference(expr: str, self_id: str) -> str:
   """Wrap a bare self-reference to `self_id` in a forward-reference string.
 
@@ -137,8 +145,22 @@ def quote_self_reference(expr: str, self_id: str) -> str:
   `BasicOrder.children: list[BasicOrder]` -- would raise `NameError` at import time unless
   the self-reference is quoted, exactly as a forward reference to any not-yet-defined name
   must be.
+
+  Only *bare* occurrences are quoted: the substitution skips the string literals already in
+  the expression. A record named `Alert` whose own `messageType` is
+  `Literal['Alert', 'Update', ...]` would otherwise have its enum member rewritten to
+  `''Alert''` -- a syntax error, from a value that was never a type reference at all.
   """
-  return re.sub(rf'\b{re.escape(self_id)}\b', f"'{self_id}'", expr)
+  pattern = re.compile(rf'\b{re.escape(self_id)}\b')
+  quoted = f"'{self_id}'"
+  out: builtins.list[str] = []
+  cursor = 0
+  for match in STRING_LITERAL.finditer(expr):
+    out.append(pattern.sub(quoted, expr[cursor:match.start()]))
+    out.append(match.group())
+    cursor = match.end()
+  out.append(pattern.sub(quoted, expr[cursor:]))
+  return ''.join(out)
 
 def record(type: Record, recur: Callable[[Type], Code]) -> Code:
   imports: builtins.list[Imports] = [{'typing_extensions': {'TypedDict'}}]

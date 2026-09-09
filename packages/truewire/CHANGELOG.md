@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.9.1 (2026-09-09)
+
+Both findings come from building the weather.gov showcase, which is the point of building
+one.
+
+- **An enum member spelled like its own record broke the generated Python.** A record's own
+  name is quoted inside its class body, because generated code cannot use `from __future__
+  import annotations` and a recursive field would otherwise raise `NameError` at import.
+  That substitution was textual and unconditional, so it rewrote string literals too: a
+  record `Alert` whose own `messageType` is `Literal['Alert', 'Update', 'Cancel']` came out
+  as `Literal[''Alert'', ...]` -- a syntax error in `schemas.py`, so nothing downstream ran
+  at all. `api.weather.gov` really is shaped that way. The substitution now skips the string
+  literals already in a rendered type expression, which also makes it idempotent, which it
+  was not.
+- **Rule 18 now refuses a router group that collides with a shared schema.** A `forecast/`
+  group beside a `Forecast` in `schemas.json` renders one name for two things, because the
+  module composing the group also imports the shared types. `truewire check` passed it,
+  Python generated and ran, and `tsc` then refused it (`TS2440`/`TS2395`) -- one backend's
+  silence is not evidence a name is free. It is refused at the gate now, in either
+  direction, with both renames named in the message.
+
 ## 0.9.0 (2026-09-09)
 
 - **The Rust backend renders a composite root, and stream endpoints.** A router whose core

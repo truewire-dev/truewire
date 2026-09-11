@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.1 (2026-09-11)
+
+- `truewire --version` (and `-V`) prints the installed toolchain version. It was the first command a newcomer ran after `pip install truewire`, and it was an error.
+
 ## 0.10.0 (2026-09-09)
 
 **Breaking, Rust backend only.** The generated root struct's constructor is renamed and

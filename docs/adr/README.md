@@ -19,5 +19,6 @@ Most of these were carried over from the system Truewire was extracted from. The
 | [0009](0009-standalone-project-and-truewire-toml.md) | Truewire is a standalone project; `truewire.toml` replaces the monorepo's per-client convention | accepted |
 | [0010](0010-response-schema-describes-the-wire-body.md) | The response schema describes the wire body; `envelope.payload` selects the returned value | accepted |
 | [0011](0011-declared-core-contract.md) | The generator reads a declared core contract and never imports the target package | accepted |
+| [0012](0012-conformance-runs.md) | Conformance is a nightly replay of the recorded requests, and drift is a change of shape, never of value | accepted |
 
 New entry: copy `0000-template.md`, number it next, add a row above.

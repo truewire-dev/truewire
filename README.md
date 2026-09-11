@@ -116,6 +116,7 @@ Questions, bugs and spec corrections: open an issue, or write to hello@truewire.
 
 ## Documentation
 
+- [The shape](docs/shape/README.md): what a finished project and the toolchain must look like, as numbered clauses, and the scorecard that measures the gap.
 - [Concepts](docs/concepts.md): the five ideas behind the tool.
 - [Spec authoring](docs/spec/authoring.md): the rules `truewire check` enforces.
 - [The plan](docs/plan.md): what a backend renders from, and its JSON shape.

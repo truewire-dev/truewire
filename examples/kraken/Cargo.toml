@@ -1,0 +1,24 @@
+[package]
+name = "kraken"
+version = "0.1.0"
+edition = "2021"
+description = "Typed client generated with Truewire."
+license = "MIT"
+publish = false
+
+[lib]
+path = "src/kraken/lib.rs"
+
+[dependencies]
+async-trait = "0.1"
+base64 = "0.22"
+hmac = "0.12"
+serde = { version = "1", features = ["derive"] }
+sha2 = "0.10"
+tokio = { version = "1", features = ["sync", "time"] }
+truewire-core = { path = "../../crates/truewire-core" }
+
+[dev-dependencies]
+futures = "0.3"
+tokio = { version = "1", features = ["io-util", "macros", "net", "rt-multi-thread"] }
+truewire-testing = { path = "../../crates/truewire-testing" }

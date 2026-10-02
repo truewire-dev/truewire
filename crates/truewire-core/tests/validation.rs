@@ -4,9 +4,9 @@
 //! JSON pointer of the offending value.
 
 use chrono::{DateTime, NaiveDate, TimeZone, Utc};
-use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
+use truewire_core::bigdecimal::BigDecimal;
 use truewire_core::types::{
     BooleanString, DateIso, DecimalString, IntegerString, TimestampIso, TimestampMicros, TimestampMillis,
     TimestampNanos, TimestampSeconds,
@@ -227,20 +227,21 @@ fn literal_enums_render_as_serde_enums() {
 
 #[test]
 fn decimal_string_keeps_the_digits_the_wire_carried() {
-    for (wire, back) in [
-        ("10.50", "10.50"),
-        ("-0.1", "-0.1"),
-        ("1e-7", "0.0000001"),
-        ("42", "42"),
-        (".5", "0.5"),
-        ("+3.", "3"),
-    ] {
+    for wire in ["10.50", "-0.1", "1e-7", "42", ".5", "+3.", "1.5E+2", "-0"] {
         let parsed: DecimalString = decode(json!(wire)).expect(wire);
-        assert_eq!(dump(&parsed).expect("dumps"), json!(back), "{wire}");
+        assert_eq!(dump(&parsed).expect("dumps"), json!(wire), "{wire}");
+        assert_eq!(parsed.to_string(), wire);
     }
     assert_eq!(
         *decode::<DecimalString>(json!("1.50")).expect("parses"),
-        Decimal::new(150, 2)
+        BigDecimal::new(150.into(), 2)
+    );
+    assert_eq!(
+        decode::<DecimalString>(json!("1e-7"))
+            .expect("parses")
+            .value()
+            .to_plain_string(),
+        "0.0000001"
     );
     let err = failure(decode::<DecimalString>(json!(10.5)));
     assert_eq!(
@@ -253,17 +254,69 @@ fn decimal_string_keeps_the_digits_the_wire_carried() {
 }
 
 #[test]
-fn decimal_string_with_more_digits_than_a_decimal_holds_fails_instead_of_rounding() {
-    let err = failure(decode::<DecimalString>(json!("0.1234567890123456789012345678901234")));
+fn decimal_string_rejects_what_is_not_a_decimal_with_a_path() {
+    let err = failure(decode::<DecimalString>(json!("1.2.3")));
     assert_eq!(err.path(), "");
     assert!(err.message.starts_with("expected decimal string"), "{}", err.message);
-    assert!(decode::<DecimalString>(json!("12345678901234567890123456789012")).is_err());
+    for bad in [".", "+", "-.", "1e", "1e+", "e5", "0x10", "1_000", "NaN", "inf", "1 2"] {
+        assert!(bad.parse::<DecimalString>().is_err(), "{bad}");
+    }
+}
+
+#[test]
+fn decimal_string_holds_any_number_of_digits_exactly() {
+    // The kucoin `spot.all_tickers` volume that rust_decimal's 28 digits refused.
+    let kucoin = "2026923210466.81353527916997967066";
+    let wide = "123456789012345678901234567890.1234567890123456789"; // 49 digits
+    let tiny = "-0.000000000000000000000000000000000000000001234567890123456789"; // 45 places
+    let long_int = "1234567890123456789012345678901234567890123"; // 43 digits
+    for wire in [
+        kucoin,
+        wide,
+        tiny,
+        long_int,
+        "4.00000000000000000000000000000000000000000e-40",
+    ] {
+        let parsed: DecimalString = decode(json!(wire)).expect(wire);
+        assert_eq!(dump(&parsed).expect("dumps"), json!(wire), "{wire}");
+        let again: DecimalString = decode(dump(&parsed).expect("dumps")).expect(wire);
+        assert_eq!(again, parsed);
+        assert_eq!(again.as_str(), wire);
+    }
+
+    let d = |s: &str| s.parse::<DecimalString>().expect(s);
+    // Values that differ only in the 43rd significant digit are different and ordered.
+    let a = d("1.000000000000000000000000000000000000000001");
+    let b = d("1.000000000000000000000000000000000000000002");
+    assert_ne!(a, b);
+    assert!(a < b);
+    assert_eq!(d("1.0000000000000000000000000000000000000000010"), a);
     assert_eq!(
-        decode::<DecimalString>(json!("0.1234567890123456789012345678"))
-            .expect("28 digits")
-            .to_string(),
-        "0.1234567890123456789012345678"
+        d("12345678901234567890123456789012345678901.5e-1"),
+        d("1234567890123456789012345678901234567890.15")
     );
+
+    // Arithmetic is exact at that width.
+    assert_eq!((&a + &b).to_string(), "2.000000000000000000000000000000000000000003");
+    assert_eq!((&b - &a).to_string(), "0.000000000000000000000000000000000000000001");
+    assert_eq!(
+        (d("11111111111111111111.11111111111111111111") * d("9")).to_string(),
+        "99999999999999999999.99999999999999999999"
+    );
+    assert_eq!((-d(long_int)).to_string(), format!("-{long_int}"));
+
+    // The nearest float, for code that wants one.
+    assert_eq!(d(kucoin).to_f64(), 2026923210466.8135);
+    assert_eq!(d(".5").to_f64(), 0.5);
+    assert_eq!(d("+3.").to_f64(), 3.0);
+    assert_eq!(d("1e-7").to_f64(), 1e-7);
+
+    // Hashing agrees with equality, and does not expand a large exponent.
+    let set: std::collections::HashSet<DecimalString> =
+        [d("1.50"), d("1.5"), d("15e-1"), d("0"), d("-0.00"), d("1e999999999")]
+            .into_iter()
+            .collect();
+    assert_eq!(set.len(), 3);
 }
 
 #[test]
@@ -276,14 +329,26 @@ fn decimal_string_compares_by_value() {
     assert_eq!(d("1.5e2"), d("150"));
     assert_eq!(d("-0"), d("0"));
     assert_eq!(d("10.5").to_string(), "10.5");
-    assert_eq!(DecimalString::from(Decimal::new(42, 0)).to_string(), "42");
+    assert_eq!(DecimalString::from(BigDecimal::new(42.into(), 0)).to_string(), "42");
+    assert_eq!(DecimalString::from(4250_i64).to_string(), "4250");
+    assert_eq!(DecimalString::default().to_string(), "0");
 }
 
 #[test]
 fn integer_string() {
-    assert_eq!(*decode::<IntegerString>(json!("42")).expect("42"), 42);
-    assert_eq!(*decode::<IntegerString>(json!("-7")).expect("-7"), -7);
-    assert_eq!(dump(&IntegerString(42)).expect("dumps"), json!("42"));
+    assert_eq!(decode::<IntegerString>(json!("42")).expect("42").to_i64(), Some(42));
+    assert_eq!(decode::<IntegerString>(json!("-7")).expect("-7").to_i64(), Some(-7));
+    assert_eq!(dump(&IntegerString::from(42)).expect("dumps"), json!("42"));
+    // Any size the wire holds: a uint256 token id, a wei amount past i64 and u128.
+    let max = "115792089237316195423570985008687907853269984665640564039457584007913129639935";
+    let big = decode::<IntegerString>(json!(max)).expect("uint256 max");
+    assert_eq!(dump(&big).expect("dumps"), json!(max));
+    assert_eq!(big.to_i64(), None);
+    assert_eq!(big.saturating_i64(), i64::MAX);
+    assert_eq!(decode::<IntegerString>(json!("+5")).expect("plus").to_i64(), Some(5));
+    assert!(decode::<IntegerString>(json!("")).is_err());
+    assert!(decode::<IntegerString>(json!("1e3")).is_err());
+    assert!(decode::<IntegerString>(json!("0x10")).is_err());
     let err = failure(decode::<IntegerString>(json!("4.2")));
     assert_eq!(err.message, "expected integer string, got \"4.2\" at /");
     assert!(decode::<IntegerString>(json!(42)).is_err());
@@ -345,10 +410,11 @@ fn rejects_non_epoch_values() {
     let err = failure(decode::<TimestampMillis>(json!("2024-05-30")));
     assert!(err.message.starts_with("expected epoch timestamp"), "{}", err.message);
     assert_eq!(err.path(), "");
-    assert_eq!(
-        *decode::<TimestampMillis>(json!(1.5)).expect("float truncates"),
-        dt(1970, 1, 1, 0, 0, 0, 1_000_000)
-    );
+    // A fractional epoch keeps its fraction on the way in (the Python runtime's exact parse);
+    // an `integer` schema's newtype still writes whole units on the way out.
+    let fractional = decode::<TimestampMillis>(json!(1.5)).expect("fraction kept");
+    assert_eq!(*fractional, dt(1970, 1, 1, 0, 0, 0, 1_500_000));
+    assert_eq!(dump(&fractional).expect("dumps"), json!(1));
     assert!(decode::<TimestampMillis>(json!(null)).is_err());
     assert!(decode::<TimestampMillis>(json!({})).is_err());
 }

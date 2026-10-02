@@ -46,6 +46,7 @@ export interface Release {
   published_at?: TimestampIso | null
   /** Web page of the release. */
   html_url: string
+  /** Account that created the release. */
   author: SimpleUser
 }
 
@@ -89,7 +90,7 @@ export class ListReleases {
     const next = async (page: number): Promise<[Release[], number | null]> => {
       const response = await this.listReleases({ ...request, page }, options)
       const rows = response
-      if (rows.length === 0 || rows.length < (request.per_page ?? 30)) return [rows, null]
+      if (rows.length === 0 || rows.length < Math.min((request.per_page ?? 30), 100)) return [rows, null]
       return [rows, page + 1]
     }
     return new PaginatedResponse(1, next)

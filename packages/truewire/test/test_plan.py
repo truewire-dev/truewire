@@ -17,6 +17,7 @@ from truewire.cli import app
 from truewire.codegen.python import Generator
 from truewire.plan.build import PlanBuilder, build_plan, needs_cast
 from truewire.plan.model import PackagePlan
+from truewire.plan.types import seek_cursor_format
 from truewire.project import resolve
 from truewire.spec import Endpoint, load_endpoint
 from truewire.spec.codegen_toml import load_codegen_toml
@@ -151,6 +152,29 @@ def test_fixture_plan_pagination_decisions(fixture_plan: PackagePlan):
   assert page_total.pagination.walker == 'paginated'
 
 
+def test_a_seek_plan_carries_its_cursor_field_type():
+  """`cursor_type` is the row field `cursor.field` names, through a record key, a tuple
+  position or a list item, beside the bound's own `state_type` (TRU-197)."""
+  plan = build_plan(Path(__file__).parent / 'fixtures' / 'rust_walkers')
+  seek = {
+    endpoint.function: (endpoint.pagination.cursor_type, endpoint.pagination.state_type)
+    for endpoint in plan.endpoints
+    if endpoint.pagination is not None and endpoint.pagination.strategy == 'seek'
+  }
+  millis = {'type': 'scalar', 'base': 'integer', 'format': 'epoch-millis'}
+  assert seek['market.fills'] == ({'type': 'scalar', 'base': 'integer'}, {'type': 'scalar', 'base': 'integer'})
+  assert seek['market.ohlcv'] == (millis, millis)
+  assert seek['market.klines'] == ({'type': 'scalar', 'base': 'string', 'format': 'epoch-millis'}, millis)
+  assert seek['market.candles'] == ({'type': 'scalar', 'base': 'any'}, millis)
+  assert seek['market.ledger'][0] == {'type': 'scalar', 'base': 'string'}
+  assert seek_cursor_format(*seek['market.klines']) is None
+  seconds = {'type': 'scalar', 'base': 'integer', 'format': 'epoch-seconds'}
+  assert seek_cursor_format(seconds, millis) == 'epoch-seconds'
+  assert seek_cursor_format({'type': 'scalar', 'base': 'string', 'format': 'date-time'}, millis) == 'date-time'
+  assert seek_cursor_format({'type': 'scalar', 'base': 'string', 'format': 'date'}, millis) is None
+  assert seek_cursor_format({'type': 'scalar', 'base': 'integer'}, millis) is None
+
+
 def test_offset_walk_with_nothing_to_step_by_plans_no_walker():
   """An `offset` walk ending on an item-counted `total` with no rows to count and no size
   cannot advance: the plan says `none`, which is what the backend emits (no `_paged`)."""
@@ -165,6 +189,19 @@ def test_offset_walk_with_nothing_to_step_by_plans_no_walker():
   assert planned is not None and planned.pagination is not None
   assert planned.pagination.walker == 'none'
   assert planned.pagination.state_type == {'type': 'scalar', 'base': 'string'}
+
+
+def test_token_walk_ending_on_an_empty_page_plans_a_resumable_walker():
+  """A `token` walk ending on an empty page (bitget's `idLessThan`/`endId` walks) resumes
+  from its cursor exactly as an `absent_cursor` one does: the plan says `paginated`."""
+  root = FIXTURE_ROOT / 'spec' / 'endpoints' / 'market' / 'order_list'
+  raw = json.loads((root / 'endpoint.json').read_text())
+  raw['pagination']['done'] = {'kind': 'empty', 'rows': 'orders'}
+  planned = PlanBuilder(resolve(FIXTURE_ROOT)).endpoint(Endpoint.model_validate(raw), root)
+  assert planned is not None and planned.pagination is not None
+  assert planned.pagination.done == {'kind': 'empty', 'rows': 'orders'}
+  assert planned.pagination.row_type == {'type': 'ref', 'id': 'OrderListItem'}
+  assert planned.pagination.walker == 'paginated'
 
 
 def test_fixture_plan_stream_shapes(fixture_plan: PackagePlan):
@@ -286,9 +323,10 @@ def test_kraken_plan_envelopes_and_streams():
   assert command.kind == 'rpc' and command.transports == ['ws']
   assert command.wire.path == 'add_order' and command.wire.method is None
   assert command.core == 'socket'
+  # Its rows are a map keyed by trade id, which no `PaginatedResponse` can yield, so it
+  # declares no `pagination` (ADR 0013) and a caller pages with `ofs`/`count`.
   history = plan.endpoint('spot.account.trades_history')
-  assert history is not None and history.pagination is not None
-  assert history.pagination.walker == 'generator' and history.pagination.size_default == 50
+  assert history is not None and history.pagination is None
 
 
 @pytest.mark.parametrize('name', ['github', 'kraken'])
@@ -318,10 +356,12 @@ def test_generated_code_agrees_with_the_plan(name: str):
       state = generator.plan_type_code(pagination.state_type)
       assert f'PaginatedResponse[{row}, {state}]' in code, endpoint.function
     elif pagination.walker == 'generator':
-      assert 'AsyncIterator[' in code and 'PaginatedResponse' not in code, endpoint.function
+      # Python renders every declared walk as a `PaginatedResponse` (ADR 0013).
+      assert 'PaginatedResponse[' in code and 'AsyncIterator[' not in code, endpoint.function
     else:
       assert '_paged(' not in code, endpoint.function
-  assert checked >= 1
+  if name == 'github':
+    assert checked >= 1
 
 
 # -- the command -------------------------------------------------------------------------

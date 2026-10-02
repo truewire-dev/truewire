@@ -1,0 +1,79 @@
+{
+  "meta": {},
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/candles/chunked",
+    "method": "GET",
+    "description": "Candles a venue refuses to serve over a wide range, newest kept on truncation.",
+    "request": {
+      "title": "CandlesChunkedRequest",
+      "type": "object",
+      "properties": {
+        "start": {
+          "type": "integer",
+          "format": "epoch-seconds"
+        },
+        "end": {
+          "type": "integer",
+          "format": "epoch-seconds"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ]
+    },
+    "response": {
+      "title": "CandlesChunked",
+      "type": "object",
+      "properties": {
+        "candles": {
+          "type": "array",
+          "items": {
+            "title": "ChunkCandle",
+            "type": "object",
+            "properties": {
+              "time": {
+                "type": "integer",
+                "format": "epoch-seconds"
+              },
+              "close": {
+                "type": "string",
+                "format": "decimal-string"
+              }
+            },
+            "required": [
+              "time",
+              "close"
+            ]
+          }
+        }
+      },
+      "required": [
+        "candles"
+      ]
+    }
+  },
+  "pagination": {
+    "strategy": "seek",
+    "cursor": {
+      "field": "[-1].time",
+      "unique": true
+    },
+    "bound": {
+      "start": "start",
+      "end": "end"
+    },
+    "anchor": "end",
+    "cap": 300,
+    "rows": "candles",
+    "span": {
+      "parameter": "span",
+      "default": 3600,
+      "unit": "s"
+    }
+  }
+}

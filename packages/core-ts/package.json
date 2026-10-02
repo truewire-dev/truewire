@@ -1,7 +1,7 @@
 {
   "name": "@truewire/core",
-  "version": "0.1.1",
-  "description": "Runtime for Truewire-generated TypeScript clients: HTTP and WebSocket transport, codecs, paging, timestamps, errors.",
+  "version": "0.2.0",
+  "description": "Runtime for Truewire-generated TypeScript clients: HTTP, WebSocket and gRPC transport, codecs, paging, timestamps, errors.",
   "keywords": [
     "truewire",
     "api-client",
@@ -11,7 +11,9 @@
     "websocket",
     "codec",
     "validation",
-    "pagination"
+    "pagination",
+    "protobuf",
+    "grpc"
   ],
   "homepage": "https://truewire.dev",
   "bugs": "https://github.com/truewire-dev/truewire/issues",
@@ -57,6 +59,10 @@
       "types": "./dist/errors.d.ts",
       "default": "./dist/errors.js"
     },
+    "./grpc": {
+      "types": "./dist/grpc.d.ts",
+      "default": "./dist/grpc.js"
+    },
     "./http": {
       "types": "./dist/http.d.ts",
       "default": "./dist/http.js"
@@ -65,6 +71,14 @@
       "types": "./dist/paging.d.ts",
       "default": "./dist/paging.js"
     },
+    "./protobuf": {
+      "types": "./dist/protobuf.d.ts",
+      "default": "./dist/protobuf.js"
+    },
+    "./seek": {
+      "types": "./dist/seek.d.ts",
+      "default": "./dist/seek.js"
+    },
     "./times": {
       "types": "./dist/times.d.ts",
       "default": "./dist/times.js"
@@ -72,17 +86,53 @@
     "./ws": {
       "types": "./dist/ws/index.d.ts",
       "default": "./dist/ws/index.js"
+    },
+    "./json": {
+      "types": "./dist/json.d.ts",
+      "default": "./dist/json.js"
     }
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run",
-    "prepack": "npm run build"
+    "test": "vitest run && npm run test:bundles",
+    "prepack": "npm run build",
+    "test:bundles": "npm run build && node test/proxyBundle.mjs"
+  },
+  "peerDependencies": {
+    "@bufbuild/protobuf": "^2.2.0",
+    "@connectrpc/connect": "^2.0.0",
+    "@connectrpc/connect-node": "^2.0.0",
+    "protobufjs": "^8.8.0",
+    "undici": "^7.0.0 || ^8.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@bufbuild/protobuf": {
+      "optional": true
+    },
+    "@connectrpc/connect": {
+      "optional": true
+    },
+    "@connectrpc/connect-node": {
+      "optional": true
+    },
+    "protobufjs": {
+      "optional": true
+    },
+    "undici": {
+      "optional": true
+    }
   },
   "devDependencies": {
+    "@bufbuild/protobuf": "^2.2.0",
+    "@connectrpc/connect": "^2.0.0",
+    "@connectrpc/connect-node": "^2.0.0",
     "@types/node": "^22.0.0",
+    "esbuild": "^0.25.0",
+    "protobufjs": "^8.8.0",
     "typescript": "^5.9.0",
-    "vitest": "^4.0.0"
+    "undici": "^7.0.0",
+    "vitest": "^4.0.0",
+    "webpack": "^5.0.0"
   }
 }

@@ -1,0 +1,9 @@
+{
+  "description": "Page 1 of a walk over [1000, 5000]: the time range, and no `fromId`.",
+  "request": {
+    "symbol": "BTCUSDT",
+    "startTime": 1000,
+    "endTime": 5000,
+    "limit": 2
+  }
+}

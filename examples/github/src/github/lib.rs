@@ -6,6 +6,7 @@
 
 pub mod client;
 pub mod core;
+mod dispatch;
 pub mod issues;
 pub mod meta;
 pub mod repos;

@@ -9,8 +9,10 @@ Status: `@truewire/core` publishes to npm from `packages/core-ts` (a merged
 `release/core-ts` pull request, see [Releasing](../CONTRIBUTING.md#releasing)); a generated
 project depends on it as an ordinary `package.json` dependency. `examples/github` and `examples/kraken` in
 this repository link it with a relative `file:` dependency instead, so the examples always
-test the runtime at the same commit. `rpc` endpoints over HTTP and over a WebSocket, `stream`
-endpoints and composite cores (`forward`/`children` in `truewire.toml`) are generated;
+test the runtime at the same commit. `rpc` endpoints over HTTP, over a WebSocket and over
+both, `stream` endpoints (with a typed subscription `reply` when declared), every
+pagination walk including `seek`, and composite cores (`forward`/`children` in
+`truewire.toml`) are generated;
 `examples/github` is the HTTP case and `examples/kraken` the WebSocket and composite one.
 See the end of this page for what is still left out.
 
@@ -25,7 +27,7 @@ name = "GitHub"       # the root class
 ```
 
 ```sh
-truewire generate typescript             # writes src/github/**/*.ts and .truewire/typescript-files.json
+truewire generate typescript             # writes src/github/**/*.ts and .truewire/codegen/typescript.json
 truewire generate typescript --check     # CI: every owned file exists and is what the plan renders
 ```
 
@@ -105,8 +107,21 @@ export const Label: Codec<Label> = t.object({
 `Codec<Label>` on the constant is what makes `tsc` prove the codec and the interface agree;
 the two cannot drift. `parse` turns a decoded wire value into the typed one (`decimal-string`
 into the branded `Decimal`, every timestamp format into a `Date` behind its alias, `date`
-into `DateIso`, `integer-string`/`boolean-string` into `number`/`boolean`) and names the
+into `DateIso`, `integer-string` into a `bigint`, `boolean-string` into a `boolean`) and names the
 JSON pointer of the first failure in a `ValidationError`; `dump` renders it back to the wire.
+
+Numbers keep their precision. `parseJson` (and `parseJsonText`, which a hand-written core
+uses for replies it unwraps itself) reads an integer literal beyond `Number.MAX_SAFE_INTEGER`
+as a `bigint` instead of rounding it, and `dumpJson`/`stringifyJson` write a `bigint` back as
+bare digits. `t.integer` rejects such a value by name rather than hand back a wrong `number`:
+declare the field `integer-string` (a `bigint`) when a venue sends one. A bare JSON integer that can outgrow a double (deribit's int64
+`starbase_order_id`) declares `format: int64` instead: `t.int64` holds it as `number | bigint`,
+a `number` while exact and a `bigint` beyond it, and dumps it back as bare digits. An `epoch-micros`,
+`epoch-nanos` or long RFC 3339 fraction with digits below the millisecond parses to a
+`PreciseDate`, a `Date` that also keeps `subMillisecondNanos` (`epochNanoseconds(date)` is the
+exact instant), and dumps back with every digit; a whole-millisecond value stays a plain
+`Date`. An RFC 3339 fraction is written in groups of three, as many as the value needs (`02Z`,
+`.733340Z`), as the Rust and Go runtimes write it. Python keeps microseconds and rounds nanoseconds; TypeScript keeps nanoseconds.
 Objects keep keys they were not told about, unions try their variants in order, tuples are
 `readonly`. The combinators (`t.object`, `t.array`, `t.tuple`, `t.union`, `t.literal`,
 `t.record`, `t.nullable`, `t.optional`, `t.lazy`, the formats) are the whole validator: no
@@ -158,6 +173,20 @@ interface StreamEndpoint<Meta = Record<string, never>> {
 }
 ```
 
+An `rpc` endpoint declaring both `http` and `ws` transports takes a `DualEndpoint<Meta>`,
+whose one `request` receives a `TransportCall` (an `HttpCall` plus `transport: 'http' |
+'ws'`). Its methods take `TransportOptions` (`CallOptions` plus `transport?`), and the
+generated call passes `transport: options?.transport ?? '<first declared>'`, the TypeScript
+half of Python's `transport=` keyword; the core routes the call to its HTTP client or its
+socket, `path` being the HTTP path or the RPC method name (ADR 0006):
+
+```ts
+const pet = await client.pets.getPet({ petId: 42 })                     // over HTTP, declared first
+const same = await client.pets.getPet({ petId: 42 }, { transport: 'ws' })
+```
+
+`packages/testing-ts/test/fixture` is a JSON-RPC API over both transports with such a core.
+
 The hand-written core is an object satisfying that interface by shape. `examples/github`'s
 does four things in `request`: `requestCodec.dump(request)` to get the wire values, fill
 the `{placeholders}` and send the rest as the query (or as a JSON body for POST/PUT/PATCH)
@@ -165,6 +194,16 @@ through `HttpClient`, map a non-2xx reply to `ApiError`/`AuthError`/`BadRequest`
 `RateLimited`, and `parseJson(responseCodec, text)` when validation is on. Envelope
 unwrapping (`envelope.payload`), signing and headers are the core's business, as in Python;
 the plan's `meta` tells it what each endpoint needs.
+
+The core is also where a proxy goes (packages clause P18), since the generated client
+takes its core ready-made: `new HttpClient({ proxy })` and a socket's `{ url, proxy }`,
+one HTTP(S) proxy URL for both transports. HTTP sends `http://` as an absolute-form
+request and tunnels `https://`; every WebSocket is a `CONNECT` tunnel. It runs on Node
+over undici's `ProxyAgent`, an optional peer dependency (`npm install undici`) loaded on
+first use; in a browser, or beside `fetch`/`createWebSocket`, `proxy` is a `LogicError`
+at construction rather than silently ignored. Without it nothing changes: the global
+`fetch` and `WebSocket`, which on Node read no proxy variable by default. The `github` and
+`kraken` example cores take `proxy` in their `CoreOptions`.
 
 ## Streams
 
@@ -190,6 +229,14 @@ export class Ticker {
   }
 }
 ```
+
+A stream that declares its subscription `reply` (ADR 0014) takes a
+`ReplyStreamEndpoint<Meta>` instead, returns `Subscription<Message, Reply>`, and hands the
+core `replyCodec: Reply` beside `messageCodec`: the core parses the acknowledgement through
+it (unless `validate` is off, when both the reply and the pushes stay raw) and returns it as
+the stream's typed `reply`. A core that only satisfies `StreamEndpoint` does not
+type-check against such a class, so adopting a declared reply is a per-core step, as in
+Python. A stream without `reply` renders exactly as before.
 
 The call is not async: `Subscription` (`@truewire/core`) subscribes when awaited, iterated
 or opened, and is `AsyncDisposable`, so `await using stream = client.streams.marketData.ticker(...)`
@@ -242,12 +289,50 @@ when it is built, and generated code never builds a core. The core is still neve
 KrakenCore` and holds the three transports, and the root's interface is re-exported from
 `index.ts` for it.
 
+## Hand-written methods
+
+An endpoint whose spec declares `surface: {kind: "handwritten"}` is not rendered, as in
+Python: the project writes the method, and `[typescript.extras."<router node>"]` in
+`truewire.toml` folds its class into the generated router:
+
+```toml
+[[typescript.extras."spot.account"]]
+file = "retrieve_export"      # src/kraken/spot/account/retrieve_export.ts
+class = "RetrieveExport"
+methods = ["retrieveExport"]
+# replaces = "get_candles"    # stand in for a generated child (the class extends it)
+# field = "spot_client"       # under a composite router: the field it is built from
+```
+
+A hand-written endpoint still counts toward its router's core: the router holds the
+contract the endpoint would have (`StreamEndpoint<SpotStreamsEndpointMeta>` for mexc's
+protobuf-framed spot streams), and a composite parent hands it the mapped field, so a router
+whose endpoints are all hand-written is built from a real transport rather than `undefined`.
+
+The router imports the class, builds it from the core it already holds (the whole core, or
+`field`, `client` by default, under a composite), and exposes each listed method as a
+`readonly` property typed `RetrieveExport['retrieveExport']`, bound to the instance, so its
+overloads reach the caller unchanged. An entry that `replaces` a generated child is built
+in that child's place, and the router keeps delegating the generated methods to it. A
+method name the router already has, a `replaces` naming no generated child, and a node that
+is no router are refused before anything is written. The class takes what its router
+holds; when it needs more of the core (kraken's `retrieveExport` needs a signed call whose
+body is bytes), it checks for it at run time. `examples/kraken`'s `retrieve_export.ts` is
+the reference.
+
+`truewire surface --language typescript` asks the same question as the Python gate, of the
+TypeScript package: each in-scope spec is *generated* (its module declares the camelCase
+method), *hand-written* (an extras entry at the symbol's router node lists the symbol's
+file and camelCased name, and the file declares it), or *absent*; anything else is a gap,
+and a generated `rpc` method whose implementation takes no `options` is reported like a
+missing `validate`.
+
 ## Pagination
 
 `<method>Paged` is rendered from the plan's pagination decisions:
 
 - `walker: paginated` (a `page` walk ended by `short_page`, `empty` or `total`; a `token`
-  walk ended by `absent_cursor`; a plain `seek` walk): a plain method returning
+  walk ended by `absent_cursor`): a plain method returning
   `PaginatedResponse<Row, State>`, awaitable (every row, flattened) and async-iterable (one
   page at a time), with `pages()`, `resume(state)` and `via(invoker)`. Its `next(state)` is
   pure in `state`, so a page can be retried and a walk resumed. The request type is the
@@ -257,36 +342,142 @@ KrakenCore` and holds the three transports, and the root's interface is re-expor
   cover): `async *<method>Paged` yielding every page's response.
 - A `total` terminator is checked on every page: a missing total, or one that disagrees
   with an earlier page of the same walk, throws `LogicError`.
+- `seek` (ADR 0013): a plain method returning `PaginatedResponse<Row, SeekState<Row, Key>>`,
+  rendered as one call to `@truewire/core`'s `seek`. The walker takes the whole `Request`
+  (both bounds: the moving one, the bound the venue anchors truncation to, seeds the walk;
+  the far one caps it), plus the `span` keyword when one is declared. The runtime moves the
+  bound to the extreme cursor key of each full page, carries the rows sharing that key in
+  its state `[pos, carried]` and drops them when re-served (by key for a `unique` cursor,
+  by content otherwise), and ends on a short page when a cap resolves (the caller's size,
+  else the declared `cap` or the size's schema default). Keys compare by the bound's type:
+  a timestamp format parses a raw row value through its converter, a numeric bound
+  compares numerically, anything else by equality. The state carries rows, so the
+  `validate: false` overload's `PaginatedResponse<unknown, SeekState<unknown, Key>>` and the
+  declared one are unrelated types; only the implementation signature is their union. A
+  caller's numeric size is clamped once, before `seek`, to `min(max(size, 2), maximum)` (a
+  page must hold one new row beside the one it re-reads), and that `size` is both the cap
+  and what every request sends; an omitted size stays unset, and a size sent as a string
+  is left alone.
+
+```ts
+const trades = await client.account.fillsPaged({ start: new Date('2026-09-01'), end: new Date(), limit: 500 })
+for await (const page of client.market.candlesPaged({ symbol: 'BTC-USD', start, end })) ...
+```
 
 ## Testing
 
-`examples/github/test` is the pattern. `setup.ts` is a vitest `globalSetup` that spawns
-`truewire mock --http-port 0 --ws-port 0` and provides its URLs to every test through
-`inject('httpBaseUrl')` (and `inject('wsUrl')`); `replay.test.ts` walks
-`spec/endpoints/**/examples/*.request.json` and calls, for each, the method its function
-path names with the recorded request (validation on, so the codec accepts the recorded
-response); `paging.test.ts` walks the same recorded multi-page captures as
+`@truewire/testing` (`packages/testing-ts`) is the TypeScript half of `truewire.testing`:
+
+- `mockSetup({ project })` (`@truewire/testing/vitest`) is a vitest `globalSetup` that
+  spawns `truewire mock --http-port 0 --ws-port 0 --json` (`TRUEWIRE_BIN`, else the nearest
+  `.venv/bin/truewire`, else `truewire` on `PATH`) and provides `httpBaseUrl` and `wsUrl`
+  to every test through `inject`. The project declares those two keys on vitest's
+  `ProvidedContext` beside its setup; `startMock` is the same without vitest. With
+  `--json` the mock's first stdout line is `{"event": "ready", "http": <url>, "ws": <url> |
+  null}`, the contract any foreign test runner reads; the example-discovery rules are the
+  ones documented at the top of `packages/testing-ts/src/examples.ts`.
+- `httpExamples`, `wsExamples` and `endpointRecords` discover recordings with the pairing
+  rules of `truewire.spec.repo`, including a WebSocket example synthesized from each HTTP
+  one of a dual-transport `rpc` endpoint.
+- `describeReplay({ test: { describe, it }, projectRoot, packageDir, withClient,
+  importModule: url => import(url) })` replays every HTTP example (validated, then with
+  `validate: false`, comparing shapes), every WebSocket command, and every channel
+  subscription with a recorded push (its first message read); a dual-transport endpoint
+  is replayed over each transport. Each recording is parsed through its endpoint module's
+  `Request` (a stream's `Parameters`) codec first, and one the typed value cannot render
+  back exactly is skipped; so is an endpoint with a declared `surface`. The runner and the
+  module loader are passed in because a `file:` copy of the package carries its own
+  `node_modules`: suites registered on a second vitest never run, and an `import()` of a
+  generated `.ts` module made from under `node_modules` is not transformed.
+
+`examples/github/test` and `examples/kraken/test` use it. In github, `replay.test.ts` is one
+`describeHttpReplay` call, and `paging.test.ts` walks the same recorded multi-page captures as
 `test/test_paging.py`; `codecs.test.ts` round-trips recorded bodies through `parse` and
 `dump` without the mock. `examples/kraken/test` adds the WebSocket half: `streams.test.ts`
 subscribes to a public and a private channel and calls the trading methods against the
 mock, the way `test/test_streams.py` does, and `codecs.test.ts` decodes every recorded
-`*.messages.json` capture through its message codec. Its replay parses each recording
-through the endpoint's `Request` codec first, since a recording holds wire values and the
-method takes typed ones. CI (`examples-ts`) builds `@truewire/core`, installs each example,
-runs `truewire generate typescript --check`, `tsc --noEmit` and `vitest run`.
+`*.messages.json` capture through its message codec. Its `replay.test.ts` is one
+`describeReplay` call over HTTP and WebSocket recordings alike, leaving out the one channel
+(`streams.private.executions`) with no recorded subscribe ack for the mock to answer
+Kraken's `req_id`-correlated subscribe with. CI (`examples-ts`) builds `@truewire/core` and
+`@truewire/testing`, installs each example, runs `truewire generate typescript --check`,
+`tsc --noEmit` and `vitest run`; `testing-ts` runs the package's own tests against its
+fixture.
 
-After a change to `packages/core-ts`, rebuild it (`yarn build`) and reinstall the example
-(`yarn install --force`): a `file:` dependency is copied at install time.
+After a change to `packages/core-ts` or `packages/testing-ts`, rebuild it (`yarn build`) and
+reinstall the example (`yarn install --force`): a `file:` dependency is copied at install
+time.
+
+## Protobuf WebSocket frames
+
+A project whose pushes are Protocol Buffers keeps its `.proto` files under `spec/proto/`
+(ADR 0016). The generator writes them verbatim into `<package>/proto.ts` as
+`PROTO_SOURCES`; the core compiles them once with `@truewire/core/protobuf` (add
+`protobufjs` to the package's dependencies) and decodes binary frames as ProtoJSON:
+
+```ts
+import { isBinary, ProtoFrames, type Frame } from '@truewire/core/protobuf'
+import { PROTO_SOURCES } from '../proto.js'
+
+const frames = ProtoFrames.compile(PROTO_SOURCES, 'PushDataV3ApiWrapper')
+
+// in a `Streams<Frame>` core
+parseMsg(msg: Data) {
+  if (!isBinary(msg)) return this.onJson(msg)
+  const frame = frames.decode(msg)
+  return { channel: frame.string('channel')!, notification: frame }
+}
+
+// in the endpoint core: narrow to the endpoint's `meta.proto_field`
+subscribe(call) {
+  const field = call.meta.proto_field
+  return this.client.subscribe(call.channel).filter(f => f.has(field)).map(f => f.field(field))
+}
+```
+
+`truewire mock` replays `<id>.messages.protobuf.json` frames as binary messages, and
+`WsExample.frames` holds them decoded from base64.
+
+## gRPC endpoints
+
+A `kind: grpc` endpoint (ADR 0017) is rendered over protobuf-es stubs built from
+`spec/proto/` into `<package>/protos/`:
+
+```sh
+truewire protos typescript     # the stubs (--check compares them)
+truewire generate typescript   # the endpoint modules, which import them
+```
+
+A module exports `Request` (`MessageInitShape` of the input), `Response` and the stub's
+`method`, and calls `GrpcEndpoint<Meta>.unary`; `GrpcClient` from `@truewire/core/grpc` is
+the core. The project depends on `@bufbuild/protobuf`, `@connectrpc/connect` and
+`@connectrpc/connect-node`. `@truewire/testing/grpc` has `startGrpcMock` and
+`describeGrpcReplay`.
+
+Building the stubs needs `buf` and the language's protoc plugin. Nothing else in Truewire
+needs them: `truewire plan`, `check` and the generated code's callers do not. Install them
+user-locally (the directory must be on `PATH`; `truewire protos` also finds them in a
+`node_modules/.bin` above the project, or through `TRUEWIRE_BUF`, `TRUEWIRE_PROTOC_GEN_ES`
+and `TRUEWIRE_PROTOC_GEN_GO`):
+
+```sh
+npm install -g --prefix ~/.local @bufbuild/buf@1.73.0 @bufbuild/protoc-gen-es@2.15.0
+GOBIN=~/.local/bin go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.12
+```
+
+The toolchain tests that build stubs (`test_grpc_proto.py`, `test_codegen_go_grpc.py`) skip
+when a tool is missing, so run them with the tools installed before trusting a green run.
 
 ## Not generated yet
 
-- `window` walks, `seek` walks with `overlap`, and the `unchanged` terminator: the plain
-  method is generated with a note; no walker.
-- A `rpc` endpoint with both `http` and `ws` transports is generated for HTTP only, and
-  reported as skipped for the `ws` half.
-- `truewire docs check` for ```ts blocks, and `truewire surface` for the camelCase rule.
-- A `@truewire/testing` package with the replay helpers (`examples/github/test` is
-  hand-written for now).
+- `truewire docs check` for ```ts blocks.
+- Streaming gRPC methods. Unary `grpc` endpoints are generated over protobuf-es stubs
+  (`truewire protos typescript`), called through `@truewire/core/grpc` and replayed with
+  `@truewire/testing/grpc` (ADR 0017).
+- Typed protobuf stream messages: a protobuf-framed stream is served by a hand-written core
+  (see "Protobuf WebSocket frames" below).
+- A `seek` walk whose row type the plan cannot name: the plain method is generated with a
+  note; no walker.
 
 `@truewire/core` itself is published: merging a `release/core-ts` pull request into `main`
 runs `.github/workflows/release-core-ts.yml`, which tests and builds `packages/core-ts`,

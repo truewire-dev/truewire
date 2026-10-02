@@ -41,14 +41,17 @@ class Rpc(Socket, Generic[Request, Reply]):
 
   def on_msg(self, msg: str | bytes):
     response = self.parse_response(msg)
-    if response is not None:
-      self.replies[response['id']].set_result(response['reply'])
+    if response is not None and (reply := self.replies.get(response['id'])) is not None and not reply.done():
+      reply.set_result(response['reply'])
 
   async def rpc_request(self, request: Request) -> Reply:
     id = self.counter
     self.counter += 1
-    self.replies[id] = asyncio.Future()
-    await self.rpc_send(id, request)
-    response = await self.wait(self.replies[id])
-    del self.replies[id]
-    return response
+    self.replies[id] = reply = asyncio.Future[Reply]()
+    try:
+      await self.rpc_send(id, request)
+      return await self.wait(reply)
+    finally:
+      # Cancelled, failed or answered: the id is done either way, and a late reply for it is dropped.
+      self.replies.pop(id, None)
+      reply.cancel()

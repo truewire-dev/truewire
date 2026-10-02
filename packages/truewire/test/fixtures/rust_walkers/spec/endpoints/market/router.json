@@ -1,0 +1,5 @@
+{
+  "description": "Walked endpoints.",
+  "core": "default",
+  "upstream": "https://truewire.dev/docs/rust"
+}

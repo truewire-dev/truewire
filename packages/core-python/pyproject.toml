@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "truewire-core"
-version = "0.2.1"
+version = "0.3.0"
 authors = [
   {name="Truewire contributors"}
 ]
@@ -19,7 +19,7 @@ classifiers = [
   "Typing :: Typed",
 ]
 dependencies = [
-  "typing-extensions", "httpx", "websockets", "orjson", "pydantic",
+  "typing-extensions", "httpx>=0.26", "websockets>=15", "orjson", "pydantic",
   "lazy-loader",
 ]
 requires-python = ">=3.10"

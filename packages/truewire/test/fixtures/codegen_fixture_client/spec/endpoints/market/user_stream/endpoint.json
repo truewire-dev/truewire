@@ -1,0 +1,12 @@
+{
+  "meta": {"public": true},
+  "spec": {
+    "kind": "stream", "channel": "{listenKey}",
+    "parameters": {"title": "UserStreamParams", "type": "object", "properties": {
+      "listenKey": {"type": "string", "description": "The session token the connection is."}
+    }, "required": ["listenKey"]},
+    "payload": {"title": "UserEvent", "type": "object", "properties": {
+      "e": {"type": "string", "description": "Event type."}
+    }}
+  }
+}

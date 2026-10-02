@@ -268,14 +268,16 @@
               "type": "ref",
               "id": "GitActor"
             },
-            "required": true
+            "required": true,
+            "docstring": "Who wrote the commit."
           },
           "committer": {
             "type": {
               "type": "ref",
               "id": "GitActor"
             },
-            "required": true
+            "required": true,
+            "docstring": "Who committed it."
           },
           "message": {
             "type": {
@@ -298,7 +300,8 @@
               "type": "ref",
               "id": "CommitRef"
             },
-            "required": true
+            "required": true,
+            "docstring": "Root tree of the commit."
           },
           "url": {
             "type": {
@@ -344,7 +347,8 @@
               "type": "ref",
               "id": "GitCommit"
             },
-            "required": true
+            "required": true,
+            "docstring": "The underlying git commit."
           },
           "author": {
             "type": {
@@ -354,7 +358,8 @@
                   "type": {
                     "type": "ref",
                     "id": "SimpleUser"
-                  }
+                  },
+                  "docstring": "GitHub account matched to the author, when known."
                 },
                 {
                   "type": {
@@ -375,7 +380,8 @@
                   "type": {
                     "type": "ref",
                     "id": "SimpleUser"
-                  }
+                  },
+                  "docstring": "GitHub account matched to the committer, when known."
                 },
                 {
                   "type": {
@@ -503,6 +509,7 @@
         "public": true
       },
       "deprecated": false,
+      "refused": false,
       "request": {
         "shape": "fields",
         "type": "Request",
@@ -621,6 +628,7 @@
         "driverRequired": false,
         "size": "per_page",
         "sizeDefault": 30,
+        "sizeMaximum": 100,
         "start": 1,
         "done": {
           "kind": "short_page"
@@ -864,7 +872,8 @@
                     "type": {
                       "type": "ref",
                       "id": "SimpleUser"
-                    }
+                    },
+                    "docstring": "Author, when the account still exists."
                   },
                   {
                     "type": {
@@ -1034,6 +1043,7 @@
         "public": true
       },
       "deprecated": false,
+      "refused": false,
       "request": {
         "shape": "fields",
         "type": "Request",
@@ -1139,7 +1149,8 @@
                 "type": "ref",
                 "id": "SimpleUser"
               },
-              "required": true
+              "required": true,
+              "docstring": "Owning account."
             },
             "html_url": {
               "type": {
@@ -1314,7 +1325,8 @@
                     "type": {
                       "type": "ref",
                       "id": "License"
-                    }
+                    },
+                    "docstring": "License, when detected."
                   },
                   {
                     "type": {
@@ -1395,6 +1407,7 @@
         "public": true
       },
       "deprecated": false,
+      "refused": false,
       "request": {
         "shape": "fields",
         "type": "Request",
@@ -1611,7 +1624,8 @@
                 "type": "ref",
                 "id": "GitCommit"
               },
-              "required": true
+              "required": true,
+              "docstring": "The underlying git commit."
             },
             "author": {
               "type": {
@@ -1621,7 +1635,8 @@
                     "type": {
                       "type": "ref",
                       "id": "SimpleUser"
-                    }
+                    },
+                    "docstring": "GitHub account matched to the author, when known."
                   },
                   {
                     "type": {
@@ -1642,7 +1657,8 @@
                     "type": {
                       "type": "ref",
                       "id": "SimpleUser"
-                    }
+                    },
+                    "docstring": "GitHub account matched to the committer, when known."
                   },
                   {
                     "type": {
@@ -1717,6 +1733,7 @@
         "public": true
       },
       "deprecated": false,
+      "refused": false,
       "request": {
         "shape": "fields",
         "type": "Request",
@@ -1822,6 +1839,7 @@
         "driverRequired": false,
         "size": "per_page",
         "sizeDefault": 30,
+        "sizeMaximum": 100,
         "start": 1,
         "done": {
           "kind": "short_page"
@@ -1959,6 +1977,7 @@
         "public": true
       },
       "deprecated": false,
+      "refused": false,
       "request": {
         "shape": "fields",
         "type": "Request",
@@ -2017,6 +2036,7 @@
         "driverRequired": false,
         "size": "per_page",
         "sizeDefault": 30,
+        "sizeMaximum": 100,
         "start": 1,
         "done": {
           "kind": "short_page"
@@ -2213,7 +2233,8 @@
                 "type": "ref",
                 "id": "SimpleUser"
               },
-              "required": true
+              "required": true,
+              "docstring": "Account that created the release."
             }
           },
           "docstring": "A GitHub release."
@@ -2256,6 +2277,7 @@
         "public": true
       },
       "deprecated": false,
+      "refused": false,
       "request": {
         "shape": "fields",
         "type": "Request",
@@ -2314,6 +2336,7 @@
         "driverRequired": false,
         "size": "per_page",
         "sizeDefault": 30,
+        "sizeMaximum": 100,
         "start": 1,
         "done": {
           "kind": "short_page"
@@ -2402,7 +2425,8 @@
                 "type": "ref",
                 "id": "CommitRef"
               },
-              "required": true
+              "required": true,
+              "docstring": "Tagged commit."
             },
             "node_id": {
               "type": {

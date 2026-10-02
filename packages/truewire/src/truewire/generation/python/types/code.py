@@ -1,5 +1,6 @@
 from typing_extensions import Callable, Collection, TypeVar, Generic, Protocol, Mapping, Iterable
 from dataclasses import dataclass, field
+import ast
 import builtins
 import re
 from collections import defaultdict
@@ -13,7 +14,7 @@ from truewire.plan.types import refs
 from .schema import Ref, Scalar, Literal, List, Tuple, Union, Dict, Record, Type
 from .parser import (
   BOOLEAN_STRING_FORMATS, DECIMAL_STRING_FORMATS, INTEGER_STRING_FORMATS, Parser,
-  TIMESTAMP_FORMATS, TYPES_PACKAGE,
+  TIMESTAMP_FORMATS, TYPES_PACKAGE, timestamp_alias,
 )
 
 SCALAR_BASES: builtins.dict[str, str] = {
@@ -53,7 +54,7 @@ def scalar(type: Scalar, recur: Callable[[Type], Code]) -> Code:
   `Any` (an unconstrained schema) needs its `typing_extensions` import."""
   fmt = type.get('format')
   if fmt in TIMESTAMP_FORMATS:
-    name = TIMESTAMP_FORMATS[fmt]
+    name = timestamp_alias(fmt, type['base'])
     return Code(iden=name, imports={TYPES_PACKAGE: {name}})
   if fmt in DECIMAL_STRING_FORMATS:
     return Code(iden='Decimal', imports={'decimal': {'Decimal'}})
@@ -166,8 +167,29 @@ def record(type: Record, recur: Callable[[Type], Code]) -> Code:
   imports: builtins.list[Imports] = [{'typing_extensions': {'TypedDict'}}]
 
   fields = {k: recur(v["type"]) for k, v in type['fields'].items()}
-  for field_code in fields.values():
+  # A field named after a builtin type (`list`, `type`, `int`) binds that name in the class
+  # body, so a later annotation spelling it bare resolves to the field, not the builtin.
+  # Every later reference is qualified as `builtins.<name>`; the AST rewrite leaves string
+  # literals (`Literal['list']`) and attribute names alone.
+  shadowed: set[str] = set()
+
+  class QualifyBuiltins(ast.NodeTransformer):
+    def visit_Name(self, node: ast.Name):
+      if node.id in shadowed:
+        imports.append({'builtins': set()})
+        return ast.copy_location(
+          ast.Attribute(value=ast.Name(id='builtins', ctx=ast.Load()), attr=node.id, ctx=ast.Load()),
+          node,
+        )
+      return node
+
+  for name, field_code in fields.items():
+    if shadowed:
+      expression = ast.parse(field_code.iden, mode='eval')
+      field_code.iden = ast.unparse(QualifyBuiltins().visit(expression))
     field_code.iden = quote_self_reference(field_code.iden, type['id'])
+    if isinstance(getattr(builtins, name, None), builtins.type):
+      shadowed.add(name)
   # A field name can be unusable as a Python identifier for two different reasons: it's a
   # reserved keyword (`type`, `class`, ...), or it just isn't a valid identifier at all
   # (`30dSpotVol` -- leading digit). Both need the same functional-

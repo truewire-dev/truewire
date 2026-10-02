@@ -69,10 +69,28 @@ fn iso_parse_an_explicit_offset_is_the_same_instant() {
 }
 
 #[test]
+fn iso_parse_a_date_time_without_an_offset_is_utc() {
+    assert_eq!(
+        IsoConverter.parse("1970-01-01T00:00:00").expect("parses"),
+        utc(1970, 1, 1, 0, 0, 0, 0)
+    );
+    assert_eq!(
+        IsoConverter.parse("2025-11-03T09:12:44.123456789").expect("parses"),
+        utc(2025, 11, 3, 9, 12, 44, 123_456_789)
+    );
+    assert_eq!(
+        IsoConverter.parse("2024-05-30 12:34:56.5").expect("parses"),
+        utc(2024, 5, 30, 12, 34, 56, 500_000_000)
+    );
+}
+
+#[test]
 fn iso_parse_rejects_what_is_not_an_rfc_3339_date_time() {
     for bad in [
         "2024-05-30",
-        "2024-05-30T12:34:56",
+        "2024-05-30T12:34",
+        "2024-05-30T12:34:56+0200",
+        "2024-05-30T12:34:56.",
         "2024-13-01T00:00:00Z",
         "yesterday",
         "1717072496",
@@ -161,7 +179,13 @@ fn epoch_accepts_a_numeral_string_a_float_and_a_json_value() {
     let dt = utc(2024, 5, 30, 12, 34, 56, 123_000_000);
     assert_eq!(TIMESTAMP_MILLIS.parse("1717072496123").expect("string"), dt);
     assert_eq!(TIMESTAMP_MILLIS.parse(" +1717072496123 ").expect("signed string"), dt);
-    assert_eq!(TIMESTAMP_MILLIS.parse(1717072496123.9f64).expect("float truncates"), dt);
+    assert_eq!(TIMESTAMP_MILLIS.parse(1717072496123.0f64).expect("whole float"), dt);
+    assert_eq!(
+        TIMESTAMP_MILLIS
+            .parse(1717072496123.9f64)
+            .expect("fractional float keeps its fraction"),
+        utc(2024, 5, 30, 12, 34, 56, 123_900_000)
+    );
     assert_eq!(TIMESTAMP_MILLIS.parse(&json!(1717072496123i64)).expect("value"), dt);
     assert_eq!(
         TIMESTAMP_MILLIS.parse(&json!("1717072496123")).expect("value string"),
@@ -194,7 +218,14 @@ fn epoch_floors_negative_values_like_python_does() {
 
 #[test]
 fn epoch_rejects_what_is_not_an_epoch() {
-    assert!(is_logic(EpochConverter::seconds().parse("12.5")));
+    assert!(is_logic(EpochConverter::seconds().parse("12.5.1")));
+    assert!(is_logic(EpochConverter::seconds().parse("1e3")));
+    assert_eq!(
+        EpochConverter::seconds()
+            .parse("12.5")
+            .expect("a fractional numeral string"),
+        DateTime::from_timestamp(12, 500_000_000).expect("valid")
+    );
     assert!(is_logic(EpochConverter::seconds().parse(f64::NAN)));
     assert!(is_logic(EpochConverter::seconds().parse("")));
     assert!(is_logic(EpochConverter::seconds().parse("abc")));
@@ -253,4 +284,50 @@ fn date_rejects_what_does_not_match_the_pattern_or_the_calendar() {
 fn date_now_is_today() {
     let today = DateConverter::default().now();
     assert_eq!(today, Utc::now().date_naive());
+}
+
+#[test]
+fn a_fractional_epoch_keeps_its_fraction_and_dumps_back_to_the_same_number() {
+    use truewire_core::times::{EpochNumber, TIMESTAMP_SECONDS};
+    let seconds = TIMESTAMP_SECONDS
+        .parse(1763410056.903966f64)
+        .expect("fractional seconds");
+    assert_eq!(seconds.timestamp(), 1763410056);
+    assert_eq!(seconds.timestamp_subsec_micros(), 903966);
+    assert_eq!(
+        TIMESTAMP_SECONDS.dump_number(&seconds),
+        EpochNumber::Float(1763410056.903966)
+    );
+    let text = TIMESTAMP_SECONDS
+        .parse("1763410056.903966")
+        .expect("fractional numeral string");
+    assert_eq!(text.timestamp_subsec_nanos(), 903_966_000);
+    let half = TIMESTAMP_MILLIS.parse(1717072496123.5f64).expect("half a millisecond");
+    assert_eq!(half.timestamp_subsec_nanos(), 123_500_000);
+    let negative = TIMESTAMP_MILLIS.parse("-1.5").expect("negative");
+    assert_eq!(negative.timestamp_subsec_nanos(), 998_500_000);
+    let whole = TIMESTAMP_SECONDS.parse(1763410056i64).expect("whole");
+    assert_eq!(TIMESTAMP_SECONDS.dump_number(&whole), EpochNumber::Int(1763410056));
+    for bad in ["1.", ".5", "1.2.3", "1e3", ""] {
+        assert!(TIMESTAMP_SECONDS.parse(bad).is_err(), "{bad:?} parsed");
+    }
+}
+
+#[test]
+fn string_and_float_epoch_newtypes_keep_the_wire_form() {
+    use truewire_core::{TimestampNanosString, TimestampSeconds, TimestampSecondsFloat, TimestampSecondsString};
+    let last: TimestampNanosString = truewire_core::decode(json!("1786622308334567536")).expect("decodes");
+    assert_eq!(truewire_core::dump(&last).expect("dumps"), json!("1786622308334567536"));
+    let seconds: TimestampSecondsString = truewire_core::decode(json!("1763410056.903966")).expect("decodes");
+    assert_eq!(
+        truewire_core::dump(&seconds).expect("dumps"),
+        json!("1763410056.903966")
+    );
+    let number: TimestampSecondsFloat = truewire_core::decode(json!(1763410056.903966)).expect("decodes");
+    assert_eq!(truewire_core::dump(&number).expect("dumps"), json!(1763410056.903966));
+    let whole: TimestampSecondsFloat = truewire_core::decode(json!(1763410056)).expect("decodes");
+    assert_eq!(truewire_core::dump(&whole).expect("dumps"), json!(1763410056));
+    // An `integer` schema never receives a fraction.
+    let floored: TimestampSeconds = truewire_core::decode(json!(1763410056.903966)).expect("decodes");
+    assert_eq!(truewire_core::dump(&floored).expect("dumps"), json!(1763410056));
 }

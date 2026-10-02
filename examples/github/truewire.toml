@@ -1,3 +1,4 @@
+#:schema https://truewire.dev/schemas/truewire.toml.json
 [project]
 name = "github"
 
@@ -21,6 +22,12 @@ name = "GitHub"
 package = "github"
 src = "src"
 name = "GitHub"
+
+[go]
+package = "github"
+src = "src"
+name = "GitHub"
+module = "truewire.dev/examples/github"
 
 [python.cores.root]
 base = "github.core:ClientBase"

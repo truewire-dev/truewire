@@ -16,9 +16,11 @@ layered on top of §5c's explicit `children` mapping (the two mechanisms "answer
 independent questions" and compose without conflict, per design §5c's own text).
 """
 
-from typing_extensions import Self
+from typing_extensions import ClassVar, Self
 from dataclasses import dataclass
 import asyncio
+
+from truewire_core.http import HttpClient
 
 from .auth import TokenCache, resolve_credentials
 from .transport.http import SPOT_API_URL, HttpRpcClient
@@ -68,6 +70,10 @@ class KrakenBase:
   spot_client: HttpRpcClient
   market_client: KrakenSocketClient
   private_client: KrakenSocketClient
+  RATE: ClassVar[float | None] = None
+  """REST requests per second to pace to; the generated root sets it from `[policy].rate`."""
+  RETRY: ClassVar[bool] = False
+  """Whether REST requests retry on their own; the generated root sets it from `[policy].retry`."""
 
   @classmethod
   def new(
@@ -77,6 +83,7 @@ class KrakenBase:
     private_key: str | None = None,
     public: bool = False,
     validate: bool = True,
+    proxy: str | None = None,
   ) -> Self:
     """Build a Kraken Spot client.
 
@@ -85,17 +92,21 @@ class KrakenBase:
       private_key: Kraken private key; read from `KRAKEN_PRIVATE_KEY` when omitted.
       public: Build a credential-free client, usable only for public endpoints/channels.
       validate: Validate responses by default.
+      proxy: Proxy URL for the REST client and both sockets; `None` falls back to
+        `HTTPS_PROXY` from the environment.
     """
     credentials = resolve_credentials(api_key, private_key, public=public)
     spot_client = HttpRpcClient(
-      base_url=SPOT_API_URL, credentials=credentials, validate=validate
+      base_url=SPOT_API_URL, credentials=credentials, validate=validate,
+      http=HttpClient(proxy=proxy, rate=cls.RATE, retry=cls.RETRY),
     )
-    market_client = KrakenSocketClient.new(SPOT_WS_URL, validate=validate)
+    market_client = KrakenSocketClient.new(SPOT_WS_URL, validate=validate, proxy=proxy)
     private_client = KrakenSocketClient.new(
       SPOT_WS_AUTH_URL,
       token_cache=TokenCache() if credentials is not None else None,
       fetch_token=spot_client.get_ws_token if credentials is not None else None,
       validate=validate,
+      proxy=proxy,
     )
     return cls(
       spot_client=spot_client, market_client=market_client, private_client=private_client,

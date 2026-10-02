@@ -4,7 +4,7 @@ from pathlib import Path
 from typing_extensions import Annotated, Any, Literal
 
 from truewire.generation.schema import Operation
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
 
 KEY_SEGMENT = r'[A-Za-z_][A-Za-z0-9_-]*'
@@ -33,7 +33,7 @@ def dotted_path(value: str) -> str:
   `docs/pagination.md` §3: paths admit bracket indices (`key[N]`, `[N].key2`, composable
   to a small, realistic depth) alongside dotted keys -- `N` a signed integer literal,
   usually `-1` for the last element of a collection. This closes a real gap the original,
-  strictly-dotted-key rule left: most `window`-strategy rows are positional tuples (a
+  strictly-dotted-key rule left: most `seek`-strategy rows are positional tuples (a
   candle's timestamp at a fixed array index), not the named objects `seek`'s own retired
   `last:<field>` prefix was built for. One grammar now expresses both, and expresses
   envelope traversal and row/field addressing in a single composed path.
@@ -138,6 +138,94 @@ def last_row_field(path: str) -> str:
   return suffix[1:] if suffix.startswith('.') else suffix
 
 
+_ORDINALS = ('first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth')
+
+
+def _element_prose(index: int) -> str:
+  """`0` -> "first element", `-1` -> "last element", `-2` -> "second-to-last element"."""
+  if 0 <= index < len(_ORDINALS):
+    return f'{_ORDINALS[index]} element'
+  if index == -1:
+    return 'last element'
+  if -len(_ORDINALS) <= index < -1:
+    return f'{_ORDINALS[-index - 1]}-to-last element'
+  return f'element {index}' if index >= 0 else f'element {-index} from the end'
+
+
+def last_row_field_prose(path: str, *, value: bool = False) -> str:
+  """
+  Name the row field a `LastRowPath` reads in a generated doc, without its spec-path syntax.
+
+  A named field reads as itself in backticks (`` `properties.timestamp` ``); an index reads
+  as the element of the row it is (`[-1][0]` is "first element", `[-1][-1]` "last element",
+  `[-1].legs[2].id` "`legs`'s third element's `id`"), since `[0]` means nothing to a caller
+  of the generated method; a bare `[-1]` is the row itself ("row").
+
+  Args:
+    path: A `LastRowPath`, already validated -- always starts with `[-1]`.
+    value: Name the field's value rather than the field (`` `properties.timestamp` value ``,
+      and "value" for the row itself); an element already reads as a value.
+  """
+  field = last_row_field(path)
+  if not field:
+    return 'value' if value else 'row'
+  if '[' not in field:
+    return f'`{field}` value' if value else f'`{field}`'
+  groups: list[str] = []
+  keys: list[str] = []
+  for kind, segment in path_segments(field):
+    if kind == 'key':
+      keys.append(str(segment))
+      continue
+    if keys:
+      groups.append(f'`{".".join(keys)}`')
+      keys = []
+    groups.append(_element_prose(int(segment)))
+  if keys:
+    groups.append(f'`{".".join(keys)}`')
+  return "'s ".join(groups)
+
+
+def seek_move_prose(
+  path: str, *, descending: bool, ordered: bool, cap: bool | str, span: bool,
+) -> str:
+  """
+  Say where a `seek` walk moves its bound after each page, as its runtime does: the phrase
+  after "moving `<bound>`" in a generated walker's doc, shared by every backend.
+
+  A page holding as many rows as the cap moves the bound to its extreme key; with no cap
+  known, every page that brings a new key does; with a span, any other page moves it to the
+  edge of the range it requested. An unordered key (a plain string id) is the last row's.
+
+  Args:
+    path: The cursor's `LastRowPath`.
+    descending: Whether the walk moves backwards (to the earliest key).
+    ordered: Whether keys compare by order; `False` takes the last row's in wire order.
+    cap: `True` when a row cap always resolves, `False` when none ever does, or the name of
+      the size parameter the cap is known from only while the caller sets it.
+    span: Whether the walk requests the range in spans.
+  """
+  field = last_row_field_prose(path)
+  bare = not last_row_field(path)
+  extreme = 'earliest' if descending else 'latest'
+  if not ordered:
+    target = 'the last row' if bare else f'the {field} of the last row'
+  elif bare or '[' not in last_row_field(path):
+    target = f'the {extreme} {field}'
+  else:
+    target = f'the {extreme} {field} among the rows'
+  if cap is True:
+    moves, other = ' that came back full', 'a short one'
+  elif cap is False:
+    moves, other = '', 'a page that brings nothing new'
+  else:
+    moves, other = f' that came back full, or of every page while `{cap}` is unset', 'any other page'
+  prose = f'to {target} of each page{moves}'
+  if span:
+    prose += f', and to the edge of the range it requested after {other}'
+  return prose
+
+
 def payload_path(value: str) -> str:
   """
   Same as `dotted_path`, but also accepts `''`, meaning "the whole value, no extraction".
@@ -200,19 +288,26 @@ class Cursor(PaginationModel):
 
 class SeekCursor(PaginationModel):
   """
-  Request parameter carrying a cursor read off the *last row* of the previous page's own
-  row collection -- not a plain top-level field the API hands back, which is `Cursor`'s
-  shape instead. A `historical_trades` endpoint whose `fromId` is the `id` of the last row
-  of the previous page is the reference shape.
+  The row field a `seek` walk reads its next request bound from, and whether that field is
+  unique per row (ADR 0013).
   """
 
-  parameter: str
-  """Parameter name, exactly as the operation declares it."""
-  from_: LastRowPath = Field(validation_alias='from', serialization_alias='from')
-  """`[-1]<...>`, naming a field of the last row of the collection `SeekPagination.done`
-  names -- the same collection the walk already reads to decide whether it is done,
-  since that `fromId` and its emptiness check read the very same rows: it is declared
-  `[-1].id` (formerly the bespoke `last:id`)."""
+  field: LastRowPath
+  """`[-1]<...>`, naming a field of one row of the collection `SeekPagination.rows` names
+  (or of the payload itself, when `rows` is unset), in the `docs/pagination.md` §3 grammar:
+  `[-1][0]` for a candle's open time at tuple position 0, `[-1].id` for a named id."""
+  unique: bool
+  """
+  Whether `field` is unique per row. A candle's open time and a row id are; a fill or
+  funding timestamp is not (many rows share one millisecond).
+
+  Decides how the walk deduplicates the boundary rows it re-fetches: by key when unique
+  (a row whose other fields change between requests, an open candle, is never mistaken for
+  a missing one), by whole-row content otherwise. A non-unique field also needs a
+  resolvable row cap (`SeekPagination.cap`, or a `size` with a schema `default`) so the
+  walk can tell "all rows share one key and the page is full" from "exhausted" -- the
+  audit enforces it. Required, never defaulted: it is a venue fact the author has to state.
+  """
 
 
 class TotalDone(PaginationModel):
@@ -230,14 +325,11 @@ class TotalDone(PaginationModel):
   """
   rows: ResponsePath | None = None
   """
-  Response path of the collection a caller-facing paged wrapper yields per page.
+  Response path of the collection the generated `PaginatedResponse` yields per page.
 
-  Optional, and irrelevant to the ordinary async-generator paged method -- it yields the
-  whole response object per page, so nothing here has ever needed to know which field
-  holds the rows. It matters only to a wrapper shaped like `truewire_core.util.paging.
-  PaginatedResponse`, whose `next` callable returns `(rows, next_state)` rather than the
-  whole response -- see `AbsentCursorDone.rows`, the same declaration for `token` strategy.
-  Omit it when the payload is itself the collection.
+  Omit it when the payload is itself the collection. Every paged method extracts exactly
+  this field (ADR 0013), so a wrapped payload has to name it -- see `ShortPageDone.rows`
+  for why the wrapper cannot be guessed.
   """
 
 
@@ -269,110 +361,120 @@ class EmptyDone(PaginationModel):
   """
 
 
-class UnchangedDone(PaginationModel):
-  """
-  Termination when a `seek` walk's own cursor field stops advancing, whether or not the
-  page it stopped on is empty.
-
-  `short_page`/`empty` both assume the cursor field is unique enough per row that the
-  API eventually serves fewer rows, or none, once the walk is truly done -- a `fromId`
-  that is a genuine per-row id is exactly that. Neither is safe when it isn't: a
-  `get_historical_funding` that reads its cursor off an inclusive block-height bound, where
-  multiple rows can share one height, keeps re-serving the same tied
-  boundary row forever rather than ever returning an empty page -- `empty` never fires
-  (an infinite loop) and `short_page` only works by coincidence when the repeated tail is
-  narrower than the page size. `unchanged` compares the cursor value read off the new
-  page against the cursor value the request was just made with, and stops the moment
-  they agree. An empty page has no last row to read a new cursor from at all -- `None` --
-  which already disagrees with any real previous cursor, so it is a trivial instance of
-  "the cursor did not advance," not a separate case to handle.
-
-  Unlike `SeekOverlap`, which also exists for a non-unique cursor, this does not dedupe or
-  reorder rows -- a `seek` walk terminated by `unchanged` still re-fetches (and re-yields)
-  the tied rows on every page up to the last one, exactly as `short_page`/`empty` do. It
-  only changes when the walk decides it is done.
-  """
-
-  kind: Literal['unchanged'] = 'unchanged'
-  rows: ResponsePath | None = None
-  """
-  Response path of the collection whose last row's cursor field is compared.
-
-  Omit it when the payload is itself the collection. See `ShortPageDone.rows` for why
-  the wrapper cannot be guessed.
-  """
-
-
 class AbsentCursorDone(PaginationModel):
   """Termination when a response carries no next token."""
 
   kind: Literal['absent_cursor'] = 'absent_cursor'
   rows: ResponsePath | None = None
   """
-  Response path of the collection a caller-facing paged wrapper yields per page.
+  Response path of the collection the generated `PaginatedResponse` yields per page.
 
-  Optional, and irrelevant to the ordinary async-generator paged method -- it yields the
-  whole response object per page, so nothing here has ever needed to know which field
-  holds the rows. It matters only to a wrapper shaped like `truewire_core.util.paging.
-  PaginatedResponse` (awaitable *and* async-iterable), whose `next` callable returns `(rows, next_state)` rather than the
-  whole response -- declaring which field those rows are, rather than guessing, is the
-  same reasoning `ShortPageDone.rows`/`EmptyDone.rows` already state for their own shape.
-  Omit it when the payload is itself the collection.
+  Omit it when the payload is itself the collection. Every paged method extracts exactly
+  this field (ADR 0013) -- declaring which field it is, rather than guessing, is the same
+  reasoning `ShortPageDone.rows`/`EmptyDone.rows` already state for their own shape.
   """
 
 
-class WindowBound(PaginationModel):
-  """The pair of request parameters bounding one window of a time walk."""
+class SeekBound(PaginationModel):
+  """
+  The request parameters bounding the range a `seek` walk covers: a lower bound, an upper
+  bound, or both. hyperliquid's `startTime`/`endTime`, bitget's lone `idLessThan`, mexc's
+  lone `fromId`.
+  """
 
-  start: str
-  """Parameter carrying the window's lower bound, exactly as the operation declares it."""
-  end: str
-  """Parameter carrying the window's upper bound, exactly as the operation declares it."""
+  start: str | None = None
+  """Parameter carrying the range's lower bound, exactly as the operation declares it."""
+  end: str | None = None
+  """Parameter carrying the range's upper bound, exactly as the operation declares it."""
 
   @model_validator(mode='after')
-  def distinct(self) -> 'WindowBound':
+  def at_least_one_distinct(self) -> 'SeekBound':
     """
-    Reject a window whose two bounds are the same parameter.
+    Reject a bound naming no parameter, or naming one parameter twice.
 
     Raises:
-      ValueError: When both bounds name one parameter, which bounds nothing.
+      ValueError: When neither bound is declared, or both name the same parameter.
     """
-    if self.start == self.end:
+    if self.start is None and self.end is None:
+      raise ValueError('a seek walk needs at least one of `bound.start`/`bound.end`')
+    if self.start is not None and self.start == self.end:
       raise ValueError(
-        f'the window bounds are both `{self.start}`; a window is bounded by two parameters'
+        f'the bounds are both `{self.start}`; a range is bounded by two distinct parameters'
       )
     return self
 
 
-class WindowStep(PaginationModel):
-  """How far past a window's edge the next window begins."""
+class SeekSpan(PaginationModel):
+  """
+  The widest range one request may cover, for a venue that refuses a wide range outright
+  rather than truncating it (coinbase's candles: at most 350 rows per request, an error
+  past that). Purely a generated-code keyword: the venue never sees it, it only ever
+  appears baked into the request's two bounds. Declaring it makes both bounds required on
+  the generated method, since a span has to know where the caller's own range ends.
+  """
 
+  parameter: str
+  """Name the generated `_paged` method's own span keyword takes, so a caller can widen or
+  narrow it per call."""
+  default: int = Field(gt=0)
+  """Span used when the caller doesn't override `parameter`, in `unit`. Never invented:
+  declare only what the venue documents, the same discipline as a `size` default."""
   unit: Literal['us', 'ms', 's']
-  """
-  Unit the bound parameters are expressed in.
+  """Unit `default` (and the keyword) is expressed in. Read only when the bounds render as
+  `datetime`, where it names the `timedelta` unit; an integer-valued bound (a block
+  height, an id) takes the span as a bare count of its own ticks instead."""
 
-  APIs differ — one bounds a kline in milliseconds, another in seconds — and a
-  step is a count of the API's own ticks, so the unit cannot be assumed.
-  """
-  size: int = Field(ge=0)
-  """
-  Ticks between one window's edge and the next window's, in `unit`.
 
-  `1` when both bounds are inclusive: a walk that set the next bound equal to the
-  previous one would re-read the boundary row on every page. `0` when the far bound is
-  exclusive, and windows abut exactly.
+class SeekFar(PaginationModel):
+  """
+  An exclusive parameter the walk enforces itself instead of sending: the caller's value,
+  compared with a field of every row. aster's `endTime`, checked against each trade's
+  `time` once the walk has moved on to `fromId` and may no longer send it.
   """
 
+  parameter: str
+  """The exclusive parameter carrying the caller's far bound, one of `parameters`."""
+  field: LastRowPath
+  """`[-1]<...>`, the row field compared with `parameter`'s value, in the same grammar as
+  `SeekCursor.field`. A row whose field lies past the caller's value (after it, walking
+  forwards) is dropped, and the walk ends on the page that held it."""
 
-WindowDone = EmptyDone
-"""
-How a window walk ends.
 
-Only an empty window ends it. A short page does not: a window's length is a property of
-the span the caller chose, not of the walk's progress — a three-minute window of
-one-minute candles is three rows deep in the middle of years of history — so
-`short_page` would stop the walk on its first sparse window.
-"""
+class SeekExclusive(PaginationModel):
+  """
+  Request parameters the venue refuses alongside the moving bound (ADR 0013): aster's
+  `userTrades` answers `startTime`/`endTime` together with `fromId` with an error. The walk
+  sends them on its first request only, while it has no position of its own; every later
+  request carries the moving bound instead.
+  """
+
+  parameters: list[str] = Field(min_length=1)
+  """The refused parameters, exactly as the operation declares them."""
+  first: str | None = None
+  """The one of `parameters` a walk has to start from when the caller gives no moving
+  bound, because without it the venue answers from the end of the range the walk cannot
+  move away from. `None` when the venue's own default start is walkable."""
+  far: SeekFar | None = None
+  """The one of `parameters` that caps the walk, enforced on the rows rather than sent."""
+
+  @model_validator(mode='after')
+  def names_its_own_parameters(self) -> 'SeekExclusive':
+    """
+    Reject a repeated parameter, or a `first`/`far.parameter` outside `parameters`.
+
+    Raises:
+      ValueError: When a parameter is listed twice, or `first`/`far.parameter` is not one
+        of `parameters`.
+    """
+    if len(set(self.parameters)) != len(self.parameters):
+      raise ValueError('`exclusive.parameters` lists a parameter twice')
+    for location, name in (('first', self.first), ('far.parameter', self.far and self.far.parameter)):
+      if name is not None and name not in self.parameters:
+        raise ValueError(
+          f'`exclusive.{location}` is `{name}`, which is not one of `exclusive.parameters`'
+        )
+    return self
+
 
 IndexedDone = Annotated[
   TotalDone | ShortPageDone | EmptyDone,
@@ -422,92 +524,113 @@ class TokenPagination(PaginationModel):
   """How the walk ends."""
 
 
-SeekDone = Annotated[
-  ShortPageDone | EmptyDone | UnchangedDone,
-  Field(discriminator='kind'),
-]
-"""
-How a `seek` walk ends.
-
-No `total`: a seek cursor is not an index, so there is nothing to compare a reported count
-against. `short_page`/`empty` fit a cursor field unique enough per row that the API
-eventually serves a short or an empty page once the walk is truly done, the same as a
-`token` cursor whose API publishes no total either. `unchanged` is for the case neither
-covers safely: a cursor field that is not unique enough for that -- see `UnchangedDone`.
-"""
-
-
-class SeekOverlap(PaginationModel):
-  """
-  Declares that a `seek` cursor field is not unique per row -- multiple rows of one page can
-  share the value the *next* request's cursor parameter takes, so a naive re-fetch from that
-  value would return the shared rows again. A time-cursor endpoint is the motivating
-  case: the cursor is a millisecond timestamp, and a single millisecond routinely holds
-  dozens of entries.
-
-  When declared, the generated walk drops the re-fetched rows *by position*: it verifies the
-  rows already yielded for the cursor value in play reappear as an exact-order prefix of the
-  next page -- a mismatch means the API's own stable-row-order guarantee broke mid-walk,
-  and the walk raises rather than silently dropping or duplicating rows -- then advances the
-  cursor to the *largest* field value collected off the page, not merely its last row's.
-  """
-
-  cap: int = Field(gt=0)
-  """
-  The API's true maximum rows per call.
-
-  A fixed fact, not a request parameter -- unlike `SeekPagination.size`, an API may expose
-  no caller-settable size for these endpoints, so there is no parameter to read it from.
-  Needed so the walk can tell a page that was cut off mid-cursor-value (every row shares the
-  value in play, and the page is full) from one that legitimately ends there; declaring it
-  larger than the true cap silently reintroduces the loss it exists to catch.
-  """
-
-
 class SeekPagination(PaginationModel):
   """
-  Pagination by a cursor read out of the *last row* of the previous response: a
-  `historical_trades` whose `fromId` is the `id` of the last row of the previous page, not
-  a plain top-level field the API hands back (`TokenPagination`'s shape instead).
+  Pagination by a bound read off the rows of the previous page (ADR 0013): the one
+  strategy for every walk whose next request bound comes out of the data rather than out
+  of a counter or a venue-issued token -- candles bounded by a time range (bybit, binance,
+  bitget, coinbase, kucoin, mexc), fills bounded by a time cursor (hyperliquid), rows
+  bounded by an id (bitget's `idLessThan`, mexc's `fromId`) or a block height (dYdX).
 
-  ADR 0002 deliberately left indexing out of `ResponsePath` at first; `docs/pagination.md`
-  §3 later admitted bracket indices generally, and `LastRowPath` is `seek`'s own narrow
-  requirement on top of that general grammar -- it must name a field of the *last* row
-  (`[-1]<...>`) of the walk's own row collection, never an arbitrary index.
+  The venue fact that decides everything is `anchor`: which of the two bounds the venue
+  fills from when a range holds more rows than it returns. The walk moves that bound to
+  the extreme `cursor.field` value it has seen and re-requests; the other bound, when the
+  caller gives one, caps the walk. There is no declared direction, step, or inclusivity:
+  the direction is the anchor, and re-fetched boundary rows are deduplicated rather than
+  stepped over. See `docs/pagination.md` §2.4 for the exact algorithm.
   """
 
   strategy: Literal['seek'] = 'seek'
   cursor: SeekCursor
-  """Request parameter carrying the cursor, and where the next one is read from."""
+  """Row field the next bound is read from, and whether it is unique per row."""
+  bound: SeekBound
+  """Request parameter(s) bounding the range: the anchored one moves, the other caps."""
+  anchor: Literal['start', 'end']
+  """
+  Which bound the venue keeps rows adjacent to when it truncates. `end` means a range
+  holding more rows than the cap comes back as the newest ones (bybit, coinbase, kucoin
+  spot, bitget); `start` means the oldest ones (binance, mexc, kucoin futures klines). A
+  measured fact, never read off documentation: request a range far wider than one page
+  with a small explicit size and see which end the rows cluster at (ADR 0013). The walk
+  can only move the anchored bound safely, so this also fixes the order pages arrive in.
+  """
   size: PaginationParameter | None = None
-  """Request parameter carrying the page size, when the API lets a caller set one."""
-  done: SeekDone
-  """How the walk ends, over the same row collection `cursor.from_` reads its next value
-  from."""
-  overlap: SeekOverlap | None = None
-  """Declared when the cursor field is not unique per row -- see `SeekOverlap`. `None` is
-  the plain shape: a cursor that is a genuine per-row id, needing no dedup."""
+  """Request parameter carrying the page size, when the venue lets a caller set one. Its
+  schema `default` is what resolves the row cap a full page is measured against."""
+  cap: int | None = Field(default=None, gt=0)
+  """
+  The venue's fixed maximum rows per request, when `size` cannot resolve one -- no size
+  parameter at all (hyperliquid), or one with no documented default. Declaring it larger
+  than the truth turns a full page into a false "exhausted" and silently drops rows.
+  """
+  span: SeekSpan | None = None
+  """Widest range one request may cover, for a venue that refuses a wide range rather
+  than truncating it -- see `SeekSpan`. `None` for every venue that truncates."""
+  exclusive: SeekExclusive | None = None
+  """Parameters the venue refuses alongside the moving bound, sent on the first request
+  only -- see `SeekExclusive`. `None` for every venue that takes them together."""
+  rows: ResponsePath | None = None
+  """
+  Response path of the row collection. Omit it when the payload is itself the collection.
+  It is not optional decoration: a venue that wraps its rows (bybit's `{category, symbol,
+  list}`) gives the walk nothing to read unless the wrapper key is named, and locating it
+  by looking for the one array property is the inference this declaration replaces.
+  """
 
   @model_validator(mode='after')
-  def unchanged_excludes_overlap(self) -> 'SeekPagination':
+  def anchor_names_a_bound(self) -> 'SeekPagination':
     """
-    Reject `done.kind: 'unchanged'` declared alongside `overlap`.
-
-    `overlap`'s own generated walk (`Generator.paged_overlap_seek`) never reads
-    `pagination.done` at all -- it always terminates on an empty page -- so an
-    `unchanged` terminator declared beside it would be silently ignored rather than
-    produce the walk its own declaration promises.
+    Reject an `anchor` naming a bound the declaration doesn't carry, or a `span` without
+    both bounds to confine it.
 
     Raises:
-      ValueError: When both are declared together.
+      ValueError: When `anchor` names an undeclared bound, or `span` is declared with
+        only one bound.
     """
-    if self.overlap is not None and self.done.kind == 'unchanged':
+    if getattr(self.bound, self.anchor) is None:
       raise ValueError(
-        "seek pagination cannot declare both `overlap` and `done.kind: 'unchanged'` -- "
-        "`overlap`'s own generated walk always terminates on an empty page and never "
-        "reads `done.kind`, so `unchanged` would be silently ignored"
+        f'`anchor` is `{self.anchor}` but `bound.{self.anchor}` is not declared; the anchor '
+        f'is the bound the walk moves, so it has to exist'
       )
+    if self.span is not None and (self.bound.start is None or self.bound.end is None):
+      raise ValueError(
+        '`span` needs both `bound.start` and `bound.end`: a span is measured from the '
+        'moving bound towards the far one, so both have to be declared'
+      )
+    if self.exclusive is not None and self.span is not None:
+      raise ValueError(
+        '`exclusive` with `span` has no walker: a span re-sends both bounds on every request, '
+        'while an exclusive parameter is sent on the first one only'
+      )
+    if self.exclusive is not None:
+      walked = {
+        name for name in (self.bound.start, self.bound.end, self.size and self.size.parameter)
+        if name is not None
+      }
+      clash = sorted(walked & set(self.exclusive.parameters))
+      if clash:
+        raise ValueError(
+          f'`exclusive.parameters` names {", ".join(f"`{name}`" for name in clash)}, which '
+          f'the walk sends on every request; an exclusive parameter is one it stops sending'
+        )
     return self
+
+  @property
+  def moving(self) -> str:
+    """Parameter name of the bound the walk moves: the anchored one."""
+    bound = self.bound.start if self.anchor == 'start' else self.bound.end
+    assert bound is not None, 'validated by anchor_names_a_bound'
+    return bound
+
+  @property
+  def far(self) -> str | None:
+    """Parameter name of the bound that caps the walk, when one is declared."""
+    return self.bound.end if self.anchor == 'start' else self.bound.start
+
+  @property
+  def descending(self) -> bool:
+    """Whether the walk moves towards older rows: the venue fills from `end`."""
+    return self.anchor == 'end'
 
 
 class OffsetPagination(PaginationModel):
@@ -522,123 +645,18 @@ class OffsetPagination(PaginationModel):
   """How the walk ends."""
 
 
-class WindowChunk(PaginationModel):
-  """
-  Declares a `window`+`overlap` walk's own chunk-width keyword and its documented default
-  -- `docs/pagination.md` §5's `Δt`, decoupled from the caller's own `t1 - t0` width so a
-  wide caller range becomes genuine multi-request coverage instead of one all-or-nothing
-  call. Purely a generated-code, Python-side keyword: the API never sees it -- it only
-  ever appears baked into `[start]`/`[end]` as narrower per-request bounds.
-  """
-
-  parameter: str
-  """Name the generated `_paged` method's own chunk-width keyword takes -- exposed so a
-  caller can override how finely the walk probes for density (a real keyword, not
-  internal-only): the existing truncation-style guard already backstops a bad value the
-  same way it does today, so exposing it adds control without adding a new failure mode."""
-  default: int = Field(gt=0)
-  """
-  Chunk width, in `WindowStep.unit`'s own ticks, used when the caller doesn't override
-  `parameter`.
-
-  Never invented -- the same "never invent" discipline `docs/spec/authoring.md` rule 8
-  already asks of a `size` default: declare one only where a real per-row density fact
-  backs it (a candle `interval` enum converting rows to a real time span). Omitting
-  `chunk` entirely (not just this field) is how an endpoint says no such fact exists yet
-  -- `Δt` then defaults to the caller's own `t1 - t0`, degrading to a single chunk with
-  narrow-and-retry instead of `docs/pagination.md` §5's old unconditional raise.
-  """
-
-
-class WindowOverlap(PaginationModel):
-  """
-  Declares that a `window` walk's own per-row timestamp field is not unique per row --
-  multiple rows in one chunk can share the value the walk would otherwise advance past, so
-  a naive chunk-to-chunk walk can silently skip rows a single chunk didn't have room for.
-  Mirrors `SeekOverlap`'s own mechanism (dropped-by-position dedup, advance to the largest
-  value seen) applied to a `window` walk's own per-chunk paging instead of `seek`'s
-  per-request cursor -- `docs/pagination.md` §5 is the worked algorithm.
-  """
-
-  field: LastRowPath
-  """
-  Path to each row's own timestamp field, resolved relative to the row collection
-  (`WindowPagination.done`'s `rows`, or the raw payload when unset) -- always indexing
-  the last-read row, the same `[-1]<...>` requirement `SeekCursor.from_` carries, and for
-  the identical reason: `Generator.last_row_field` strips that fixed prefix unconditionally
-  rather than validating it, so the type itself has to guarantee it's there.
-
-  Mandatory once a `window` endpoint declares `overlap` at all -- it's how the walk
-  computes the largest value seen in a chunk, the same role `SeekOverlap`'s own
-  `cursor.from_` plays for `seek`. Uses the `docs/pagination.md` §3 bracket-index grammar,
-  since most `window` rows are positional tuples (a candle's timestamp at a fixed array
-  index: `[-1][0]`), not the named objects `seek`'s own retired `last:<field>` prefix was
-  built for.
-  """
-  cap: int | None = Field(default=None, gt=0)
-  """
-  The API's true maximum rows per chunk, when it is not simply resolvable from the
-  endpoint's own `size` parameter (a caller-always-set size, or one with a declared
-  default -- the same resolution `Generator.paged_cap` already does for a plain `window`
-  walk's truncation guard). Mirrors `SeekOverlap.cap`'s identical reasoning: needed only
-  when nothing else already settles the row count a full chunk is measured against, and
-  never both declared and redundant with a resolvable `size` default at once.
-  """
-  chunk: WindowChunk | None = None
-  """Declares the walk's own chunk-width (`Δt`) keyword and its documented default, when
-  one is warranted -- see `WindowChunk`. `None` keeps `Δt` fixed at the caller's own
-  `t1 - t0`, one chunk covering the whole requested range."""
-
-
-class WindowPagination(PaginationModel):
-  """
-  Pagination by walking a time window: klines, candles.
-
-  The walk is arithmetic on the request bounds alone — the next window ends one step
-  before this one starts — so it needs none of the response indexing `seek` needs (until
-  `overlap` is declared), which is what makes it a strategy rather than a second name for
-  one.
-  """
-
-  strategy: Literal['window'] = 'window'
-  bound: WindowBound
-  """Request parameters carrying the two ends of one window."""
-  order: Literal['ascending', 'descending']
-  """
-  Direction the walk moves in.
-
-  It settles which bound moves and which one the moved bound is computed from, so the two
-  cannot disagree: a descending walk sets `end` to `start` minus a step, and an ascending
-  walk sets `start` to `end` plus a step. Declare the direction the API itself sorts in
-  — descending where it returns its newest rows first, ascending where it returns its
-  oldest — so that consecutive pages read as one continuous series.
-  """
-  step: WindowStep
-  """Distance between one window's edge and the next window's."""
-  size: PaginationParameter | None = None
-  """Request parameter carrying the row cap, when the API lets a caller set one."""
-  done: WindowDone
-  """How the walk ends."""
-  overlap: WindowOverlap | None = None
-  """Declared when the walk's own per-row timestamp field is not unique per row -- see
-  `WindowOverlap`. `None` keeps today's plain single-chunk walk, raising unconditionally
-  on a full page rather than narrowing and retrying."""
-
-
 Pagination = Annotated[
-  PagePagination | TokenPagination | OffsetPagination | WindowPagination | SeekPagination,
+  PagePagination | TokenPagination | OffsetPagination | SeekPagination,
   Field(discriminator='strategy'),
 ]
 """
-How an endpoint pages, stated rather than inferred.
+How an endpoint pages, stated rather than inferred (ADR 0004, ADR 0013).
 
 Every `ResponsePath` admits bracket indices alongside dotted keys (`docs/pagination.md`
-§3), but only two shapes actually reach into a row this way: `seek`'s cursor, read off the
-*last row* of the walk's own row collection via `LastRowPath`'s narrow `[-1]<...>`
-requirement, and `window`'s own `WindowOverlap.field`, resolved the same way relative to
-the row collection. `page`/`token`/`offset` read only plain top-level (or nested-object,
-non-array) response fields, and a plain (non-`overlap`) `window` walk never reads the
-response at all -- it advances by arithmetic on the bounds it sent.
+§3), but only one shape actually reaches into a row this way: `seek`'s `cursor.field`,
+resolved relative to the walk's own row collection via `LastRowPath`'s narrow `[-1]<...>`
+requirement. `page`/`token`/`offset` read only plain top-level (or nested-object,
+non-array) response fields.
 """
 
 
@@ -799,6 +817,68 @@ class EnvelopeSpecBase(BaseModel):
     return read_dotted_path(raw, self.payload)
 
 
+class PositionalSpread(BaseModel):
+  """Positional slots holding an array-valued request property's elements, one slot each
+  (`[tx1, tx2]` for `transactions`)."""
+
+  model_config = ConfigDict(extra='forbid')
+  spread: str
+
+
+class PositionalFold(BaseModel):
+  """One positional slot holding an object built from the listed request properties that
+  are present (`{pageKey?, maxCount?}`). Absent when none of them is."""
+
+  model_config = ConfigDict(extra='forbid')
+  fold: list[str] = Field(min_length=1)
+
+
+PositionalSlot = str | PositionalSpread | PositionalFold
+"""One entry of `RpcEnvelopeSpec.positional`: a request property name (its value fills the
+slot), a `{"spread": name}`, or a `{"fold": [names]}`."""
+
+_POSITIONAL_SLOT: TypeAdapter[PositionalSlot] = TypeAdapter(PositionalSlot)
+
+
+def positional_slot_names(slot: PositionalSlot) -> list[str]:
+  """The request property names one positional slot reads."""
+  if isinstance(slot, str):
+    return [slot]
+  if isinstance(slot, PositionalSpread):
+    return [slot.spread]
+  return list(slot.fold)
+
+
+def positional_params(slots: Sequence[PositionalSlot], request: Mapping[str, Any] | None) -> list[Any]:
+  """Pack a flat request dict into the positional `params` array `slots` declares.
+
+  A named slot whose property is absent, and a fold with none of its properties present,
+  are absent: trailing absent slots are dropped, any other becomes `null`. A spread of an
+  absent property contributes no slots.
+
+  Args:
+    slots: The endpoint's `envelope.positional`.
+    request: The recorded (or wire-ready) flat request dict.
+  """
+  request = request or {}
+  absent = object()
+  out: list[Any] = []
+  for raw_slot in slots:
+    slot: PositionalSlot = raw_slot if isinstance(raw_slot, str) else _POSITIONAL_SLOT.validate_python(raw_slot)
+    if isinstance(slot, str):
+      out.append(request.get(slot, absent))
+    elif isinstance(slot, PositionalSpread):
+      value = request.get(slot.spread, absent)
+      if value is not absent:
+        out.extend(value if isinstance(value, list) else [value])
+    else:
+      folded = {name: request[name] for name in slot.fold if name in request}
+      out.append(folded if folded else absent)
+  while out and out[-1] is absent:
+    out.pop()
+  return [None if value is absent else value for value in out]
+
+
 class RpcEnvelopeSpec(EnvelopeSpecBase):
   """Envelope for a single request/reply endpoint, over HTTP or WS."""
 
@@ -810,6 +890,12 @@ class RpcEnvelopeSpec(EnvelopeSpecBase):
   params: ResponsePath | None = None
   """Dotted path naming a request/frame's arguments, paired with `selector`. Defaults to
   `'params'`, JSON-RPC's own key, when unset."""
+  positional: list[PositionalSlot] | None = None
+  """How the flat `request` is packed into a positional `params` array, one entry per wire
+  slot in order (see `PositionalSlot`, `positional_params`). `None`, the default, is the
+  whole request object as the one argument, `[request]`. `truewire mock` matches a JSON-RPC
+  call against the array this builds from the recorded request; every name must be a
+  declared `request` property, used once."""
 
 
 class VerbByValue(BaseModel):
@@ -859,6 +945,12 @@ class StreamEnvelopeSpec(EnvelopeSpecBase):
   path may resolve to a list rather than a scalar -- a `public/subscribe` taking
   `{"channels": [...]}`, one element -- in which case matching checks membership instead of
   equality."""
+  subscribe_channel: str | None = None
+  """The channel identity the subscribe frame names at `channel`, when it differs from
+  `spec.channel`, the channel the pushes arrive on. Hyperliquid subscribes with
+  `{"subscription": {"type": "userEvents"}}` and pushes on `user`. A template like
+  `spec.channel`: `{name}` placeholders are filled from the example's `parameters`. Read only
+  by the mock's subscribe and unsubscribe matching; `None` means the frame names `spec.channel`."""
   reply_payload: PayloadPath | None = None
   """Dotted path extracting the subscribe acknowledgement's own value, when it differs from
   `payload` (which names the *pushed message's* path). Defaults to `payload` for an API
@@ -1189,18 +1281,34 @@ class StreamEndpointSpec(BaseModel):
   """JSON Schema for the subscribe call's non-templated fields (same as `request` for stream)."""
   payload: dict[str, Any] | None = None
   """JSON Schema for pushed messages, replacing `openapi.responses['message']`."""
+  reply: dict[str, Any] | None = None
+  """JSON Schema for the subscribe acknowledgement's own value, replacing
+  `openapi.responses['reply']` (ADR 0014). Describes what the client core hands back as
+  `Stream.reply` -- the reply frame *after* `envelope.reply_payload` (or `envelope.payload`)
+  extraction, exactly as `payload` describes a pushed message after `envelope.payload`
+  extraction. Optional: a venue whose ack is shaped like its pushes, or carries nothing
+  worth typing, leaves it out and the generated method's reply slot stays `Any`."""
   description: str | None = None
   """Operation docstring, for the new-shape path -- there is no `openapi.description` to
   reuse (mirrors `GrpcEndpointSpec.description`)."""
 
+  @property
+  def new_shape(self) -> bool:
+    """Whether this spec is authored in the `parameters`/`payload`/`reply` shape (design
+    §8) rather than the legacy `openapi` one -- the one predicate every dual-shape gate
+    (`_one_shape`, `Endpoint._require_meta_for_new_shape`, `operation_json`) shares."""
+    return (
+      self.request is not None or self.parameters is not None
+      or self.payload is not None or self.reply is not None
+    )
+
   @model_validator(mode='after')
   def _one_shape(self) -> 'StreamEndpointSpec':
-    """Exactly one of `openapi` or `request`/`parameters`/`payload` is set -- never both, never neither."""
-    new_shape_present = self.request is not None or self.parameters is not None or self.payload is not None
-    openapi_present = self.openapi is not None
-    if new_shape_present == openapi_present:
+    """Exactly one of `openapi` or `request`/`parameters`/`payload`/`reply` is set -- never both, never neither."""
+    if self.new_shape == (self.openapi is not None):
       raise ValueError(
-        'StreamEndpointSpec must declare exactly one of `openapi` (legacy) or `request`/`parameters`/`payload`'
+        'StreamEndpointSpec must declare exactly one of `openapi` (legacy) or '
+        '`request`/`parameters`/`payload`/`reply`'
       )
     return self
 
@@ -1236,6 +1344,46 @@ EndpointSpec = Annotated[
   RpcEndpointSpec | StreamEndpointSpec | GrpcEndpointSpec,
   Field(discriminator='kind'),
 ]
+
+
+class MatchSpec(BaseModel):
+  """Declared request-matching rules for `truewire mock` (ADR 0018, ADR 0019).
+
+  `ignore` names request fields whose value is minted per call -- a signature, a signing
+  timestamp, a nonce -- by a located path, so a recorded example can match a freshly signed
+  request on everything else. The complement of `redacted` (ADR 0007): `redacted` strips a
+  flat key name wherever the comparison is looking, which cannot reach a field nested inside
+  a positional array (`{"op": "login", "args": [{"sign": ...}]}`) or tell two same-named keys
+  apart; a path can.
+
+  Paths use the response-path grammar (`dotted_path`: dotted keys plus bracket indices,
+  no `$` root, no wildcard) and are rooted at the whole request value the mock compares: the
+  parsed WebSocket frame, or the parsed HTTP JSON body. A query item or header is flat and is
+  what `redacted` already covers. The field is removed from both the real request and the
+  recorded one before comparing, so a path the recording lacks still matches; the field
+  itself is not required to be present. Never read when an example is replayed through the
+  real client -- like `redacted`, it only widens what the mock accepts.
+
+  `query_arrays` states how the API reads a list in the query string (ADR 0019). The
+  default, `repeat`, is one item per value (`?state=WA&state=OR`); `comma` is one item whose
+  value joins them (`?state=WA,OR`, OpenAPI's `style: form, explode: false`). The mock joins
+  a recorded list the declared way before comparing, so a client sending the other form is a
+  422, not a match: an API that keeps only the last repeated key would drop values silently.
+  """
+
+  model_config = ConfigDict(extra='forbid')
+  ignore: list[ResponsePath] | None = Field(default=None, min_length=1)
+  """Located request paths the mock drops from both sides before comparing, e.g.
+  `args[0].sign`, `args[0].timestamp`."""
+  query_arrays: Literal['repeat', 'comma'] = 'repeat'
+  """How a list-valued query field is written on the wire: `repeat` (one `key=value` per
+  value) or `comma` (one `key=a,b`)."""
+
+  @model_validator(mode='after')
+  def declares_a_rule(self) -> 'MatchSpec':
+    if self.ignore is None and 'query_arrays' not in self.model_fields_set:
+      raise ValueError('match declares no rule. Fix: add `ignore` or `query_arrays`, or remove `match`.')
+    return self
 
 
 class Endpoint(BaseModel):
@@ -1280,6 +1428,9 @@ class Endpoint(BaseModel):
   """Key names the mock matcher ignores when comparing requests against examples. Never read by
   `coerce_example_call` -- only widens what the mock accepts, never substitutes for a real
   `parameters`/`payload` entry."""
+  match: 'MatchSpec | None' = None
+  """How `truewire mock` compares a real request against this endpoint's recorded examples,
+  beyond the default structural equality -- see `MatchSpec`, ADR 0018 and ADR 0019."""
   docs: str | None = None
   notes: list[str] | None = None
   spec: EndpointSpec
@@ -1336,19 +1487,45 @@ class Endpoint(BaseModel):
 
     The two branches use different field sets on purpose, not a copy-paste of the same
     pair: `StreamEndpointSpec` has no `response` field at all (it uses `request`/
-    `parameters`/`payload`), and a stream endpoint migrated with only `payload` set (the
-    legitimate push-only-stream shape, rule 11) would silently skip the meta requirement
-    under the reused-pair version. Each branch must mirror its own spec class's
-    `_one_shape` field set."""
+    `parameters`/`payload`/`reply`, folded into its own `new_shape` predicate), and a
+    stream endpoint migrated with only `payload` set (the legitimate push-only-stream
+    shape, rule 11) would silently skip the meta requirement under the reused-pair
+    version, defeating design §2's "never omittable" for that endpoint shape. Each branch
+    must mirror its own spec class's `_one_shape` field set."""
     spec = self.spec
     if isinstance(spec, RpcEndpointSpec):
       new_shape = spec.request is not None or spec.response is not None
     elif isinstance(spec, StreamEndpointSpec):
-      new_shape = spec.request is not None or spec.parameters is not None or spec.payload is not None
+      new_shape = spec.new_shape
     else:
       return self
     if new_shape and self.meta is None:
       raise ValueError('meta is required on a request/response-shaped endpoint')
+    return self
+
+  @model_validator(mode='after')
+  def _check_positional_slots(self) -> 'Endpoint':
+    """`envelope.positional` names only declared `request` properties, each once, and
+    spreads only an array-typed one."""
+    envelope = self.envelope
+    if not isinstance(envelope, RpcEnvelopeSpec) or envelope.positional is None:
+      return self
+    request = self.spec.request if isinstance(self.spec, RpcEndpointSpec) else None
+    properties = (request or {}).get('properties')
+    if not isinstance(properties, dict):
+      raise ValueError('envelope.positional needs a `request` schema with flat `properties`')
+    seen: set[str] = set()
+    for slot in envelope.positional:
+      for name in positional_slot_names(slot):
+        if name not in properties:
+          raise ValueError(f'envelope.positional names `{name}`, which is not a `request` property')
+        if name in seen:
+          raise ValueError(f'envelope.positional names `{name}` more than once')
+        seen.add(name)
+      if isinstance(slot, PositionalSpread):
+        declared = properties[slot.spread]
+        if isinstance(declared, dict) and declared.get('type', 'array') != 'array':
+          raise ValueError(f'envelope.positional spreads `{slot.spread}`, which is not an array')
     return self
 
   @property
@@ -1410,6 +1587,16 @@ class Endpoint(BaseModel):
   def redacted_names(self) -> frozenset[str]:
     """Redacted key names normalized to a frozenset, empty when none are declared."""
     return frozenset(self.redacted) if self.redacted else frozenset()
+
+  @property
+  def ignored_paths(self) -> tuple[str, ...]:
+    """`match.ignore` paths, empty when none are declared (ADR 0018)."""
+    return tuple(self.match.ignore) if self.match is not None and self.match.ignore else ()
+
+  @property
+  def query_arrays(self) -> Literal['repeat', 'comma']:
+    """`match.query_arrays`, `repeat` when none is declared (ADR 0019)."""
+    return self.match.query_arrays if self.match is not None else 'repeat'
 
   def resolved_function(self, endpoint_path: Path, spec_root: Path) -> str:
     """

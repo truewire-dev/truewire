@@ -19,7 +19,7 @@ from typing_extensions import Any, Callable
 from truewire.generation.schema import Schema
 
 from truewire.project import Project, resolve, spec_dir
-from truewire.spec import Endpoint
+from truewire.spec import Endpoint, RouterDoc
 
 
 class BackendUnavailable(Exception):
@@ -264,6 +264,20 @@ def class_name(section: str) -> str:
   """Return the PascalCase class name derived from one function segment."""
   parts = section.replace('-', '_').split('_')
   return ''.join(part[:1].upper() + part[1:] for part in parts if part)
+
+
+def group_class_name(doc: RouterDoc | None, segment: str) -> str:
+  """Return the class a router group renders: its `router.json` `class` when it declares
+  one, else `class_name(segment)`.
+
+  Only the type name: the parent still reaches the group through `segment` itself
+  (`client.chain.rpc` whether the class is `Rpc` or `ChainRpc`).
+
+  Args:
+    doc: The group's loaded `router.json` (`load_router`), or `None` when it has none.
+    segment: The group's last function-tree segment, what the name derives from.
+  """
+  return doc.class_ if doc is not None and doc.class_ is not None else class_name(segment)
 
 
 def aggregate_nodes(functions: list[str]) -> set[tuple[str, ...]]:

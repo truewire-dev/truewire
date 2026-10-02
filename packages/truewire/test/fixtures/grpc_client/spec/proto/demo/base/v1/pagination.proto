@@ -1,0 +1,19 @@
+syntax = "proto3";
+package demo.base.v1;
+
+option go_package = "github.com/example/demo/types/query";
+
+// PageRequest is a Cosmos-style pagination request.
+message PageRequest {
+  bytes key = 1;
+  uint64 offset = 2;
+  uint64 limit = 3;
+  bool count_total = 4;
+  bool reverse = 5;
+}
+
+// PageResponse is a Cosmos-style pagination response.
+message PageResponse {
+  bytes next_key = 1;
+  uint64 total = 2;
+}

@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "files": [
+    "issues/__init__.py",
+    "issues/list.py",
+    "main.py",
+    "meta.py",
+    "repos/__init__.py",
+    "repos/get.py",
+    "repos/get_commit.py",
+    "repos/list_commits.py",
+    "repos/list_releases.py",
+    "repos/list_tags.py",
+    "schemas.py"
+  ]
+}

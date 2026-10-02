@@ -4,7 +4,7 @@
  *
  * @see https://docs.kraken.com/api/docs/guides/global-errors
  */
-import { ApiError, AuthError, BadRequest, RateLimited, ValidationError } from '@truewire/core'
+import { ApiError, AuthError, BadRequest, RateLimited, ValidationError, parseJsonText } from '@truewire/core'
 
 /** The `ApiError` subclass per `<Category>:<Description>` prefix, unless a substring below decides first. */
 const CATEGORY_ERRORS: Record<string, typeof ApiError> = {
@@ -37,7 +37,7 @@ export function raiseError(errors: string[]): never {
 /** A non-2xx status, rare for Kraken (it answers 200 to most logical errors) but what an edge failure looks like. */
 export function raiseHttpStatus(status: number, text: string): never {
   let body: unknown = text
-  try { body = JSON.parse(text) } catch { /* not JSON: keep the text */ }
+  try { body = parseJsonText(text) } catch { /* not JSON: keep the text */ }
   const message = `HTTP ${status}: ${text.slice(0, 200)}`
   const options = { status, body }
   if (status === 401 || status === 403) throw new AuthError(message, options)
@@ -50,7 +50,7 @@ export function raiseHttpStatus(status: number, text: string): never {
 export function unwrap(status: number, text: string): unknown {
   if (status >= 400) raiseHttpStatus(status, text)
   let envelope: unknown
-  try { envelope = JSON.parse(text) } catch (e) {
+  try { envelope = parseJsonText(text) } catch (e) {
     throw new ValidationError(`invalid JSON: ${(e as Error).message}`, { cause: e })
   }
   if (typeof envelope !== 'object' || envelope === null || !Array.isArray((envelope as { error?: unknown }).error)) {

@@ -120,6 +120,33 @@ class Function:
   implementation, which is where a type checker reads it for every variant."""
   tab: str = '  '
 
+  def qualify_self_shadowed_params(self) -> bool:
+    """Qualify every parameter annotation naming the builtin this method's name shadows.
+
+    Once a class body holds one `def list(...)`, every later `list[...]` annotation in
+    that body resolves to the method, not the builtin. `@overload` stubs make this real
+    at definition time (the second stub's `ids: list[str]` subscripts the first stub:
+    `TypeError: 'function' object is not subscriptable`), and PEP 649 makes it real for
+    the implementation too. Rewriting to `builtins.list[...]` covers the stubs and the
+    implementation alike; the return annotation is handled by `self_shadowing_alias`.
+
+    Returns:
+      Whether any annotation was rewritten, i.e. the module needs `import builtins`.
+    """
+    if self.name not in SELF_SHADOWING_BUILTINS:
+      return False
+    pattern = re.compile(rf"(?<![\w.'\"]){re.escape(self.name)}(?![\w'\"])")
+    changed = False
+    for function in [self, *self.overloads]:
+      for param in [*function.args, *function.kwargs]:
+        if param.type is None:
+          continue
+        qualified = pattern.sub(f'builtins.{self.name}', param.type)
+        if qualified != param.type:
+          param.type = qualified
+          changed = True
+    return changed
+
   def code(self, *, max_line_length: int = 80) -> str:
     """Render the header, on one line when it fits and grouped otherwise -- preceded by
     every `overloads` entry as a one-line stub (`... -> T: ...`)."""

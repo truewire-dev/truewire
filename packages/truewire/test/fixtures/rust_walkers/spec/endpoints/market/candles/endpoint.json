@@ -1,0 +1,59 @@
+{
+  "meta": {},
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/candles",
+    "method": "GET",
+    "description": "Candles over a time range, oldest kept on truncation.",
+    "request": {
+      "title": "CandlesRequest",
+      "type": "object",
+      "properties": {
+        "symbol": {
+          "type": "string"
+        },
+        "start": {
+          "type": "integer",
+          "format": "epoch-millis"
+        },
+        "end": {
+          "type": "integer",
+          "format": "epoch-millis"
+        },
+        "limit": {
+          "type": "integer",
+          "default": 3,
+          "maximum": 1000
+        }
+      },
+      "required": [
+        "symbol"
+      ]
+    },
+    "response": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": {}
+      }
+    }
+  },
+  "pagination": {
+    "strategy": "seek",
+    "cursor": {
+      "field": "[-1][0]",
+      "unique": true
+    },
+    "bound": {
+      "start": "start",
+      "end": "end"
+    },
+    "anchor": "start",
+    "size": {
+      "parameter": "limit"
+    }
+  }
+}

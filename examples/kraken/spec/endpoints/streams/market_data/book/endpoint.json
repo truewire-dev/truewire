@@ -148,6 +148,7 @@
     }
   },
   "envelope": {
+    "correlate": "req_id",
     "payload": "",
     "verb": {
       "path": "method",

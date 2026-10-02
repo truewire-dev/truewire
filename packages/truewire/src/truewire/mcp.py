@@ -86,6 +86,11 @@ def root_class_name(project: Project) -> str:
 
 def load_client(project: Project, new_kwargs: dict[str, Any]) -> Any:
   """Import the generated package and build its root client via `<Root>.new(**new_kwargs)`."""
+  return load_root(project).new(**new_kwargs)
+
+
+def load_root(project: Project) -> Any:
+  """Import the generated package fresh from disk and return its root client class."""
   src = str(project.python_src)
   if src not in sys.path:
     sys.path.insert(0, src)
@@ -96,8 +101,7 @@ def load_client(project: Project, new_kwargs: dict[str, Any]) -> Any:
   for name in [n for n in sys.modules if n == package or n.startswith(package + '.')]:
     del sys.modules[name]
   module = importlib.import_module(package)
-  root = getattr(module, root_class_name(project))
-  return root.new(**new_kwargs)
+  return getattr(module, root_class_name(project))
 
 
 async def call_tool(client: Any, tool: ToolSpec, arguments: dict[str, Any], project: Project) -> Any:
@@ -111,8 +115,10 @@ async def call_tool(client: Any, tool: ToolSpec, arguments: dict[str, Any], proj
   return await fn(*args, **kwargs)
 
 
-def to_json(value: Any) -> str:
-  """Render a response for a tool result: dates as ISO strings, decimals as strings."""
+def to_json(value: Any, *, indent: int | None = 2) -> str:
+  """Render a response for a tool result: dates as ISO strings, decimals as strings.
+
+  `indent=None` renders one line, for a stream of documents."""
   def default(item: Any) -> Any:
     if isinstance(item, (datetime, date)):
       return item.isoformat()
@@ -121,7 +127,7 @@ def to_json(value: Any) -> str:
     if isinstance(item, (set, frozenset)):
       return sorted(item)
     return str(item)
-  return json.dumps(value, default=default, indent=2)
+  return json.dumps(value, default=default, indent=indent)
 
 
 def parse_new_kwargs(pairs: list[str]) -> dict[str, Any]:

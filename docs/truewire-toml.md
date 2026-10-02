@@ -6,6 +6,7 @@ the file with the `[cores.*]` and `[python.cores.*]` tables its `--template` nee
 [docs/cores.md](cores.md) for what each template wires.
 
 ```toml
+#:schema https://truewire.dev/schemas/truewire.toml.json
 [project]
 name = "petstore"            # required. Also the default Python package name.
 
@@ -14,6 +15,12 @@ dir = "spec"                 # default "spec": holds endpoints/ and schemas.json
 
 [secrets]                    # optional: credential variable *names*, never values.
 required = ["PETSTORE_API_KEY"]
+optional = ["PETSTORE_ADMIN_KEY"]
+
+[policy]                     # optional: what the client may do on its own behalf.
+rate = 10                    # requests per second it paces itself to; unpaced when absent
+retry = false                # default false
+refuse = ["pets.delete"]     # endpoint ids it refuses to call
 
 [cores.default]              # one table per symbolic core name a router.json can declare.
 meta = { type = "object", properties = { public = { type = "boolean" } }, additionalProperties = false }
@@ -47,6 +54,9 @@ name = "Petstore"            # root class name; default: [python].name, else Pas
 package = "petstore"         # default: [project].name; the modules live at <src>/<package>, lib.rs at their top
 src = "src"                  # default "src"
 name = "Petstore"            # root struct name; default: [python].name, else PascalCase of [project].name
+
+[score]                      # optional
+stranger = 2026-10-12        # the day a newcomer last completed the quickstart unaided
 ```
 
 ## Sections
@@ -56,8 +66,29 @@ name = "Petstore"            # root struct name; default: [python].name, else Pa
 - **`[spec]`**: `dir` relocates the spec tree. `truewire check`, `examples`, `surface`, `mock`
   and `generate` all read `<dir>/endpoints/**/endpoint.json`, `<dir>/**/router.json` and
   `<dir>/schemas.json`.
-- **`[secrets]`**: variable names only. `truewire standards` uses them to flag a recorded
+- **`[secrets]`**: `required` and `optional`, lists of environment variable names and
+  nothing else: a value, a path or another key is an error. The values live in `.env`,
+  which `truewire init` git-ignores. `truewire standards` uses the names to flag a recorded
   example that leaked a real credential-shaped value.
+- **`[policy]`**: `rate`, a positive number of requests per second; `retry`, `true` or
+  `false`; `refuse`, endpoint ids (the dotted function path `truewire capture` takes).
+  `truewire check` fails on a `refuse` id that names no endpoint in the spec. `refuse` is
+  generated (W15): a refused endpoint keeps its method in Python, TypeScript and Rust, and
+  the method fails with the package's `RefusedByPolicy` (a `LogicError`, generated into
+  `policy.py`, `policy.ts` or `policy.rs`) before any request is made. `generate` fails
+  on an id that names no generated endpoint, and on a refused endpoint whose method is
+  written by hand: `surface: handwritten`, an extras entry that `replaces` it, or a
+  `[python].backend` `skip_endpoint`. Go does not render refusals yet, and `generate go` says so for each
+  one. `rate` and `retry` are generated onto the root (`RATE`/`RETRY` in Python and
+  TypeScript, associated consts in Rust), and the hand-written core builds its runtime
+  `HttpClient` from them ([cores](cores.md)): request starts spaced `1 / rate` seconds
+  apart, and, with `retry`, up to three attempts for a connection that never opened or a
+  429/503, waiting its `Retry-After` up to 30 s. Go renders neither yet.
+- **`[score]`**: `stranger` is the date `truewire score` prints for S12
+  ([docs/shape/score.md](shape/score.md)): the day someone who had never seen the project
+  completed its quickstart from the published package and the public docs alone. A TOML
+  date or the same as a `"YYYY-MM-DD"` string. Absent, the row is `unchecked` and the
+  project is not done. No command writes it; the person who watched the run does.
 - **`[cores.<name>]`**: the JSON Schema every endpoint's `meta` must satisfy when its nearest
   `router.json` resolves to `<name>`. Omit `meta` for a core that reads nothing per call.
 - **`[python]`**: where the generated Python package goes and how it is finished. `name`
@@ -91,7 +122,8 @@ name = "Petstore"            # root struct name; default: [python].name, else Pa
 - **`[typescript]`**: where `truewire generate typescript` writes the TypeScript package
   (`<src>/<package>/`) and what its root class is called. There is no per-core table: a
   generated class takes its core as a constructor argument typed by the `@truewire/core`
-  contract (`HttpEndpoint<Meta>`, `CommandEndpoint<Meta>`, `StreamEndpoint<Meta>`), and
+  contract (`HttpEndpoint<Meta>`, `CommandEndpoint<Meta>`, `DualEndpoint<Meta>`,
+  `StreamEndpoint<Meta>`, `ReplyStreamEndpoint<Meta>`), and
   the hand-written `<package>/core/index.ts` satisfies it by shape, so nothing is imported
   or resolved at generation. The composition keys are read from `[python.cores.<name>]`,
   the one declaration serving both languages: a core declaring `children` or `forward`
@@ -100,13 +132,19 @@ name = "Petstore"            # root struct name; default: [python].name, else Pa
   `children` entry maps it to (`client` when unmapped), or the whole object to a child
   that is itself composite. `params` needs nothing: the hand-written core takes its
   parameters when it is built. See [docs/typescript.md](typescript.md#composite-cores).
+- **`[[typescript.extras."<router node>"]]`**: hand-written classes folded into a generated
+  TypeScript router (`file`, `class`, `methods`, optional `replaces` and `field`); what
+  serves an endpoint whose spec declares `surface: handwritten`, which the TypeScript
+  backend does not render. See [docs/typescript.md](typescript.md#hand-written-methods).
 - **`[rust]`**: where `truewire generate rust` writes the Rust modules (`<src>/<package>/`,
   whose `lib.rs` the project's `Cargo.toml` names as its library path) and what its root
   struct is called. As for TypeScript there is no per-core table: a generated struct holds
   its core as an `Arc<dyn HttpEndpoint<Meta>>` from `truewire-core`, and the hand-written
   `<package>/core` module, which the generated `lib.rs` declares, implements the trait, so
   nothing is imported or resolved at generation. A core declaring `children` or `forward`
-  is not rendered yet; see [docs/rust.md](rust.md#not-generated-yet).
+  makes its router take one parameter per field (`Kraken::from_cores(market_client,
+  private_client, spot_client)`), a field needing several traits held as the combined
+  trait `contract.rs` declares; see [docs/rust.md](rust.md#websocket-commands-and-dual-transports).
 
 ## Generated state
 
@@ -120,14 +158,18 @@ schema (`DefaultMeta` for `default`), which the hand-written core names as the `
 parameter of `HttpEndpoint`. `generate rust` writes `<src>/<package>/meta.rs`, one struct
 per such core, which the hand-written core implements `HttpEndpoint<DefaultMeta>` for.
 
-`generate` writes `.truewire/<language>-files.json` (`python-files.json`,
-`typescript-files.json`, `rust-files.json`), the manifest of files it owns. Files not in the manifest are
+`generate` writes `.truewire/codegen/<language>.json` (`python.json`, `typescript.json`,
+`rust.json`, `go.json`), the manifest of files it owns. Files not in the manifest are
 never deleted; `generate --check` compares the plan to it and each owned file's content
 to what the plan renders (formatted the way `generate` writes it), and `generate --delete`
-removes only what it owns. Add `.truewire/` to `.gitignore` (`truewire init` does): the
-manifest is local state, not source. On a checkout without it, `generate --check` takes
-the plan as the owned file list -- it names every file `generate` would write -- and
-checks existence and content the same way; the one thing it cannot see without a manifest
-is a file an earlier plan owned that this one does not, which the next `generate` deletes.
-So CI runs `truewire generate python --check` on a fresh clone with nothing committed
-under `.truewire/`.
+removes only what it owns. Commit the manifest: it is what lets `--check` on a fresh
+clone see a file an earlier plan owned that this one does not, which the next `generate`
+deletes. Only `.truewire/cache/` is git-ignored (`truewire init` writes that line, and
+rewrites a bare `.truewire/` line an older `init` wrote). On a checkout without a manifest,
+`generate --check` takes the plan as the owned file list -- it names every file `generate`
+would write -- and checks existence and content the same way, less that one difference.
+
+Up to 0.10 the manifest was `.truewire/<language>-files.json`, git-ignored. `generate`
+moves one it finds to the new path and says so; `generate --check` reads it when the new
+path has none and reports it as a stale manifest, so the check fails until `generate` has
+moved it.

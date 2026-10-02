@@ -17,8 +17,11 @@
  * - `request({ method, path, ... })`: one HTTP call (`HttpEndpoint`).
  * - `request({ path, ... })`: one WebSocket command/reply call, `path` being the wire
  *   method name (`CommandEndpoint`).
+ * - `request({ method, path, transport, ... })`: one call of an endpoint declaring both
+ *   transports, routed by `transport` (`DualEndpoint`).
  * - `subscribe({ channel, parameters, ... })`: one channel subscription, returning a
- *   `Subscription` the caller awaits or iterates (`StreamEndpoint`).
+ *   `Subscription` the caller awaits or iterates (`StreamEndpoint`; `ReplyStreamEndpoint`
+ *   when the stream declares its acknowledgement's `reply` and passes `replyCodec`).
  */
 import type { Codec } from './validation.js'
 import type { Subscription } from './ws/streams.js'
@@ -55,18 +58,46 @@ export interface HttpCall<Req, Res, Meta> extends Call<Req, Res, Meta> {
   path: string
 }
 
+/** A transport an `rpc` endpoint can be reached over. */
+export type Transport = 'http' | 'ws'
+
+/**
+ * Options of a method whose endpoint declares both `http` and `ws` transports: the call
+ * options plus which transport this call goes over. Omitted, the endpoint's first-declared
+ * transport is used.
+ */
+export interface TransportOptions extends CallOptions {
+  transport?: Transport
+}
+
+/**
+ * One call of an endpoint that declares both transports. It carries everything an
+ * `HttpCall` does (the HTTP method may be `undefined` for a uniformly POST JSON-RPC API);
+ * `path` is the HTTP path template or, over `ws`, the wire method name (ADR 0006: one
+ * identifier regardless of transport), and `transport` is always set.
+ */
+export interface TransportCall<Req, Res, Meta> extends HttpCall<Req, Res, Meta> {
+  transport: Transport
+}
+
 /** One WebSocket command; `path` is the wire method name. */
 export interface CommandCall<Req, Res, Meta> extends Call<Req, Res, Meta> {
   path: string
 }
 
 /** One channel subscription; `{name}` placeholders in `channel` are filled from `parameters`. */
-export interface SubscribeCall<Params, Message, Meta> extends CallOptions {
+export interface SubscribeCall<Params, Message, Meta, Reply = unknown> extends CallOptions {
   channel: string
   parameters: Params | undefined
   parametersCodec: Codec<Params> | undefined
   /** Codec of each pushed message. */
   messageCodec: Codec<Message> | undefined
+  /**
+   * Codec of the subscription's acknowledgement, the `Stream.reply` value (ADR 0014); set
+   * only by a stream that declares `reply`, whose class takes a `ReplyStreamEndpoint`. A
+   * core validates the ack through it and never through `messageCodec`, and vice versa.
+   */
+  replyCodec?: Codec<Reply> | undefined
   meta: Meta
 }
 
@@ -86,7 +117,30 @@ export interface CommandEndpoint<Meta = Record<string, never>> {
   request<Req, Res>(call: CommandCall<Req, Res, Meta>): Promise<Res>
 }
 
+/**
+ * Base of a generated `rpc` endpoint that declares both `http` and `ws` transports.
+ *
+ * The generated method passes `transport` (the caller's choice, else the first-declared
+ * one) and the core routes the call to its HTTP client or its socket: the TypeScript half
+ * of Python's `request(..., transport=...)`.
+ */
+export interface DualEndpoint<Meta = Record<string, never>> {
+  request<Req, Res>(call: TransportCall<Req, Res, Meta>): Promise<Res>
+}
+
 /** Base of a generated `stream` endpoint. */
 export interface StreamEndpoint<Meta = Record<string, never>> {
   subscribe<Params, Message>(call: SubscribeCall<Params, Message, Meta>): Subscription<Message>
+}
+
+/**
+ * Base of a generated `stream` endpoint that declares its subscription `reply` (ADR 0014):
+ * the core parses the acknowledgement through `replyCodec` (unless `validate` is off) and
+ * hands it back as the stream's typed `reply`. Adopting a declared `reply` is a per-core
+ * step: a core that only satisfies `StreamEndpoint` does not type-check here.
+ */
+export interface ReplyStreamEndpoint<Meta = Record<string, never>> {
+  subscribe<Params, Message, Reply>(
+    call: SubscribeCall<Params, Message, Meta, Reply> & { replyCodec: Codec<Reply> | undefined },
+  ): Subscription<Message, Reply>
 }

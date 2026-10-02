@@ -1,0 +1,32 @@
+{
+  "meta": {
+    "public": true
+  },
+  "docs": "https://docs.cosmos.network/main/build/modules/bank",
+  "spec": {
+    "kind": "grpc",
+    "service": "demo.bank.v1.Query",
+    "rpc": "Search",
+    "request": "demo.bank.v1.SearchRequest",
+    "response": "demo.bank.v1.SearchResponse",
+    "proto": "demo/bank/v1/query.proto",
+    "description": "Page through coins matching a query, by page number.",
+    "optional_scalars": ["query"]
+  },
+  "pagination": {
+    "strategy": "page",
+    "index": {
+      "parameter": "page",
+      "start": 1
+    },
+    "size": {
+      "parameter": "limit"
+    },
+    "done": {
+      "kind": "total",
+      "path": "total",
+      "counts": "items",
+      "rows": "hits"
+    }
+  }
+}

@@ -17,13 +17,25 @@ TIMESTAMP_FORMATS: tuple[str, ...] = (
 )
 """Spec formats that render to a real timestamp/date type (`docs/spec/authoring.md` rule 3)."""
 
+INSTANT_FORMATS: tuple[str, ...] = ('epoch-seconds', 'epoch-millis', 'epoch-micros', 'epoch-nanos', 'date-time')
+"""Timestamp formats that name an instant, each convertible to any other: a `seek` walk reads
+a row's cursor in one and sends its bound in another. `date` names a day and converts to
+nothing but itself."""
+
 NARROWING_FORMATS: tuple[str, ...] = ('decimal-string', 'integer-string', 'boolean-string')
 """String formats that change the rendered type (rules 12, 13, 15)."""
 
 OPAQUE_FORMATS: tuple[str, ...] = ('uuid', 'hostname', 'uri')
 """Standard string formats that document a value without narrowing its type."""
 
-KNOWN_FORMATS: frozenset[str] = frozenset((*TIMESTAMP_FORMATS, *NARROWING_FORMATS, *OPAQUE_FORMATS))
+WIDE_INTEGER_FORMATS: tuple[str, ...] = ('int64',)
+"""Integer formats for a JSON number that may exceed 2^53 (an int64 id sent as a bare number).
+A language whose JSON number is an int64 or unbounded (Python, Go, Rust) renders the base
+integer; TypeScript, whose `number` is a double, renders `number | bigint` so no digit is lost."""
+
+KNOWN_FORMATS: frozenset[str] = frozenset(
+  (*TIMESTAMP_FORMATS, *NARROWING_FORMATS, *OPAQUE_FORMATS, *WIDE_INTEGER_FORMATS)
+)
 
 
 class Scalar(TypedDict):
@@ -120,12 +132,18 @@ def is_optional(t: Type) -> bool:
 
 
 def strip_null(t: Type) -> Type:
-  """`t` without its `null` variant: `X | null` -> `X`, `X | Y | null` -> `X | Y`, else `t`."""
+  """`t` without its `null` variant: `X | null` -> `X`, `X | Y | null` -> `X | Y`, else `t`.
+
+  A union of nothing but `null` (`anyOf: [{type: null}]`) is `null` itself, never a union
+  with no variants, which no backend can render.
+  """
   if t['type'] != 'union':
     return t
   rest = [v for v in t['variants'] if not is_null(v['type'])]
   if len(rest) == len(t['variants']):
     return t
+  if not rest:
+    return t['variants'][0]['type']
   if len(rest) == 1:
     return rest[0]['type']
   return {'type': 'union', 'variants': rest, 'id': t.get('id')}
@@ -138,7 +156,28 @@ def has_zero_value(t: Type) -> bool:
   if t['type'] != 'scalar' or t['base'] in ('null', 'any'):
     return False
   fmt = t.get('format')
-  return fmt is None or fmt in ('integer-string', 'boolean-string') or fmt in OPAQUE_FORMATS
+  return fmt is None or fmt in ('integer-string', 'boolean-string') or fmt in OPAQUE_FORMATS or fmt in WIDE_INTEGER_FORMATS
+
+
+def seek_cursor_format(cursor: 'Type | None', bound: 'Type | None') -> str | None:
+  """The format a `seek` walk parses a raw row cursor value through when it is not the
+  moving bound's own: the row field's instant format, under a bound of another instant
+  format (lighter's `epoch-seconds` fundings under an `epoch-millis` `end_timestamp`).
+
+  `None` when the bound's own converter is right (one format for both), or when there is
+  no row format to take: a row field with no timestamp format under a timestamp bound would
+  leave the walk guessing the unit, and `truewire check` refuses it.
+
+  Args:
+    cursor: `PaginationPlan.cursor_type`.
+    bound: `PaginationPlan.state_type`.
+  """
+  if cursor is None or bound is None or cursor['type'] != 'scalar' or bound['type'] != 'scalar':
+    return None
+  row, moving = cursor.get('format'), bound.get('format')
+  if row == moving or row not in INSTANT_FORMATS or moving not in INSTANT_FORMATS:
+    return None
+  return row
 
 
 def refs(t: Type) -> Iterator[Ref]:

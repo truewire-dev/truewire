@@ -14,6 +14,8 @@ class Imports:
   max_line_length: int = field(default=80, kw_only=True)
 
   def package(self, pkg: str, names: Collection[str]) -> str:
+    if not names:
+      return f'import {pkg}'
     names = sorted(names)
     out = f'from {pkg} import '
     single_line = out + ', '.join(names)

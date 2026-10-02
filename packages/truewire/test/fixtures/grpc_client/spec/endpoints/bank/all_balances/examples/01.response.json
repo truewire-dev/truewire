@@ -1,0 +1,15 @@
+{
+  "balances": [
+    {
+      "denom": "uatom",
+      "amount": "10"
+    },
+    {
+      "denom": "udemo",
+      "amount": "1250000"
+    }
+  ],
+  "pagination": {
+    "next_key": "AQI="
+  }
+}

@@ -1,5 +1,12 @@
+#:schema https://truewire.dev/schemas/truewire.toml.json
 [project]
 name = "kraken"
+
+# W15: the client refuses to move funds off the exchange. `spot.funding.withdraw` keeps its
+# generated method in every backend, and that method fails with `RefusedByPolicy` before
+# any request is made (Go does not render refusals yet, and `generate go` says so).
+[policy]
+refuse = ["spot.funding.withdraw"]
 
 [cores.spot]
 # `signed` genuinely varies across spot's own 58 endpoints (46 signed, 12 public) --
@@ -15,6 +22,17 @@ src = "src"
 name = "Kraken"
 
 [typescript]
+package = "kraken"
+src = "src"
+name = "Kraken"
+
+[go]
+package = "kraken"
+src = "src"
+name = "Kraken"
+module = "truewire.dev/examples/kraken"
+
+[rust]
 package = "kraken"
 src = "src"
 name = "Kraken"
@@ -35,3 +53,11 @@ children = { market_data = "market_client", private = "private_client" }
 
 [python.cores.socket]
 base = "kraken.core.endpoint.socket:SocketEndpoint"
+
+# `spot.account.retrieve_export` answers with the raw export zip, not the JSON envelope, so
+# its spec declares `surface: handwritten`: the TypeScript backend renders no method for it,
+# and `spot/account/retrieve_export.ts` (hand-written) is folded into the generated router.
+[[typescript.extras."spot.account"]]
+file = "retrieve_export"
+class = "RetrieveExport"
+methods = ["retrieveExport"]

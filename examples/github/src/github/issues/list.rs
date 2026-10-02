@@ -246,8 +246,8 @@ impl List {
         options: CallOptions,
     ) -> PaginatedResponse<Issue, i64> {
         let endpoint = self.clone();
-        let size = request.per_page.unwrap_or(30);
-        let size = Some(size as usize);
+        let size = request.per_page.unwrap_or(30).min(100);
+        let size = usize::try_from(size).ok().filter(|&size| size > 0);
         let next = move |page: i64| {
             let endpoint = endpoint.clone();
             let request = request.clone();

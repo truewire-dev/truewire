@@ -2,6 +2,55 @@
 
 Rules for `spec/schemas.json` and every `spec/endpoints/**/endpoint.json`. `truewire check` enforces most of them; each rule says whether it does, and at what severity. An `error` fails the check. A `warning` is a heuristic that can be wrong, so it reports but never fails.
 
+## Endpoint inventory
+
+`spec/inventory.json` records the upstream documentation's endpoint list for the
+[S1 coverage score](../shape/score.md). It sits beside `schemas.json`; endpoint specs
+live under `spec/endpoints/`, with `router.json` and scoped `schemas.json` in their groups.
+Discovery notes may remain in `spec/inventory.md`, but the score reads only the JSON file.
+
+```json
+{
+  "source": "https://www.weather.gov/documentation/services-web-api",
+  "approved": {"by": "Reviewer name", "date": "2026-10-01"},
+  "endpoints": [
+    {"method": "GET", "path": "/stations/{stationId}/observations", "endpoint": "stations.get_observations"},
+    {"method": "GET", "path": "/radar/queues/{host}", "excluded": "operator-only, undocumented response"},
+    {"method": "GET", "path": "/alerts"}
+  ]
+}
+```
+
+Use `"approved": null` until a person has confirmed the inventory is the full upstream
+list; then record their name and review date (`YYYY-MM-DD`). Approval can precede a
+complete spec. Each entry requires `method` and `path`, and may carry either `endpoint`
+or `excluded`, but never both, with no other fields. An entry with neither is documented
+but not yet specified; keep it in the inventory so it counts in the denominator.
+An endpoint id is its directory path under
+`spec/endpoints/`, joined with dots: `stations/get_observations/endpoint.json` becomes
+`stations.get_observations`, regardless of any function override. An exclusion is a
+nonblank, one-line reason. `source` is the upstream documentation URL.
+
+Each `(method, path)` pair must be unique, regardless of whether its entry is specified,
+excluded or unspecified. Method comparison is case-insensitive (`get` and `GET` are the
+same); paths are compared exactly, including case. Duplicate errors name both the later
+entry's index and the first matching index. Different operations may map to the same
+spec endpoint id.
+
+`truewire check` validates this file's shape when present, using the packaged
+[JSON Schema](../../packages/truewire/src/truewire/resources/inventory.schema.json)
+and the loader's duplicate-operation check.
+It permits null approval and bare entries and does not require an inventory.
+`truewire score` requires an approved inventory and fails every unknown endpoint reference
+or unspecified entry. It reports the resolved/total ratio, including explicit exclusions
+as resolved: the example above fails with `2/3 endpoints; 1 unspecified`. An unapproved
+inventory shows the same ratio plus `inventory not approved`. Every entry must resolve
+and the inventory must be approved for S1 to pass with `N/N endpoints`.
+Spec endpoints absent from the inventory are warnings, not failures. `score --verbose`
+prints every unspecified operation's method and path, and all coverage errors when a
+long list is abbreviated in the table. The inventory
+follows `[spec].dir` when the project uses a custom spec directory.
+
 ## 0. Endpoint shape
 
 Each `endpoint.json` carries one self-contained operation: a `spec` with `kind`, an identifier, a titled `request` object schema (each property is one named parameter) and a titled `response` schema. Keep 2xx responses only; errors belong to the client core. Inline any schema used once. `$ref` into `spec/schemas.json` is for genuinely shared shapes.
@@ -132,7 +181,7 @@ A response schema, and the examples recorded against it, describe the body exact
 
 **Keep the envelope when it carries something the caller needs.** An API that puts its page counts beside `data` rather than inside it returns the frame: no `envelope`, and its `pagination` block reads `"done": {"kind": "total", "path": "data.totalPage"}`.
 
-**Pagination paths are relative to what the method returns.** `done.rows`, `done.path` and `cursor.from` resolve inside the schema at `envelope.payload`, never from the frame root, because the generated walk reads them off the value the core handed back.
+**Pagination paths are relative to what the method returns.** `rows`, `done.path` and `cursor.from` resolve inside the schema at `envelope.payload`, never from the frame root, because the generated walk reads them off the value the core handed back.
 
 **Be consistent with the core, not with the venue.** Envelope is declared per endpoint, never per project, because a real client can be two cores' worth of behavior: 9 JSON-RPC endpoints that unwrap `result` and 32 REST endpoints that do not, under one package. A project-level default could only pick one answer.
 
@@ -152,7 +201,7 @@ Enforcement: `truewire check`, `error`.
 
 ## 8. Pagination is declared, not inferred
 
-An endpoint the API paginates carries a `pagination` block beside `spec`, tagged by `strategy` (`page`, `token`, `offset`, `window`, `seek`), naming request parameters by their spec names and stating how the walk ends. See ADR 0002.
+An endpoint the API paginates carries a `pagination` block beside `spec`, tagged by `strategy` (`page`, `token`, `offset`, `seek`), naming request parameters by their spec names. See ADR 0002 and ADR 0013.
 
 ```jsonc
 {"pagination": {"strategy": "page",
@@ -160,28 +209,36 @@ An endpoint the API paginates carries a `pagination` block beside `spec`, tagged
   "done": {"kind": "total", "path": "data.totalPage", "counts": "pages"}}}
 {"pagination": {"strategy": "token",
   "cursor": {"parameter": "cursor", "from": "nextPageCursor"}, "size": {"parameter": "limit"},
-  "done": {"kind": "absent_cursor"}}}
+  "done": {"kind": "absent_cursor", "rows": "list"}}}
 {"pagination": {"strategy": "offset",
   "offset": {"parameter": "ofs"}, "size": {"parameter": "limit"},
-  "done": {"kind": "total", "path": "count", "counts": "items"}}}
-{"pagination": {"strategy": "window",
-  "bound": {"start": "start", "end": "end"}, "order": "descending",
-  "step": {"unit": "ms", "size": 1}, "size": {"parameter": "limit"},
-  "done": {"kind": "empty", "rows": "list"}}}
+  "done": {"kind": "total", "path": "count", "counts": "items", "rows": "trades"}}}
 {"pagination": {"strategy": "seek",
-  "cursor": {"parameter": "fromId", "from": "[-1].id"}, "size": {"parameter": "limit"},
-  "done": {"kind": "short_page"}}}
+  "cursor": {"field": "[-1][0]", "unique": true},
+  "bound": {"start": "start", "end": "end"}, "anchor": "end",
+  "size": {"parameter": "limit"}, "rows": "list"}}
 ```
 
-**Terminators.** Each strategy admits only the terminators it can decide: `page` and `offset` take `total`, `short_page` or `empty`; `token` takes `absent_cursor` or `empty`; `seek` takes `short_page`, `empty` or `unchanged`; `window` takes `empty` alone. A `total` states what it counts (`pages` or `items`); an item count needs a declared `size` to convert. `page` does not require a total: `short_page` works, and needs a `size` to be short relative to.
+**`page`, `offset` and `token` declare a terminator.** `page` and `offset` take `total`, `short_page` or `empty`; `token` takes `absent_cursor` or `empty`. A `total` states what it counts (`pages` or `items`); an item count needs a declared `size` to convert. `page` does not require a total: `short_page` works, and needs a `size` to be short relative to.
 
-A `total` is checked for the whole walk. The generated walk raises `LogicError` if a response is ever missing the declared total, or if a later page's total disagrees with an earlier one in the same walk. A missing total is the API breaking the contract the terminator exists to use, not a signal to stop quietly. Concatenating rows fetched against two different totals is a splice of two moments, not a result.
+**A `total` only ever decides an earlier stop.** An empty page ends every `page`/`offset` walk whatever terminator is declared, and a `total` missing from a response, or changing between two pages of one walk, is not an error (ADR 0013): a page walk over live data is racy whether or not `total` moves.
 
-`short_page`, `empty`, `unchanged` and `total` name the collection they measure as `rows`. Omit it only when the payload is the collection. Picking the wrapper key by looking for the one array property is the guessing the block exists to end.
+**Every declared block generates a `PaginatedResponse`**, so every block names its row collection as `rows` (on the terminator for `page`/`offset`/`token`, at the top level for `seek`). Omit it only when the payload is the collection. Picking the wrapper key by looking for the one array property is the guessing the block exists to end. A response whose rows are not an array (a map keyed by id) cannot be walked this way: declare no block, and say why in `notes`.
 
-**`window`** walks a time range and reads nothing out of the response. It keeps the width the caller's own two bounds state and moves that window along. `order` says which way; the bound that moves is derived from it. `step` is the distance past the edge just covered: `1` when both bounds are inclusive (a walk that omitted it would re-read the boundary row forever), `0` when the far bound is exclusive (a walk that stepped would skip a row). The walk ends once advancing would cross the caller's own far bound, or earlier if a response empties out. A caller asking for `[start, end]` never gets rows past `end`; before the far-bound check existed, two shipped walkers did exactly that.
+**`seek`** is the one strategy for every walk whose next request bound is read off the rows of the previous page: a timestamp, a block height or a row id, with one bound or two.
 
-A full page is the opposite signal: a window holding more rows than `size` was truncated by the API, silently, and a walk that moves on skips the rows it never saw. Declaring `size` on a `window` generates a guard: a page as full as requested raises `LogicError` naming the endpoint and the bounds, and a caller who means to accept a capped read passes `allow_truncation=True`. **A `window` also declares its size parameter's `default`**, as `default` on that property's schema, because on the call a caller usually makes (bounds and no size) "full" means the API's own default, not the caller's `None`. Prose ("defaults to 200") does not reach the generator.
+- `cursor.field`: the row field the next bound is read from, starting with `[-1]` (`[-1][0]`, `[-1].id`), resolved against a row of `rows`. Under a timestamp bound it declares its own timestamp `format`, which may differ from the bound's: the walk reads a row value in the row's format and sends the next bound in the bound's (lighter's `epoch-seconds` fundings under an `epoch-millis` `end_timestamp`). Any two instant formats (`epoch-*`, `date-time`) convert; a `date` converts only to a `date`. A row field with no timestamp format under a timestamp bound would leave the unit to a guess, and `truewire check` refuses it.
+- `cursor.unique`: whether that field is unique per row. Required, never defaulted.
+- `bound.start` / `bound.end`: the request parameters bounding the range. At least one.
+- `anchor`: `start` or `end`, the bound the API fills from when it truncates. The walk moves the anchored bound, so the anchor is also the walk's direction: an API anchored to `end` is walked newest-first.
+- `size`: the page-size parameter; its schema `default` resolves the row cap. An integer size the caller gives is sent clamped to `min(max(size, 2), maximum)`: a page must hold one new row beside the boundary row it re-reads. A size with no `maximum` is only floored, and a `maximum` below 2 is the page size.
+- `cap`: the API's fixed row cap, when `size` cannot resolve one.
+- `span`: `{"parameter", "default", "unit"}`, the widest range one request may cover, for an API that refuses a wide range rather than truncating it. Makes both bounds required.
+- `exclusive`: `{"parameters", "first", "far": {"parameter", "field"}}`, request parameters the API refuses alongside the moving bound (a time range next to a `fromId`). They are sent on the first request only, while the caller gave no moving bound; passing the moving bound with any of them but `far.parameter` raises. `first` names the one a walk must start from when the moving bound is omitted. `far.parameter` caps the walk client-side, and is never sent beside the moving bound: every row whose `far.field` lies past the caller's value is dropped, and the walk ends on the page that held one. `far.parameter` must be a number, an `integer-string` or a timestamp, with the same timestamp `format` as `far.field` when either has one.
+
+The walk requests from the moving bound to the far bound (or the span edge), moves the bound to the extreme key of each full page, and deduplicates the re-fetched boundary rows: by key when `unique`, by whole-row content otherwise (a carried row absent from the next page raises `LogicError`). A full page whose rows all share one key raises `LogicError`. Without a resolvable cap the walk cannot tell a short page from a full one, and keeps going until a page brings nothing fresh, so `unique: false` requires a cap and an orderable field; `truewire check` enforces both, flags a `cap` made redundant by a `size` default, a `span.parameter` that shadows a wire parameter, and (`pagination-read`, a warning) a paginated non-`GET` operation, since a retried or resumed page repeats its request.
+
+**The cap is never invented.** A size default lives on the parameter's schema, as `default`, because prose ("defaults to 200") does not reach the generator:
 
 ```jsonc
 // WRONG: the default lives where only a human reads it
@@ -192,27 +249,13 @@ A full page is the opposite signal: a window holding more rows than `size` was t
   "description": "Rows per page. Range [1, 1000]; defaults to 200."}}
 ```
 
-Never invent the number. A guessed default raises on windows the API answered in full, a false stop the caller cannot refuse without giving up the guard. No `size`, or no declared default, generates no guard and a docstring that states the loss instead of promising a raise.
+Declaring a cap larger than the truth turns a full page into a false "exhausted" and silently drops rows, so the number is documented or measured, never guessed. A declared `maximum` clamps a caller's larger size when measuring a full page.
 
-Declaring `overlap` on a `window` replaces the raise with an attempt to make progress first: the walk reads the largest `overlap.field` value off the full page, narrows the window to it and retries, raising only when every row in a full page shares one value. `chunk` declares a real step size decoupled from the caller's span; declare its default only where a real per-row density fact backs it (a candle interval), never as a guess.
+**Types.** The parameters a `page` or `offset` walk computes are numbers: spec them `integer` even where the API documents every query parameter as a string. A `token` cursor is opaque and exempt; so is a `seek` bound without a `span`, which is re-sent, compared, never added to. A `seek` bound with a `span` is added to, so it must be `integer`, `number`, or a `string` with `format: 'date-time'`.
 
-**Types.** The parameters a walk computes are numbers. Spec them `integer` even where the API documents every query parameter as a string; a `window` declared over `string` bounds raises `TypeError` on the first page. A `window` bound alone may instead be `string` with `format: 'date-time'`, since that renders to a real `datetime` that supports the same arithmetic. A `page` index or an `offset` gets no such exception. A `token` or `seek` cursor is exempt: both are opaque to the walk.
+**Response paths admit dotted keys and bracket indices.** `pageKey`, `data.totalPage`, `[-1].id`, `list[-1][0]`: a plain key, or an integer index in brackets (`[-1]` is the last element), composed to whatever small depth a real field needs. No wildcards, no slices, no `$` root.
 
-**Response paths admit dotted keys and bracket indices.** `pageKey`, `data.totalPage`, `[-1].id`, `list[-1][0]`: a plain key, or an integer index in brackets (`[-1]` is the last element), composed to whatever small depth a real field needs. No wildcards, no slices, no `$` root. This was refused entirely at first and widened once `seek` and positional candle rows made the gap impossible to route around; it stays narrow for the same reason it was refused.
-
-**`seek`** reads its cursor off the last row of the previous page (`cursor.from: "[-1].id"`), resolved against `done.rows` or the whole payload. Its plain form assumes the cursor is unique per row. A cursor that is not (a millisecond timestamp where one millisecond holds dozens of fills) needs `overlap`, declaring the API's true per-call row cap as `overlap.cap`:
-
-```jsonc
-{"pagination": {"strategy": "seek",
-  "cursor": {"parameter": "startTime", "from": "[-1].time"},
-  "done": {"kind": "empty"}, "overlap": {"cap": 500}}}
-```
-
-The generated walk then advances to the largest value seen on a page, drops the rows already yielded for that value from the next page by position (verified as an exact prefix, raising `LogicError` if the API's stable order broke), and raises when a page fills to `cap` while every row shares one value. `overlap` requires the payload to be the row collection (`done.rows` unset).
-
-A `seek` cursor can also fail by never seeing an empty page: an inclusive bound over a non-unique field re-serves the tied boundary row forever. `done: {"kind": "unchanged"}` ends the walk the moment a page's last-row cursor stops differing from the cursor the request was made with. It cannot be declared alongside `overlap`, whose walk always terminates on an empty page.
-
-**Bound inclusivity and sort order are API facts, not spec facts.** Nothing in an operation states either, so the audit cannot check them, and a wrong `step` or `order` reads as a clean spec and shows up as a duplicated or missing row at runtime. Establish both by calling the endpoint before declaring it. Probe with a window safely in the past, snapped to interval boundaries, never near "now": a range at the live edge can look start-inclusive when rows for part of it simply do not exist yet. The same goes for a documented default or maximum; one API documented `limit`'s default and maximum swapped.
+**The anchor is an API fact, not a spec fact.** Nothing in an operation states it, so the audit cannot check it, and a wrong one reads as a clean spec and shows up as a walk that silently under-covers at runtime. Measure it before declaring it: request a range far wider than one page with a small explicit size, and see which end the rows cluster at. Probe with a window safely in the past, snapped to interval boundaries, never near "now": a range at the live edge can look start-anchored when rows for part of it simply do not exist yet. Record the probe in `notes`. The same goes for a documented default or maximum; one API documented `limit`'s default and maximum swapped. Bound inclusivity is not declared at all: the dedup absorbs it.
 
 **Omission is not a lie the checker can catch.** Nothing in a spec says an endpoint paginates, so an absent block is checked against nothing. When an endpoint paginates in a shape this format cannot state, say so in its `notes`, so nobody later "completes" it.
 
@@ -251,7 +294,13 @@ A `kind: 'stream'` endpoint with no subscribe frame of its own carries a `push` 
 
 These two shapes are the entire space a connect-only dialect takes across every API reviewed so far. A push-only example still records `parameters` and `messages`; `push` only changes when the mock sends them, never what.
 
-Enforcement: none today.
+Every other stream example sends a subscribe frame, and the mock answers it with `<id>.reply.json` and nothing else (a generic `{type: 'ack'}` is synthesized only for an `envelope.channel` dialect). With no recording the mock stays silent, and a core that waits for its ack hangs in every language's replay. So each such example records one of:
+
+- the captured ack;
+- a documented ack, when the live capture missed it: the upstream docs' example, or a sibling channel's captured ack with only the channel identity changed, with its source stated in `<id>.parameters.json`'s `description`;
+- the literal `null`, when the API sends no ack at all. The mock then sends nothing, `check` skips schema validation, and a client core for that API must not wait for one.
+
+Enforcement: `truewire check` lists every subscribe example with no `<id>.reply.json` under "Missing subscribe acks" (a warning, not yet a failure). Nothing checks the `push` declaration itself.
 
 ## 12. A wire boolean sent as the string `"true"`/`"false"` carries `format: 'boolean-string'`
 
@@ -287,7 +336,18 @@ A directory under `spec/endpoints/` that groups several endpoints into one gener
 
 `description` is prose about what the grouping is, not a restatement of its path segment. `upstream` is one canonical URL to the API's own documentation for that domain, resolving to the specific page. Every grouping directory declares one; a directory whose endpoints span several pages cites the page covering the most of them, or reuses a parent's link. Never invent one.
 
-Enforcement: `truewire standards` (presence, `error`; link reachability, `warning`, via `--only links`). Shape is validated on load.
+Two more fields are optional. `core` names the core the subtree's endpoints are built on (`docs/cores.md`). `class` names the group's generated class, in place of the PascalCase of its directory name, for when the derived name is taken or misleading. A `chain/rpc/` group derives `Rpc`, which is also a core transport type in Python:
+
+```jsonc
+// spec/endpoints/chain/rpc/router.json
+{"description": "Node RPC: health, sync status and the raw JSON-RPC passthrough.",
+ "upstream": "https://example.com/api-doc/chain/rpc",
+ "class": "ChainRpc"}
+```
+
+Only the type name changes. Every backend declares the group under it (the Python and TypeScript class, the Rust struct, the Go type), and the parent names it as its accessor's type, but the accessor itself is still named after the directory: `client.chain.rpc` in every language, `Chain.RPC` in Go. The words are the author's and the letter case is the language's: Go re-cases initialisms in a declared name as in every other, so the type is `ChainRPC` there. `class` is an ASCII PascalCase identifier (a capital letter, then letters and digits, not `Self`, `None`, `True` or `False`). A declared `class` is still judged by rule 18 like a derived one. It is refused on the root `router.json`, because the client root is named by each backend's `name` in `truewire.toml`.
+
+Enforcement: `truewire standards` (presence, `error`; link reachability, `warning`, via `--only links`). Shape, including `class`, is validated on load; `truewire check` reports a `router.json` that does not load, or a `class` on the root, as an `error` naming the file, and `truewire generate` refuses it before writing anything.
 
 ## 15. A wire number sent as the string `"1.23"` carries `format: 'decimal-string'`
 
@@ -344,7 +404,7 @@ Enforcement: `truewire check`, `error`, naming the schemas on the cycle. Generat
 
 ## 18. A router group's class name is not its parent's, a sibling's, or a shared schema's
 
-Every router node generates one class, and that class names each child it composes: a group by the class the child's own directory renders, an endpoint by the method it exposes. Two things claiming one name in that module is refused, in either of the two ways it happens.
+Every router node generates one class, and that class names each child it composes: a group by the class the child's own directory renders (or the `class` its `router.json` declares, rule 14), an endpoint by the method it exposes. Two things claiming one name in that module is refused, in either of the two ways it happens.
 
 The first is a group whose class name is already the composing class's own. At the root that class is the client itself, named by `[python].name`, `[typescript].name` or `[rust].name` — so a client called `Weather` over a spec with a `weather/` group is refused:
 
@@ -361,6 +421,31 @@ The third is a group whose class name is a shared schema's. The same module impo
 
 The title's rename here is the fix that usually reads better anyway: `GridpointForecast` is the service's own term for what that endpoint returns.
 
-The fix is a rename, and which one is the author's: choose a different `name` in the backend's section, or rename the group directory. It is never done for you — the root class name and every group attribute are the public surface of somebody's client, and a generator that quietly picked `Weather2` would change what a caller writes without saying so.
+The fix is a rename, and which one is the author's: choose a different `name` in the backend's section, rename the group directory, or give the group a `class` in its `router.json` (rule 14), which renames the type and leaves the accessor alone. A declared `class` is judged exactly as a derived name is, so it is refused if it collides in any of the three ways above. It is never done for you — the root class name and every group attribute are the public surface of somebody's client, and a generator that quietly picked `Weather2` would change what a caller writes without saying so.
 
 Enforcement: `truewire check`, `error`, naming the client, the group and the `router.json` the group comes from. `truewire generate python`, `typescript` and `rust` refuse the same condition before writing a file, each judging its own declared client name, so skipping the gate cannot produce the broken tree.
+
+## 19. A request field minted per call, nested out of `redacted`'s reach, is named under `match.ignore`
+
+`redacted` (ADR 0007) strips flat key names: a query item, a top-level body key, a named-object JSON-RPC `params` entry. A signature, signing timestamp or nonce that sits deeper is out of its reach. Bitget's WebSocket login is one: `{"op": "login", "args": [{"apiKey", "passphrase", "timestamp", "sign"}]}`. A recording can only hold a stale value there, so the mock never matches the real frame. The endpoint names each such field by path (ADR 0018):
+
+```json
+"envelope": {"payload": "", "selector": "op", "params": "args"},
+"match": {"ignore": ["args[0].apiKey", "args[0].passphrase", "args[0].timestamp", "args[0].sign"]}
+```
+
+A path uses the response-path grammar (dotted keys and bracket indices, no `$`, no wildcard), rooted at the whole WebSocket frame or HTTP JSON body. The field is dropped from both the real request and the recording before comparing, so the recording may hold a placeholder or omit it. List only what a recording cannot hold: a field the caller controls stays compared. A frame with no JSON-RPC `method` also needs `envelope.selector` and `envelope.params`, or `truewire mock` never routes it to the endpoint at all.
+
+Enforcement: `Endpoint` validation refuses a path outside the grammar, an empty `ignore`, a `match` with no rule and any other key under `match`. Whether a field belongs there is not checked; a missing entry shows up as the mock's 422 or `unexpected_parameters` frame.
+
+## 20. An API that reads a list in the query string comma-separated declares `match.query_arrays: "comma"`
+
+A list-valued request field travels in the query string as one key per value (`?state=WA&state=OR`) unless the endpoint says otherwise. When the API reads one comma-separated item instead (`?state=WA,OR`, OpenAPI's `style: form, explode: false`), the endpoint declares it (ADR 0019):
+
+```json
+"match": {"query_arrays": "comma"}
+```
+
+The core writes that form, and the mock joins each recorded list the same way before comparing. Check the form against the live API with two values: a recording with one value per filter matches either form, and an API that keeps only the last of a repeated key (api.weather.gov) drops the rest without an error. Record one example with two values in a filter and assert that both come back.
+
+Enforcement: `Endpoint` validation refuses any value other than `repeat` or `comma`. Whether the declaration matches the API is not checked; a core sending the other form gets the mock's 422 on any recording with two values in a list.

@@ -1,0 +1,5 @@
+{
+  "description": "A gRPC-only client over a Cosmos-shaped bank module: the fixture for ADR 0016.",
+  "upstream": "https://docs.cosmos.network/main/build/modules/bank",
+  "core": "grpc"
+}

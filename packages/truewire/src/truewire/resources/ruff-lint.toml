@@ -1,0 +1,7 @@
+# `truewire lint`'s Ruff config for a package that declares none: the config `truewire generate`
+# formats with, plus Ruff's default rule set (pyflakes and the syntax-level pycodestyle rules),
+# which the `select` there replaces rather than extends.
+extend = "ruff.toml"
+
+[lint]
+extend-select = ["E4", "E7", "E9", "F"]

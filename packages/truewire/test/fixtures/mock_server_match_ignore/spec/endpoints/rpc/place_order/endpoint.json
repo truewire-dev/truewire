@@ -1,0 +1,27 @@
+{
+  "meta": {},
+  "function": "acme.place_order",
+  "notes": [
+    "Synthetic signed JSON-RPC over HTTP: the transport adds `nonce` and `signature` into the one positional `params` object. `match.ignore` paths are rooted at the JSON body."
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": ["http"],
+    "path": "acme_placeOrder",
+    "method": "POST",
+    "request": {
+      "title": "PlaceOrderRequest",
+      "type": "object",
+      "properties": {
+        "symbol": {"type": "string"},
+        "nonce": {"type": "string"},
+        "signature": {"type": "string"}
+      },
+      "required": ["symbol"]
+    },
+    "response": {"type": "object"},
+    "description": "Place a signed order."
+  },
+  "envelope": {"payload": "result", "correlate": "id"},
+  "match": {"ignore": ["params[0].nonce", "params[0].signature"]}
+}

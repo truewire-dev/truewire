@@ -2,7 +2,7 @@ from typing_extensions import Sequence, Mapping
 from dataclasses import dataclass, field
 
 from truewire.generation.schema import Reference, Schema, DataType
-from truewire.plan.types import OPAQUE_FORMATS
+from truewire.plan.types import OPAQUE_FORMATS, WIDE_INTEGER_FORMATS
 from .schema import Type, InlineType, Scalar
 
 TIMESTAMP_FORMATS: Mapping[str, str] = {
@@ -16,6 +16,24 @@ TIMESTAMP_FORMATS: Mapping[str, str] = {
 """Wire timestamp format -> the alias `truewire_core.types` exports for it. Uniform across
 every project: the runtime defines every pair, and the generator only ever asks for a
 name from this table."""
+
+NUMBER_TIMESTAMP_FORMATS: Mapping[str, str] = {
+  'epoch-seconds': 'TimestampSecondsFloat',
+  'epoch-millis': 'TimestampMillisFloat',
+  'epoch-micros': 'TimestampMicrosFloat',
+  'epoch-nanos': 'TimestampNanosFloat',
+}
+"""An epoch format on a `type: number` schema -> its `truewire_core.types` alias. The wire
+value may carry a fraction (kraken's `trades_history` `time`: `1688669448.4712`), and the
+`TIMESTAMP_FORMATS` alias dumps a whole count, so a value read and sent back would lose it."""
+
+
+def timestamp_alias(fmt: str, base: str | Sequence[str] | None) -> str:
+  """The alias a timestamp `fmt` renders to on a schema whose `type` is `base`: the
+  `NUMBER_TIMESTAMP_FORMATS` twin when `base` is (or includes) `number`."""
+  number = base == 'number' or (not isinstance(base, str) and base is not None and 'number' in base)
+  return NUMBER_TIMESTAMP_FORMATS.get(fmt, TIMESTAMP_FORMATS[fmt]) if number else TIMESTAMP_FORMATS[fmt]
+
 
 TYPES_PACKAGE = 'truewire_core.types'
 """Runtime module the `TIMESTAMP_FORMATS` aliases (and the converter instances the request
@@ -140,14 +158,19 @@ class Parser:
     return scalar('string', schema.format)
 
   def number(self, schema: Schema, id: str | None = None) -> Type:
+    """A literal, a timestamp, or a bare `number`. A timestamp `format` is kept the same way
+    `integer` keeps it -- kraken's `trades_history` `time` is `type: number, format:
+    epoch-seconds` (a fractional epoch), and dropping the format rendered it a bare float."""
     if schema.enum:
       return {'type': 'literal', 'values': schema.enum, 'id': id}
+    if schema.format in TIMESTAMP_FORMATS:
+      return scalar('number', schema.format)
     return scalar('number')
 
   def integer(self, schema: Schema, id=None) -> Type:
     if schema.enum:
       return {'type': 'literal', 'values': schema.enum, 'id': id}
-    if schema.format in TIMESTAMP_FORMATS:
+    if schema.format in TIMESTAMP_FORMATS or schema.format in WIDE_INTEGER_FORMATS:
       return scalar('integer', schema.format)
     return scalar('integer')
 
@@ -195,7 +218,7 @@ class Parser:
         'fields': {
           k: {
             'type': self.inline(v),
-            'docstring': v.description if isinstance(v, Schema) else None,
+            'docstring': v.description,
             'required': k in (schema.required or []),
           }
           for k, v in schema.properties.items()
@@ -214,7 +237,7 @@ class Parser:
       'variants': [
         {
           'type': self.inline(v),
-          'docstring': v.description if isinstance(v, Schema) else None,
+          'docstring': v.description,
         }
         for v in schema.anyOf
       ],

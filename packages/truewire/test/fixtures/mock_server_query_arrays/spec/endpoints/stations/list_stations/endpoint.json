@@ -1,0 +1,27 @@
+{
+  "meta": {},
+  "function": "acme.list_stations",
+  "notes": [
+    "Synthetic weather.gov-shaped list: the API reads `id` and `state` comma-separated and keeps only the last of a repeated key."
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": ["http"],
+    "path": "/stations",
+    "method": "GET",
+    "request": {
+      "title": "ListStationsRequest",
+      "type": "object",
+      "properties": {
+        "id": {"type": "array", "items": {"type": "string"}},
+        "state": {"type": "array", "items": {"type": "string"}},
+        "active": {"type": "array", "items": {"type": "boolean"}},
+        "limit": {"type": "integer"}
+      },
+      "required": []
+    },
+    "response": {"type": "object"},
+    "description": "List stations."
+  },
+  "match": {"query_arrays": "comma"}
+}

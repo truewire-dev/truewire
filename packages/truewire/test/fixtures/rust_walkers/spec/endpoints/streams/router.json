@@ -1,0 +1,5 @@
+{
+  "description": "Subscriptions.",
+  "core": "socket",
+  "upstream": "https://truewire.dev/docs/rust"
+}

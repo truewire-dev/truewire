@@ -1,0 +1,10 @@
+# A JSON-RPC API reachable over HTTP and over a WebSocket: every endpoint declares both
+# transports. The fixture `@truewire/testing` proves itself against, and the proof that
+# `truewire generate typescript` renders a dual-transport `rpc` endpoint in full.
+[project]
+name = "pets"
+
+[typescript]
+package = "pets"
+src = "src"
+name = "PetStore"

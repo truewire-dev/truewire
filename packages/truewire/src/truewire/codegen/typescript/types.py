@@ -3,8 +3,12 @@ it, a `Codec<T>` value built from the `@truewire/core` combinators (`t.object`,
 `t.array`, ...), declared against the interface so `tsc` proves the two agree.
 
 The one language-specific decision is the `scalar` node: a `decimal-string` is the branded
-`Decimal`, every timestamp format is a `Date` behind its alias (`TimestampMillis`, ...), a
-`date` is the branded `DateIso`, and `integer-string`/`boolean-string` are `number`/`boolean`.
+`Decimal`, every timestamp format is a `Date` behind its alias (`TimestampMillis`, ...;
+an epoch format on a `number` schema parses and dumps through the `*Float` codec, which
+keeps a fractional count's fraction), a `date` is the branded `DateIso`, `integer-string`
+is a `bigint` (every digit of a wei amount or an int64 id survives, as with Python's
+`int`), `boolean-string` is a `boolean`, and an `int64` integer is `number | bigint` (a
+`number` while exact, a `bigint` beyond 2^53).
 Everything else is the JSON value itself.
 """
 from typing_extensions import Any, Mapping
@@ -16,6 +20,9 @@ from .names import literal, property_key, string
 from .printer import Imports, Writer, relative_specifier
 
 CORE = '@truewire/core'
+CORE_GRPC = '@truewire/core/grpc'
+GRPC_CORE_NAMES = frozenset(('GrpcEndpoint', 'GrpcCallOptions'))
+"""Names imported from `@truewire/core/grpc`, which needs the protobuf packages (ADR 0016)."""
 """The runtime package every generated module imports from."""
 
 _SCALAR_TYPE: Mapping[str, str] = {
@@ -27,17 +34,19 @@ _SCALAR_CODEC: Mapping[str, str] = {
   'null': 't.null', 'any': 't.unknown',
 }
 _FORMAT_TYPE: Mapping[str, str] = {
-  'decimal-string': 'Decimal', 'integer-string': 'number', 'boolean-string': 'boolean',
+  'decimal-string': 'Decimal', 'integer-string': 'bigint', 'boolean-string': 'boolean',
   'epoch-seconds': 'TimestampSeconds', 'epoch-millis': 'TimestampMillis',
   'epoch-micros': 'TimestampMicros', 'epoch-nanos': 'TimestampNanos',
-  'date-time': 'TimestampIso', 'date': 'DateIso',
+  'date-time': 'TimestampIso', 'date': 'DateIso', 'int64': 'number | bigint',
 }
 _FORMAT_CODEC: Mapping[str, str] = {
   'decimal-string': 't.decimal', 'integer-string': 't.integerString',
   'boolean-string': 't.booleanString', 'epoch-seconds': 't.epochSeconds',
   'epoch-millis': 't.epochMillis', 'epoch-micros': 't.epochMicros',
-  'epoch-nanos': 't.epochNanos', 'date-time': 't.dateTime', 'date': 't.date',
+  'epoch-nanos': 't.epochNanos', 'date-time': 't.dateTime', 'date': 't.date', 'int64': 't.int64',
 }
+_EPOCH_FORMATS = frozenset(('epoch-seconds', 'epoch-millis', 'epoch-micros', 'epoch-nanos'))
+"""Formats whose codec has a `*Float` twin for a `number` schema, which keeps the fraction."""
 CORE_TYPE_NAMES: frozenset[str] = frozenset(
   {'Decimal', 'TimestampSeconds', 'TimestampMillis', 'TimestampMicros', 'TimestampNanos',
    'TimestampIso', 'DateIso'}
@@ -77,7 +86,7 @@ class Module:
   # -- references ---------------------------------------------------------------------
 
   def core(self, name: str, *, type_only: bool = False):
-    self.imports.add(CORE, name, type_only=type_only)
+    self.imports.add(CORE_GRPC if name in GRPC_CORE_NAMES else CORE, name, type_only=type_only)
 
   def ref(self, name: str, *, type_only: bool = False) -> str:
     """Resolve a `Ref` id to the identifier this module reaches it by, importing it from
@@ -141,7 +150,9 @@ class Module:
     if kind == 'scalar':
       fmt = t.get('format')
       codec = _FORMAT_CODEC.get(fmt) if fmt is not None else None
-      return codec if codec is not None else _SCALAR_CODEC[t['base']]
+      if codec is None:
+        return _SCALAR_CODEC[t['base']]
+      return f'{codec}Float' if fmt in _EPOCH_FORMATS and t['base'] == 'number' else codec
     if kind == 'ref':
       name = self.ref(t['id'])
       if name in self.local and name not in self.defined:

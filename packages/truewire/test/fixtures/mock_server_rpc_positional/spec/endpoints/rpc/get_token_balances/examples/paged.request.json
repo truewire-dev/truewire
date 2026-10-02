@@ -1,0 +1,8 @@
+{
+  "request": {
+    "address": "0xACME0000000000000000000000000000000001",
+    "tokenSpec": "erc20",
+    "pageKey": "cursor-1",
+    "maxCount": 1
+  }
+}

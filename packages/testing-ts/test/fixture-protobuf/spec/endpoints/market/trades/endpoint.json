@@ -1,0 +1,125 @@
+{
+  "docs": "https://www.mexc.com/api-docs/spot-v3/websocket-market-streams/trade-streams",
+  "notes": [
+    "Spot public websocket protobuf stream. Runtime payloads are protobuf-encoded PushDataV3ApiWrapper messages; example messages are decoded docs shapes."
+  ],
+  "spec": {
+    "kind": "stream",
+    "channel": "spot@public.aggre.deals.v3.api.pb@{aggregation}@{symbol}",
+    "parameters": {
+      "title": "TradesParameters",
+      "type": "object",
+      "properties": {
+        "aggregation": {
+          "type": "string",
+          "enum": [
+            "100ms",
+            "10ms"
+          ],
+          "description": "Update aggregation cadence embedded in the channel name. MEXC documents `100ms` and `10ms`."
+        },
+        "symbol": {
+          "type": "string",
+          "pattern": "^[A-Z0-9]+$",
+          "description": "Uppercase spot trading pair, for example `BTCUSDT`."
+        }
+      },
+      "required": [
+        "aggregation",
+        "symbol"
+      ]
+    },
+    "payload": {
+      "title": "PublicAggreDealsPush",
+      "type": "object",
+      "properties": {
+        "channel": {
+          "type": "string",
+          "description": "Subscribed protobuf channel string."
+        },
+        "publicdeals": {
+          "title": "PublicAggreDealsV3Api",
+          "type": "object",
+          "description": "Decoded aggregate trade body.",
+          "properties": {
+            "dealsList": {
+              "type": "array",
+              "description": "Trade records included in this push.",
+              "items": {
+                "title": "PublicAggreDealsV3ApiItem",
+                "type": "object",
+                "properties": {
+                  "price": {
+                    "type": "string",
+                    "description": "Trade price."
+                  },
+                  "quantity": {
+                    "type": "string",
+                    "description": "Trade quantity."
+                  },
+                  "tradetype": {
+                    "type": "integer",
+                    "description": "Trade side, where 1 is buy and 2 is sell.",
+                    "enum": [
+                      1,
+                      2
+                    ]
+                  },
+                  "time": {
+                    "type": "integer",
+                    "description": "Trade time in milliseconds.",
+                    "format": "epoch-millis"
+                  }
+                },
+                "required": [
+                  "price",
+                  "quantity",
+                  "tradetype",
+                  "time"
+                ],
+                "additionalProperties": true
+              }
+            },
+            "eventtype": {
+              "type": "string",
+              "description": "Event type without the symbol segment."
+            }
+          },
+          "required": [
+            "dealsList",
+            "eventtype"
+          ],
+          "additionalProperties": true
+        },
+        "symbol": {
+          "type": "string",
+          "description": "Trading pair."
+        },
+        "sendtime": {
+          "type": "integer",
+          "description": "Event push time in milliseconds.",
+          "format": "epoch-millis"
+        }
+      },
+      "required": [
+        "channel",
+        "publicdeals",
+        "symbol",
+        "sendtime"
+      ],
+      "additionalProperties": true
+    },
+    "description": "Subscribes to raw spot trade updates for one uppercase trading pair with a 100ms or 10ms aggregation cadence. Messages are protobuf-encoded PushDataV3ApiWrapper payloads whose publicAggreDeals body contains the decoded trades."
+  },
+  "envelope": {
+    "payload": "",
+    "verb": {
+      "path": "method",
+      "subscribe": "SUBSCRIPTION",
+      "unsubscribe": "UNSUBSCRIPTION"
+    }
+  },
+  "meta": {
+    "proto_field": "public_aggre_deals"
+  }
+}

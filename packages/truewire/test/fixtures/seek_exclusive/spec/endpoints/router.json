@@ -1,0 +1,5 @@
+{
+  "description": "A venue whose trade history takes a time range or an id cursor, never both.",
+  "core": "default",
+  "upstream": "https://truewire.dev/docs/spec/authoring"
+}

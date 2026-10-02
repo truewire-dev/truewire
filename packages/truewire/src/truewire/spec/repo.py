@@ -59,6 +59,10 @@ class WsExample:
   when recorded. Optional and purely additive: a bare, verbatim frame loaded the same
   trivial way as `reply`, and its presence or absence never affects whether this example
   counts as complete -- see `ws_examples`."""
+  synthesized: bool = False
+  """Built from an HTTP recording by `synthesize_ws_example_from_http`. Its `reply` is the
+  recorded HTTP body, a real reply even when that body is `null`; a native `null`
+  `.reply.json` instead records that the API sends nothing (`docs/spec/authoring.md` rule 11)."""
 
   @property
   def has_messages(self) -> bool:
@@ -431,6 +435,7 @@ def synthesize_ws_example_from_http(http_example: HttpExample) -> WsExample:
     reply=http_example.response.payload,
     messages=[],
     message_frames=[],
+    synthesized=True,
   )
 
 

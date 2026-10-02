@@ -3,4 +3,5 @@
 export { Kraken, type KrakenCore } from './main.js'
 export * from './types/index.js'
 export * from './meta.js'
+export { RefusedByPolicy } from './policy.js'
 export type { CallOptions } from '@truewire/core'

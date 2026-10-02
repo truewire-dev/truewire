@@ -17,6 +17,7 @@ The language-specific decisions, all fixed by `docs/rust.md`:
   (`Issue.state_reason` becomes `IssueStateReason`), emitted before the type that uses it.
 - A field whose type reaches back to its own record is boxed, so the struct has a size.
 """
+import re
 from dataclasses import dataclass
 
 from typing_extensions import Mapping
@@ -43,8 +44,26 @@ _FORMAT: Mapping[str, str] = {
   'epoch-millis': 'TimestampMillis', 'epoch-micros': 'TimestampMicros',
   'epoch-nanos': 'TimestampNanos', 'date-time': 'TimestampIso', 'date': 'DateIso',
 }
+_EPOCH_FORMATS = frozenset(('epoch-seconds', 'epoch-millis', 'epoch-micros', 'epoch-nanos'))
+"""Formats whose value travels as a number, or as a numeral string when the schema says `string`."""
 _DEFAULTABLE_FORMATS = frozenset(('decimal-string', 'integer-string', 'boolean-string'))
 """Newtypes that implement `Default`; a timestamp has no meaningful zero."""
+
+def format_newtype(t: Type) -> str | None:
+  """The `truewire_core` newtype a scalar's `format` renders to, or `None`. An epoch
+  format on a `string` schema is the `*String` twin, which reads and writes a numeral
+  string (`"1786622308334567536"`); on a `number` schema the `*Float` twin, which writes a
+  fractional count back as the float it came as. An `integer` schema's newtype writes
+  whole units."""
+  fmt = t.get('format')
+  name = _FORMAT.get(fmt) if fmt is not None else None
+  if name is not None and fmt in _EPOCH_FORMATS:
+    if t.get('base') == 'string':
+      return f'{name}String'
+    if t.get('base') == 'number':
+      return f'{name}Float'
+  return name
+
 
 EXTRA_FIELD = 'extra'
 """The flattened map every struct ends with."""
@@ -108,6 +127,19 @@ class Field:
   nullable: bool
 
 
+def _has_tuple(expr: str) -> bool:
+  """Whether a rendered Rust type holds a tuple of two or more positions (not the unit `()`)."""
+  return re.search(r'\((?!\))[^()]*,', expr) is not None
+
+
+
+def _allow_case(w: Writer, name: str):
+  """A plan type name is kept verbatim (a spec `title` such as `annotation`, which the other
+  backends keep as it is, and which references and imports name); one that is not
+  UpperCamelCase is allowed rather than renamed, so `cargo clippy -D warnings` passes."""
+  if not name[:1].isupper() or '_' in name:
+    w.line('#[allow(non_camel_case_types)]')
+
 class Module:
   """One generated `.rs` file while it is rendered: its imports, the names it defines,
   and the definitions hoisted out of inline literals and unions."""
@@ -131,10 +163,28 @@ class Module:
     """Record a type the module defines beside its plan types (a walker's request type)."""
     self.names.add(name)
 
+  def checkpoint(self) -> tuple:
+    """The module's written state, for `restore` when a definition is abandoned part-way
+    (a walker skipped after it declared its request type or imported a helper)."""
+    return (list(self.writer._lines), {path: set(names) for path, names in self.imports._paths.items()}, set(self.names), dict(self.fields))
+
+  def restore(self, state: tuple):
+    lines, paths, names, fields = state
+    self.writer._lines[:] = lines
+    self.imports._paths = paths
+    self.names = names
+    self.fields = fields
+
   # -- references ---------------------------------------------------------------------
 
-  def core(self, name: str):
+  def core(self, name: str) -> str:
+    """Import a `truewire_core` name and return how this module spells it: the bare name,
+    or `truewire_core::Name` when the module defines a type of that name itself (an
+    endpoint's `Result` record beside the runtime's `Result` alias)."""
+    if name in self.names:
+      return f'{CORE}::{name}'
     self.imports.add(CORE, name)
+    return name
 
   def serde_json(self):
     """`serde_json`, through the runtime's re-export so the crate pins one version."""
@@ -213,7 +263,9 @@ class Module:
     if kind == 'scalar':
       fmt = t.get('format')
       if fmt is not None and fmt in _FORMAT:
-        return True
+        # `IntegerString` and `DecimalString` hold arbitrary-precision values (the decimal
+        # its wire text too), which are not `Copy`; every other newtype wraps a `Copy` value.
+        return fmt not in ('integer-string', 'decimal-string')
       return t['base'] in ('integer', 'number', 'boolean', 'null')
     if kind == 'ref':
       target = self.lookup(t['id'])
@@ -238,8 +290,7 @@ class Module:
     """
     kind = t['type']
     if kind == 'scalar':
-      fmt = t.get('format')
-      name = _FORMAT.get(fmt) if fmt is not None else None
+      name = format_newtype(t)
       if name is None:
         if t['base'] == 'any':
           self.serde_json()
@@ -343,7 +394,8 @@ class Module:
         values = ', '.join(f'`{literal(v)}`' for v in t['values'])
         doc = f'{doc}\n\nOne of {values}.' if doc else f'One of {values}.'
       w.doc(doc)
-      w.line(f'pub type {name} = {expr};')
+      _allow_case(w, name)
+      w.type_alias(f'pub type {name} = ', expr)
 
     self._emit(render)
 
@@ -352,6 +404,7 @@ class Module:
     def render(w: Writer):
       taken: set[str] = set()
       w.doc(t.get('docstring'))
+      _allow_case(w, name)
       w.line(f'#[derive({", ".join(LITERAL_DERIVES)})]')
       with w.block(f'pub enum {name} {{'):
         for value in t['values']:
@@ -374,12 +427,20 @@ class Module:
         expr = self.type_expr(variant['type'], owner=owner, direct=direct, path=[name, label])
         variants.append((label, expr, variant.get('docstring')))
       w.doc(t.get('docstring'))
+      # Members are the wire's own shapes, often of very different sizes; boxing the large
+      # ones would change every match a caller writes, so the lint is silenced instead.
+      _allow_case(w, name)
+      w.line('#[allow(clippy::large_enum_variant)]')
+      if any('(' in expr for _, expr, _ in variants):
+        # A wire tuple (a candle row) is a positional type the plan gives no name to;
+        # naming it here would invent API, so the lint is silenced instead.
+        w.line('#[allow(clippy::type_complexity)]')
       w.line(f'#[derive({", ".join(UNION_DERIVES)})]')
       w.line('#[serde(untagged)]')
       with w.block(f'pub enum {name} {{'):
         for label, expr, doc in variants:
           w.doc(doc)
-          w.line(f'{label}({expr}),')
+          w.variant(label, expr)
 
     self.imports.add('serde', 'Serialize')
     self.imports.add('serde', 'Deserialize')
@@ -391,10 +452,8 @@ class Module:
     if kind == 'ref':
       return t['id']
     if kind == 'scalar':
-      fmt = t.get('format')
-      if fmt is not None and fmt in _FORMAT:
-        return _FORMAT[fmt]
-      return pascal_ident(t['base'])
+      name = format_newtype(t)
+      return name if name is not None else pascal_ident(t['base'])
     if kind == 'list':
       return f'{self.variant_name(t["item"])}List'
     if kind == 'union':
@@ -434,6 +493,11 @@ class Module:
       if self.defaultable(t):
         derives.insert(3, 'Default')
       w.doc(t.get('docstring'))
+      if any(_has_tuple(f.type) for f in fields):
+        # A wire tuple (a candle row) is a positional type the plan gives no name to;
+        # naming it here would invent API, so the lint is silenced instead.
+        w.line('#[allow(clippy::type_complexity)]')
+      _allow_case(w, name)
       w.line(f'#[derive({", ".join(derives)})]')
       with w.block(f'pub struct {name} {{'):
         for (wire, field), rendered in zip(t['fields'].items(), fields):
@@ -447,7 +511,7 @@ class Module:
             w.attribute('serde', attrs)
           if rendered.optional and rendered.nullable:
             w.attribute('serde', [f'with = "{CORE}::validation::double_option"'])
-          w.line(f'pub {rendered.ident}: {rendered.type},')
+          w.declaration(f'pub {rendered.ident}: {rendered.type}')
         w.doc('Keys the spec does not document, kept as they came.')
         w.line('#[serde(flatten)]')
         w.line(f'pub {EXTRA_FIELD}: serde_json::Map<String, serde_json::Value>,')

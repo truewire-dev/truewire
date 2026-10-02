@@ -19,8 +19,10 @@ response body are the places a credential lives.
 """
 
 import asyncio
+import io
 import json
 import re
+from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import unquote
@@ -69,28 +71,39 @@ def capture(
   The recorded exchange is the one that matches the endpoint's own method and path,
   wherever the core sent it in the sequence; the requests the core made around it (a
   token mint, a retry) are reported as skipped and never recorded. A call that reaches
-  the API through nothing matching the endpoint records nothing at all.
+  the API through nothing matching the endpoint records nothing at all, and neither does
+  a pair holding the value of a `[secrets]` variable (W14): `--scrub` the field it names.
   """
   from truewire.examples import run_example_request
   from truewire.mcp import load_client, parse_new_kwargs
   from truewire.spec import ExampleRequest
   from truewire.spec.repo import endpoint_records
+  from truewire.standards.secret_values import (
+    held_secrets, leaks_in_text, names_in, redact, short_note,
+  )
   from truewire_core.exceptions import ApiError
   from truewire_core.http import recording
 
   loaded = resolve_project(project)
+  secrets = held_secrets(loaded)
+
+  def echo(message: str, err: bool = False) -> None:
+    # Every line goes out redacted: a key can ride in a base URL's path, a JSON key or an
+    # error body, and each of those is printed somewhere below.
+    typer.echo(redact(message, secrets), err=err)
+
   try:
     parameters = json.loads(request)
   except json.JSONDecodeError as exc:
-    typer.echo(f'--request is not valid JSON: {exc}', err=True)
+    echo(f'--request is not valid JSON: {exc}', err=True)
     raise typer.Exit(code=1)
   if not isinstance(parameters, dict):
-    typer.echo('--request must be a JSON object', err=True)
+    echo('--request must be a JSON object', err=True)
     raise typer.Exit(code=1)
   try:
     new_kwargs = parse_new_kwargs(new)
   except ValueError as exc:
-    typer.echo(str(exc), err=True)
+    echo(str(exc), err=True)
     raise typer.Exit(code=1)
 
   spec_root = loaded.spec_dir
@@ -99,10 +112,10 @@ def capture(
     None,
   )
   if record is None:
-    typer.echo(f'no endpoint with function {function!r} in {spec_root}', err=True)
+    echo(f'no endpoint with function {function!r} in {spec_root}', err=True)
     raise typer.Exit(code=1)
   if record.endpoint.spec.kind != 'rpc' or 'http' not in record.endpoint.spec.transports:
-    typer.echo(f'{function} is not an HTTP rpc endpoint; capture records HTTP request/reply pairs only', err=True)
+    echo(f'{function} is not an HTTP rpc endpoint; capture records HTTP request/reply pairs only', err=True)
     raise typer.Exit(code=1)
 
   client = load_client(loaded, new_kwargs)
@@ -121,24 +134,24 @@ def capture(
 
   exchanges, error = asyncio.run(call())
   if not exchanges:
-    typer.echo('the call made no HTTP request through truewire_core.http.HttpClient; nothing to record', err=True)
+    echo('the call made no HTTP request through truewire_core.http.HttpClient; nothing to record', err=True)
     raise typer.Exit(code=1)
 
   route = endpoint_route(record.endpoint, parameters)
   matched, skipped = select_exchanges(exchanges, route)
   if not matched:
-    typer.echo(
+    echo(
       f'{function}: no request the core made matches this endpoint; nothing recorded', err=True,
     )
-    typer.echo(f'  expected: {route.display}', err=True)
-    typer.echo(f'  the call made {len(exchanges)} request{plural(exchanges)} through '
+    echo(f'  expected: {route.display}', err=True)
+    echo(f'  the call made {len(exchanges)} request{plural(exchanges)} through '
                'truewire_core.http.HttpClient:', err=True)
     for line in exchange_lines(exchanges):
-      typer.echo(f'    {line}', err=True)
-    typer.echo('  method and path only: a header, a request body and a response body are '
+      echo(f'    {line}', err=True)
+    echo('  method and path only: a header, a request body and a response body are '
                'where a credential lives', err=True)
     if error is not None:
-      typer.echo('  the call also raised ApiError; its message is withheld here because it '
+      echo('  the call also raised ApiError; its message is withheld here because it '
                  'can quote a response body', err=True)
     raise typer.Exit(code=1)
 
@@ -152,51 +165,82 @@ def capture(
   exchange = matched[-1]
   status = exchange.response.status_code
   if status >= 300:
-    typer.echo(f'{exchange.request.method} {exchange.request.url.path}: HTTP {status}', err=True)
-    typer.echo(exchange.response.text[:1000], err=True)
-    typer.echo('not recorded: examples keep 2xx responses only (authoring rule 0)', err=True)
+    echo(f'{exchange.request.method} {exchange.request.url.path}: HTTP {status}', err=True)
+    echo(redact(exchange.response.text, secrets)[:1000], err=True)
+    echo('not recorded: examples keep 2xx responses only (authoring rule 0)', err=True)
     for line in selection_report(route, matched, skipped, verb='selected'):
-      typer.echo(line, err=True)
+      echo(line, err=True)
     raise typer.Exit(code=1)
   if error is not None:
     # The endpoint answered, but the call did not complete -- a core that raised on a
     # later request of its own, or on the reply it went on to unwrap. Recording the pair
     # would record a call nobody can replay.
-    typer.echo(f'{route.display}: HTTP {status}, but the call raised ApiError; its message '
+    echo(f'{route.display}: HTTP {status}, but the call raised ApiError; its message '
                'is withheld here because it can quote a response body', err=True)
-    typer.echo('not recorded: the call did not complete', err=True)
+    echo('not recorded: the call did not complete', err=True)
     for line in selection_report(route, matched, skipped, verb='selected'):
-      typer.echo(line, err=True)
+      echo(line, err=True)
     raise typer.Exit(code=1)
   try:
     payload = exchange.response.json()
   except ValueError:
-    typer.echo(f'HTTP {status} body is not JSON; capture records JSON bodies only', err=True)
+    echo(f'HTTP {status} body is not JSON; capture records JSON bodies only', err=True)
     raise typer.Exit(code=1)
   payload = scrub_keys(payload, set(scrub))
 
   out = record.path.parent / 'examples'
-  out.mkdir(parents=True, exist_ok=True)
   request_file = out / f'{example_id}.request.json'
   response_file = out / f'{example_id}.response.json'
-  request_file.write_text(json.dumps(
+  request_text = json.dumps(
     {k: v for k, v in (('description', description), ('request', parameters)) if v is not None},
     indent=2,
-  ) + '\n')
-  response_file.write_text(json.dumps({'status': status, 'payload': payload}, indent=2) + '\n')
-  typer.echo(f'{function}[{example_id}]: HTTP {status}, {len(exchange.response.content)} bytes')
-  typer.echo(f'  {relative(request_file, loaded.root)}')
-  typer.echo(f'  {relative(response_file, loaded.root)}')
+  ) + '\n'
+  response_text = json.dumps({'status': status, 'payload': payload}, indent=2) + '\n'
+  for name in secrets.short:
+    echo(f'  note: {short_note(name)}', err=True)
+  # W14: the pair is searched as it would be written, so a key `--scrub` replaced is gone
+  # and a key sent as a parameter is caught. The wire request is not searched: an
+  # authenticated call always carries its key in a header, and headers are never written.
+  leaks = [
+    (file, name, where)
+    for file, text in ((request_file, request_text), (response_file, response_text))
+    for name, where in [
+      *((name, 'its file name') for name in names_in(relative(file, loaded.root), secrets)),
+      *leaks_in_text(text, secrets),
+    ]
+  ]
+  if leaks:
+    echo(f'{function}: not recorded: the pair holds the value of a [secrets] variable (W14)', err=True)
+    for file, name, where in leaks:
+      echo(f'  {name} in {relative(file, loaded.root)}' + (f' at {where}' if where else ''), err=True)
+    echo('  the value is withheld here. Pass --scrub <key> for a response field; a '
+         'secret sent as a parameter belongs in the core, not in --request', err=True)
+    raise typer.Exit(code=1)
+
+  out.mkdir(parents=True, exist_ok=True)
+  request_file.write_text(request_text)
+  response_file.write_text(response_text)
+  echo(f'{function}[{example_id}]: HTTP {status}, {len(exchange.response.content)} bytes')
+  echo(f'  {relative(request_file, loaded.root)}')
+  echo(f'  {relative(response_file, loaded.root)}')
   for line in selection_report(route, matched, skipped, verb='recorded'):
-    typer.echo(line)
+    echo(line)
   if drop_unverified(record.path):
     # The pair just written is the evidence `unverified` said was missing (ADR 0001);
     # left in place it would fail `truewire examples` on the next run.
-    typer.echo(f'  removed the stale `unverified` declaration from {relative(record.path, loaded.root)}')
+    echo(f'  removed the stale `unverified` declaration from {relative(record.path, loaded.root)}')
 
   if check:
     from .check import check as run_check
-    run_check(project=str(loaded.root), path=str(record.path.parent), verbose=False)
+    # `check` quotes the recordings it rejects, and a sibling pair in this directory can
+    # hold a value this capture never wrote: its output goes out redacted like the rest.
+    stdout, stderr = io.StringIO(), io.StringIO()
+    try:
+      with redirect_stdout(stdout), redirect_stderr(stderr):
+        run_check(project=str(loaded.root), path=str(record.path.parent), verbose=False)
+    finally:
+      typer.echo(redact(stdout.getvalue(), secrets), nl=False)
+      typer.echo(redact(stderr.getvalue(), secrets), nl=False, err=True)
 
 
 @dataclass(frozen=True)

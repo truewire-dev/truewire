@@ -8,20 +8,23 @@ project's root name; `lib.rs` declares every module and re-exports the root.
 
 What a router's `new` takes depends on what its subtree needs. When every endpoint
 beneath it holds the same contract (`Arc<dyn HttpEndpoint<DefaultMeta>>`), `new` takes that
-and hands a clone to every child. When the endpoints beneath it hold different `Meta`
-shapes, `new` is generic in the core -- `new<C>(core: Arc<C>) where C:
-HttpEndpoint<DefaultMeta> + HttpEndpoint<FuturesMeta> + 'static` -- and the `Arc<C>` handed
-to each child coerces to the trait object that child holds. Nothing is imported from the
+and hands a clone to every child. When the endpoints beneath it hold several (different
+`Meta` shapes, commands beside streams), `new` takes the combined trait `contract.rs`
+declares for the set (`Arc<dyn CommandStreamEndpoint>`), and the value handed to each child
+upcasts to the trait object that child holds. The root alone is generic instead --
+`from_core<C>(core: C) where C: HttpEndpoint<DefaultMeta> + HttpEndpoint<FuturesMeta> +
+'static` -- since it is the one constructor a caller writes. Nothing is imported from the
 project (ADR 0011): the hand-written core implements the traits, and the compiler checks
 it where the client is built.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
-from typing_extensions import Mapping
+from typing_extensions import Collection, Mapping
 
-from truewire.codegen.shapes import CoreShape, field_for
+from truewire.codegen.shapes import CoreShape, child_fields, field_for
 from truewire.plan.model import PackagePlan, RouterPlan
 
+from .contract import Contracts, atoms
 from .endpoint import EndpointModule, emit_method
 from .meta import META_FILE
 from .names import snake_ident
@@ -41,7 +44,7 @@ class RouterModule:
   module: str
   """The module name a parent declares (`pub mod issues;`) and reaches it by."""
   bounds: frozenset[str]
-  """Every contract an endpoint beneath this router holds."""
+  """Every single trait an endpoint beneath this router holds (`HttpEndpoint<DefaultMeta>`)."""
   shape: CoreShape
   """What this router's own `new` takes: one transport, or a field per transport."""
   source: str
@@ -60,7 +63,9 @@ def bound_meta(bound: str) -> str | None:
 def render_router(
   plan: PackagePlan, router: RouterPlan, *, struct_name: str,
   endpoints: Mapping[str, EndpointModule], routers: Mapping[tuple[str, ...], RouterModule],
-  shapes: Mapping[tuple[str, ...], CoreShape],
+  shapes: Mapping[tuple[str, ...], CoreShape], contracts: Contracts | None = None,
+  handwritten: Collection[str] = (), handwritten_bounds: Mapping[str, str] | None = None,
+  policy: tuple[str, bool] | None = None,
 ) -> RouterModule | None:
   """One router module (or `client.rs` for the root), or `None` when nothing beneath it
   was rendered.
@@ -70,7 +75,18 @@ def render_router(
     endpoints: Every rendered endpoint by dotted function path.
     routers: Every rendered child router by path.
     shapes: What every router's constructor takes, by path.
+    handwritten: Function paths whose method is written by hand. A grouping built from one
+      core that parents one keeps that core as `pub(crate) core`, so the inherent `impl`
+      written beside it reaches the transport (the Go backend's `core` field).
+    handwritten_bounds: The trait each hand-written endpoint's core would hold, by function
+      path. A router whose only endpoints are hand-written is still rendered, holding that
+      core, so the methods written beside it have a struct and a transport.
+    policy: At the root, `[policy].rate` as an `Option<f64>` expression and
+      `[policy].retry`, stated as the associated consts `RATE`/`RETRY` for the core to
+      build its `HttpClient` from (W15). No new runtime API is named, so a crate on
+      `truewire-core` 0.1 still builds.
   """
+  contracts = contracts if contracts is not None else Contracts()
   file = router_file(router.path)
   module = Module(plan, file, local={}, visible=[])
   w = module.writer
@@ -89,20 +105,19 @@ def render_router(
       if child_router is None:
         continue
       kids.append((child_router.module, child_router.module, None, child_router))
-  if not kids:
+  held_by_hand = {
+    (handwritten_bounds or {})[function]
+    for child in router.children
+    if child.kind == 'endpoint' and (function := '.'.join([*router.path, child.name])) in (handwritten_bounds or {})
+  }
+  if not kids and not held_by_hand:
     return None
 
-  bounds: set[str] = set()
+  bounds: set[str] = set(atoms(held_by_hand)) if held_by_hand else set()
   for _, _, endpoint, child_router in kids:
-    bounds.update(child_router.bounds if child_router is not None else {endpoint.bound})  # type: ignore[union-attr]
+    bounds.update(child_router.bounds if child_router is not None else atoms(endpoint.bound))  # type: ignore[union-attr]
   shape = shapes[tuple(router.path)]
-  for bound in bounds:
-    module.core(bound.split('<')[0])
   module.imports.add('std::sync', 'Arc')
-  for bound in bounds:
-    meta = bound_meta(bound)
-    if meta is not None:
-      module.imports.add(f'crate::{META_FILE[:-3]}', meta)
   # The root's children are modules `lib.rs` declares, so it imports them; a grouping
   # declares its own children (`pub mod list;`) and reaches them by module name.
   is_root = not router.path
@@ -116,6 +131,15 @@ def render_router(
   def child_type(module_name: str, child_router: RouterModule) -> str:
     return child_router.struct_name if is_root else f'{module_name}::{child_router.struct_name}'
 
+  def handwritten_child(child) -> bool:
+    function = '.'.join([*router.path, child.name])
+    if child.kind == 'endpoint':
+      return function in handwritten
+    # A child router with nothing rendered beneath it because every endpoint there is
+    # hand-written: its methods are written on a hand-written struct reached from this one.
+    return routers.get((*router.path, child.name)) is None and any(h.startswith(f'{function}.') for h in handwritten)
+
+  keeps_core = not is_root and not shape.composite and any(handwritten_child(child) for child in router.children)
   doc = router.doc
   w.blank()
   w.doc(doc.description if doc is not None else None, f'See <{doc.upstream}>.' if doc is not None and doc.upstream else None)
@@ -124,27 +148,29 @@ def render_router(
     for name, module_name, endpoint, child_router in kids:
       if child_router is not None:
         w.doc(_router_doc(plan, [*router.path, name]))
-        w.line(f'pub {name}: {child_type(module_name, child_router)},')
+        w.declaration(f'pub {name}: {child_type(module_name, child_router)}')
       else:
-        w.line(f'{name}: {module_name}::{endpoint.struct_name},')  # type: ignore[union-attr]
+        w.declaration(f'{name}: {module_name}::{endpoint.struct_name}')  # type: ignore[union-attr]
+    if keeps_core:
+      w.doc('The core this router was built from, for hand-written methods beside the generated ones.')
+      w.line(f'pub(crate) core: Arc<dyn {contracts.holder(module, bounds)}>,')
   w.blank()
   with w.block(f'impl {struct_name} {{'):
+    if policy is not None:
+      rate, retry = policy
+      w.doc("`[policy].rate`: requests per second the core's `HttpClient` paces to; `None` for none.")
+      w.line(f'pub const RATE: ::core::option::Option<f64> = {rate};')
+      w.doc("`[policy].retry`: whether the core's `HttpClient` retries on its own.")
+      w.line(f'pub const RETRY: bool = {"true" if retry else "false"};')
+      w.blank()
     if shape.composite:
-      _emit_composite_new(plan, w, router, kids, shape, child_type, is_root=is_root)
+      _emit_composite_new(plan, w, router, kids, shape, child_type, is_root=is_root, module=module, contracts=contracts)
     else:
       prelude: list[str] = []
       if not is_root:
         # A grouping is plumbing: its parent already holds the core and hands it down, so
         # it takes what the parent has rather than taking ownership again.
-        if len(bounds) == 1:
-          (bound,) = bounds
-          w.line(f'pub fn new(core: Arc<dyn {bound}>) -> Self {{')
-        else:
-          w.line('pub fn new<C>(core: Arc<C>) -> Self')
-          w.line('where')
-          with w.indented():
-            w.line(f'C: {" + ".join(sorted(bounds))} + \'static,')
-          w.line('{')
+        w.line(f'pub fn new(core: Arc<dyn {contracts.holder(module, bounds)}>) -> Self {{')
       elif len(bounds) == 1:
         # The root is the one struct a caller constructs, so `new` is left for the
         # hand-written core to define -- an inherent impl on the generated type, in the
@@ -153,14 +179,14 @@ def render_router(
         # plumbing. Taking `impl Trait` rather than `Arc<dyn Trait>` is the other half:
         # the `Arc` is our storage decision, not the caller's, and `truewire-core`
         # implements the endpoint traits for `Arc<T>` so a shared core still fits.
-        (bound,) = bounds
+        bound = contracts.holder(module, bounds)
         w.line(f'pub fn from_core(core: impl {bound} + \'static) -> Self {{')
         prelude.append(f'let core: Arc<dyn {bound}> = Arc::new(core);')
       else:
         w.line('pub fn from_core<C>(core: C) -> Self')
         w.line('where')
         with w.indented():
-          w.line(f'C: {" + ".join(sorted(bounds))} + \'static,')
+          w.bounds('C: ', [*contracts.bound(module, bounds).split(' + '), "'static"], ',')
         w.line('{')
         prelude.append('let core = Arc::new(core);')
       with w.indented():
@@ -168,9 +194,11 @@ def render_router(
           w.line(line)
         entries: list[str] = []
         for index, (name, module_name, endpoint, child_router) in enumerate(kids):
-          handed = 'core' if index == len(kids) - 1 else 'core.clone()'
+          handed = 'core' if index == len(kids) - 1 and not keeps_core else 'core.clone()'
           target = f'{module_name}::{endpoint.struct_name}' if endpoint is not None else child_type(module_name, child_router)  # type: ignore[arg-type]
           entries.append(f'{name}: {target}::new({handed})')
+        if keeps_core:
+          entries.append('core')
         w.struct_literal('', 'Self', entries)
       w.line('}')
     for name, module_name, endpoint, _ in kids:
@@ -178,16 +206,18 @@ def render_router(
         continue
       for method in endpoint.methods:
         w.blank()
-        emit_method(module, method, qualifier=module_name)
+        alias = endpoint.aliases.get(method.name, method.name)
+        emit_method(module, replace(method, name=alias), qualifier=module_name, delegate=method.name)
   head = [] if is_root else [f'pub mod {module_name};' for _, module_name, _, _ in kids]
   return RouterModule(
     file=file, struct_name=struct_name, module=snake_ident(router.path[-1], fallback='router') if router.path else '',
-    bounds=frozenset(bounds), shape=shape, source=module.render(BANNER, head=sorted(head)),
+    bounds=frozenset(bounds), shape=shape, source=module.render(BANNER, head=sorted(head, key=_declared_module)),
   )
 
 
 def _emit_composite_new(
   plan: PackagePlan, w, router: RouterPlan, kids, shape: CoreShape, child_type, *, is_root: bool,
+  module: Module, contracts: Contracts,
 ) -> None:
   """The constructor for a router built from more than one transport: one parameter per field.
 
@@ -206,23 +236,27 @@ def _emit_composite_new(
   """
   fields = sorted(shape.fields or {})
   params = []
-  prelude: list[str] = []
+  prelude: list[tuple[str, str]] = []
   for name in fields:
-    held = sorted((shape.fields or {})[name])
+    held = atoms((shape.fields or {})[name])
     # More than one contract on one field: keep it one value so every bound is satisfied
-    # by the same core, the way a single-transport router does.
-    bound = ' + '.join(held)
+    # by the same core, held as the combined trait `contract.rs` declares for the set.
+    holder = contracts.holder(module, held)
     if is_root:
-      params.append(f"{name}: impl {bound} + 'static")
-      prelude.append(f'let {name}: Arc<dyn {bound}> = Arc::new({name});')
+      params.append(f"{name}: impl {contracts.bound(module, held)} + 'static")
+      prelude.append((f'let {name}: Arc<dyn {holder}>', f'Arc::new({name})'))
     else:
-      params.append(f'{name}: Arc<dyn {bound}>')
-  w.line(f'pub fn {"from_cores" if is_root else "new"}({", ".join(params)}) -> Self {{')
+      params.append(f'{name}: Arc<dyn {holder}>')
+  if len(params) > 7:
+    # One parameter per transport the root declares (bybit has ten); clippy's limit is seven.
+    w.line('#[allow(clippy::too_many_arguments)]')
+  w.signature(f'pub fn {"from_cores" if is_root else "new"}', params, ' -> Self {')
 
   def handed_fields(child_name: str, child_router: 'RouterModule | None') -> list[str]:
     """The fields a child is constructed from, in the order its own `new` takes them."""
     if child_router is not None and child_router.shape.composite:
-      return sorted(child_router.shape.fields or {})
+      handed = child_fields(plan, tuple(router.path), child_name, child_router.shape)
+      return [handed[f] for f in sorted(child_router.shape.fields or {})]
     return [field_for(plan, tuple(router.path), child_name)]
 
   plan_uses: dict[str, int] = {}
@@ -232,8 +266,8 @@ def _emit_composite_new(
 
   seen: dict[str, int] = {}
   with w.indented():
-    for line in prelude:
-      w.line(line)
+    for head, value in prelude:
+      w.let_binding(head, value)
     entries: list[str] = []
     for name, module_name, endpoint, child_router in kids:
       args = []
@@ -255,9 +289,13 @@ def _router_doc(plan: PackagePlan, path: list[str]) -> str | None:
 
 def render_lib(
   plan: PackagePlan, *, root: RouterModule | None, root_modules: list[str], has_meta: bool,
+  extra_modules: list[str] | None = None, private_modules: list[str] | None = None,
 ) -> str:
   """`lib.rs`: the crate root, declaring every generated module and the hand-written
-  `core`, and re-exporting the root struct and `CallOptions`."""
+  `core`, and re-exporting the root struct and `CallOptions`. `private_modules` are
+  declared without `pub`: modules that only add methods to a public type, so their own
+  page in the docs would be empty. `rustfmt` orders the lines by name whatever their
+  visibility."""
   w = Writer()
   w.line(BANNER)
   root_plan = next((router for router in plan.routers if not router.path), None)
@@ -265,7 +303,7 @@ def render_lib(
     w.line('//!')
     w.doc(root_plan.doc.description, f'See <{root_plan.doc.upstream}>.' if root_plan.doc.upstream else None, inner=True)
   w.blank()
-  modules = [CORE_MODULE, *root_modules]
+  modules = [CORE_MODULE, *root_modules, *(extra_modules or []), *(private_modules or [])]
   if root is not None:
     modules.append(ROOT_FILE[:-3])
   if has_meta:
@@ -273,7 +311,7 @@ def render_lib(
   if plan.schemas:
     modules.append(TYPES_MODULE)
   for name in sorted(modules):
-    w.line(f'pub mod {name};')
+    w.line(f'mod {name};' if name in (private_modules or []) else f'pub mod {name};')
   w.blank()
   if root is not None:
     w.line(f'pub use {ROOT_FILE[:-3]}::{root.struct_name};')
@@ -285,3 +323,9 @@ __all__ = [
   'CORE_MODULE', 'LIB_FILE', 'ROOT_FILE', 'RouterModule', 'bound_meta', 'render_lib',
   'render_router', 'router_file',
 ]
+
+
+def _declared_module(line: str) -> str:
+  """The module a `pub mod name;` line declares: `rustfmt` orders the lines by that name, so
+  `orderbook_level5` comes before `orderbook_level50` (a whole-line sort puts `;` after `0`)."""
+  return line.removeprefix('pub mod ').removesuffix(';')

@@ -32,6 +32,7 @@
     "@truewire/core": "file:../../packages/core-ts"
   },
   "devDependencies": {
+    "@truewire/testing": "file:../../packages/testing-ts",
     "@types/node": "^22.0.0",
     "typescript": "^5.9.0",
     "vitest": "^4.0.0"

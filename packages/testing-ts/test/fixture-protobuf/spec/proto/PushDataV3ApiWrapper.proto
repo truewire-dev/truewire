@@ -1,0 +1,197 @@
+// Reconstructed from typed_mexc betterproto2 classes (upstream: github.com/mexcdevelop/websocket-proto).
+syntax = "proto3";
+
+message PrivateAccountV3Api {
+  string vcoin_name = 1;
+  string coin_id = 2;
+  string balance_amount = 3;
+  string balance_amount_change = 4;
+  string frozen_amount = 5;
+  string frozen_amount_change = 6;
+  string type = 7;
+  int64 time = 8;
+}
+
+message PrivateDealsV3Api {
+  string price = 1;
+  string quantity = 2;
+  string amount = 3;
+  int32 trade_type = 4;
+  bool is_maker = 5;
+  bool is_self_trade = 6;
+  string trade_id = 7;
+  string client_order_id = 8;
+  string order_id = 9;
+  string fee_amount = 10;
+  string fee_currency = 11;
+  int64 time = 12;
+}
+
+message PrivateOrdersV3Api {
+  string id = 1;
+  string client_id = 2;
+  string price = 3;
+  string quantity = 4;
+  string amount = 5;
+  string avg_price = 6;
+  int32 order_type = 7;
+  int32 trade_type = 8;
+  bool is_maker = 9;
+  string remain_amount = 10;
+  string remain_quantity = 11;
+  optional string last_deal_quantity = 12;
+  string cumulative_quantity = 13;
+  string cumulative_amount = 14;
+  int32 status = 15;
+  int64 create_time = 16;
+  optional string market = 17;
+  optional int32 trigger_type = 18;
+  optional string trigger_price = 19;
+  optional int32 state = 20;
+  optional string oco_id = 21;
+  optional string route_factor = 22;
+  optional string symbol_id = 23;
+  optional string market_id = 24;
+  optional string market_currency_id = 25;
+  optional string currency_id = 26;
+}
+
+message PublicAggreBookTickerV3Api {
+  string bid_price = 1;
+  string bid_quantity = 2;
+  string ask_price = 3;
+  string ask_quantity = 4;
+}
+
+message PublicAggreDealsV3Api {
+  repeated PublicAggreDealsV3ApiItem deals = 1;
+  string event_type = 2;
+}
+
+message PublicAggreDealsV3ApiItem {
+  string price = 1;
+  string quantity = 2;
+  int32 trade_type = 3;
+  int64 time = 4;
+}
+
+message PublicAggreDepthsV3Api {
+  repeated PublicAggreDepthV3ApiItem asks = 1;
+  repeated PublicAggreDepthV3ApiItem bids = 2;
+  string event_type = 3;
+  string from_version = 4;
+  string to_version = 5;
+}
+
+message PublicAggreDepthV3ApiItem {
+  string price = 1;
+  string quantity = 2;
+}
+
+message PublicBookTickerBatchV3Api {
+  repeated PublicBookTickerV3Api items = 1;
+}
+
+message PublicBookTickerV3Api {
+  string bid_price = 1;
+  string bid_quantity = 2;
+  string ask_price = 3;
+  string ask_quantity = 4;
+}
+
+message PublicDealsV3Api {
+  repeated PublicDealsV3ApiItem deals = 1;
+  string event_type = 2;
+}
+
+message PublicDealsV3ApiItem {
+  string price = 1;
+  string quantity = 2;
+  int32 trade_type = 3;
+  int64 time = 4;
+}
+
+message PublicIncreaseDepthsBatchV3Api {
+  repeated PublicIncreaseDepthsV3Api items = 1;
+  string event_type = 2;
+}
+
+message PublicIncreaseDepthsV3Api {
+  repeated PublicIncreaseDepthV3ApiItem asks = 1;
+  repeated PublicIncreaseDepthV3ApiItem bids = 2;
+  string event_type = 3;
+  string version = 4;
+}
+
+message PublicIncreaseDepthV3ApiItem {
+  string price = 1;
+  string quantity = 2;
+}
+
+message PublicLimitDepthsV3Api {
+  repeated PublicLimitDepthV3ApiItem asks = 1;
+  repeated PublicLimitDepthV3ApiItem bids = 2;
+  string event_type = 3;
+  string version = 4;
+}
+
+message PublicLimitDepthV3ApiItem {
+  string price = 1;
+  string quantity = 2;
+}
+
+message PublicMiniTickersV3Api {
+  repeated PublicMiniTickerV3Api items = 1;
+}
+
+message PublicMiniTickerV3Api {
+  string symbol = 1;
+  string price = 2;
+  string rate = 3;
+  string zoned_rate = 4;
+  string high = 5;
+  string low = 6;
+  string volume = 7;
+  string quantity = 8;
+  string last_close_rate = 9;
+  string last_close_zoned_rate = 10;
+  string last_close_high = 11;
+  string last_close_low = 12;
+}
+
+message PublicSpotKlineV3Api {
+  string interval = 1;
+  int64 window_start = 2;
+  string opening_price = 3;
+  string closing_price = 4;
+  string highest_price = 5;
+  string lowest_price = 6;
+  string volume = 7;
+  string amount = 8;
+  int64 window_end = 9;
+}
+
+message PushDataV3ApiWrapper {
+  string channel = 1;
+  optional string symbol = 3;
+  optional string symbol_id = 4;
+  optional int64 create_time = 5;
+  optional int64 send_time = 6;
+  oneof body {
+    PublicDealsV3Api public_deals = 301;
+    PublicIncreaseDepthsV3Api public_increase_depths = 302;
+    PublicLimitDepthsV3Api public_limit_depths = 303;
+    PrivateOrdersV3Api private_orders = 304;
+    PublicBookTickerV3Api public_book_ticker = 305;
+    PrivateDealsV3Api private_deals = 306;
+    PrivateAccountV3Api private_account = 307;
+    PublicSpotKlineV3Api public_spot_kline = 308;
+    PublicMiniTickerV3Api public_mini_ticker = 309;
+    PublicMiniTickersV3Api public_mini_tickers = 310;
+    PublicBookTickerBatchV3Api public_book_ticker_batch = 311;
+    PublicIncreaseDepthsBatchV3Api public_increase_depths_batch = 312;
+    PublicAggreDepthsV3Api public_aggre_depths = 313;
+    PublicAggreDealsV3Api public_aggre_deals = 314;
+    PublicAggreBookTickerV3Api public_aggre_book_ticker = 315;
+  }
+}

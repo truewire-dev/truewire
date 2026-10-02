@@ -13,6 +13,7 @@
  * functions, and this module is the whole validator.
  */
 import { Decimal, isDecimal } from './decimal.js'
+import { parseJsonText, stringifyJson } from './json.js'
 import { ValidationError, type Issue } from './errors.js'
 import {
   DateIso, dateIso, timestampIso, timestampMicros, timestampMillis, timestampNanos, timestampSeconds,
@@ -104,20 +105,58 @@ const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'obj
 export const unknown: Codec<unknown> = { parse: v => v, dump: v => v }
 export const string: Codec<string> = scalar('string', isString)
 /** A finite JSON number. */
-export const number: Codec<number> = scalar('number', isNumber)
-/** A JSON integer within `Number.MAX_SAFE_INTEGER`. */
-export const integer: Codec<number> = scalar('integer', (v): v is number => Number.isSafeInteger(v))
+/**
+ * A finite JSON number. A `bigint` (an integer literal past 2^53 that the lossless
+ * `parseJson` kept exact) is accepted and read as the double any JSON number is.
+ */
+export const number: Codec<number> = {
+  parse: (value, path = '') => (typeof value === 'bigint' ? Number(value) : isNumber(value) ? value : expected(path, 'number', value)),
+  dump: (value, path = '') => (isNumber(value) ? value : expected(path, 'number', value)),
+}
+/**
+ * A JSON integer within `Number.MAX_SAFE_INTEGER`. One beyond it (a `bigint` from the
+ * lossless `parseJson`) is rejected by name rather than rounded: declare the field
+ * `integer-string` (a `bigint`) when the venue sends such values.
+ */
+export const integer: Codec<number> = {
+  parse(value, path = '') {
+    if (typeof value === 'bigint') fail(path, `expected integer, got ${value}: beyond Number.MAX_SAFE_INTEGER, which a number cannot hold exactly`)
+    return Number.isSafeInteger(value) ? value as number : expected(path, 'integer', value)
+  },
+  dump(value, path = '') {
+    return Number.isSafeInteger(value) ? value : expected(path, 'integer', value)
+  },
+}
+/**
+ * `int64`: a JSON integer that may exceed `Number.MAX_SAFE_INTEGER` (an int64 id sent as a
+ * bare number). A `number` while exact, else the `bigint` the lossless `parseJson` read, which
+ * `dumpJson` writes back as bare digits.
+ */
+export const int64: Codec<number | bigint> = {
+  parse(value, path = '') {
+    return typeof value === 'bigint' || Number.isSafeInteger(value) ? value as number | bigint : expected(path, 'integer', value)
+  },
+  dump(value, path = '') {
+    return typeof value === 'bigint' || Number.isSafeInteger(value) ? value : expected(path, 'integer', value)
+  },
+}
 export const boolean: Codec<boolean> = scalar('boolean', isBoolean)
 const nul: Codec<null> = scalar('null', isNull)
 export { nul as null }
 
 /** `decimal-string`: the digits the wire carried, branded `Decimal`. */
 export const decimal: Codec<Decimal> = scalar('decimal string', isDecimal)
-/** `integer-string`: `"42"` on the wire, `42` in the client. */
-export const integerString: Codec<number> = wire(
+/**
+ * `integer-string`: `"42"` on the wire, `42n` in the client. A `bigint`, not a `number`:
+ * the venues that quote an integer do so because it outgrows a double (wei amounts,
+ * 256-bit token ids, int64 order ids), and Python's `int` keeps every digit too. `dump`
+ * also takes a safe-integer `number`, for callers passing small literals.
+ */
+export const integerString: Codec<bigint> = wire(
   string, 'integer string',
-  s => { if (!/^[+-]?\d+$/.test(s)) throw new Error('not an integer'); const n = Number(s); if (!Number.isSafeInteger(n)) throw new Error('beyond safe integer range'); return n },
-  n => String(n), (v): v is number => Number.isSafeInteger(v),
+  s => { if (!/^[+-]?\d+$/.test(s)) throw new Error('not an integer'); return BigInt(s) },
+  n => String(n),
+  (v): v is bigint => typeof v === 'bigint' || Number.isSafeInteger(v),
 )
 /** `boolean-string`: `"true"`/`"false"` on the wire, a `boolean` in the client. */
 export const booleanString: Codec<boolean> = wire(
@@ -126,15 +165,29 @@ export const booleanString: Codec<boolean> = wire(
   b => String(b), isBoolean,
 )
 
-const epochWire: Codec<number | string> = scalar('epoch timestamp', (v): v is number | string =>
-  (typeof v === 'number' && Number.isFinite(v)) || (typeof v === 'string' && /^[+-]?\d+$/.test(v)))
+const epochWire: Codec<number | string | bigint> = scalar('epoch timestamp', (v): v is number | string | bigint =>
+  (typeof v === 'number' && Number.isFinite(v)) || typeof v === 'bigint' || (typeof v === 'string' && /^[+-]?\d+$/.test(v)))
+/** An epoch value as JSON: a `number` while exact, else a `bigint` (written as bare digits by `dumpJson`). */
+const exactNumber = (n: bigint): number | bigint =>
+  n <= BigInt(Number.MAX_SAFE_INTEGER) && n >= BigInt(Number.MIN_SAFE_INTEGER) ? Number(n) : n
 const epoch = (what: string, conv: typeof timestampMillis): Codec<Date> =>
-  wire(epochWire, what, v => conv.parse(v), d => conv.dump(d), isDate)
+  wire(epochWire, what, v => conv.parse(v), d => exactNumber(conv.dumpBigInt(d)), isDate)
+const epochFloat = (what: string, conv: typeof timestampMillis): Codec<Date> =>
+  wire(epochWire, what, v => conv.parse(v), d => conv.dumpNumber(d), isDate)
 
+/** `epoch-*` on an `integer` schema: whole units on the wire, a time between two floored on dump. */
 export const epochSeconds: Codec<TimestampSeconds> = epoch('epoch seconds', timestampSeconds)
 export const epochMillis: Codec<TimestampMillis> = epoch('epoch milliseconds', timestampMillis)
 export const epochMicros: Codec<TimestampMicros> = epoch('epoch microseconds', timestampMicros)
 export const epochNanos: Codec<TimestampNanos> = epoch('epoch nanoseconds', timestampNanos)
+/**
+ * `epoch-*` on a `number` schema: a fractional count (kraken's `1688669448.4712` seconds)
+ * parses to the nanosecond and dumps back as the fraction, a whole count as an integer.
+ */
+export const epochSecondsFloat: Codec<TimestampSeconds> = epochFloat('epoch seconds', timestampSeconds)
+export const epochMillisFloat: Codec<TimestampMillis> = epochFloat('epoch milliseconds', timestampMillis)
+export const epochMicrosFloat: Codec<TimestampMicros> = epochFloat('epoch microseconds', timestampMicros)
+export const epochNanosFloat: Codec<TimestampNanos> = epochFloat('epoch nanoseconds', timestampNanos)
 /** `date-time`: an RFC 3339 string on the wire, a `Date` in the client. */
 export const dateTime: Codec<TimestampIso> = wire(string, 'RFC 3339 date-time', s => timestampIso.parse(s), d => timestampIso.dump(d), isDate)
 /** `date`: an RFC 3339 full-date, kept as a branded `DateIso` string. */
@@ -143,7 +196,12 @@ export const date: Codec<DateIso> = wire(string, 'RFC 3339 date', s => dateIso.p
 /** Exactly one of `values` (a `const` enum on the wire). */
 export function literal<const V extends readonly (string | number | boolean | null)[]>(...values: V): Codec<V[number]> {
   const what = values.map(v => JSON.stringify(v)).join(' | ')
-  return scalar(what, (v): v is V[number] => values.includes(v as V[number]))
+  const check = (value: unknown, path = ''): V[number] => {
+    // A numeric literal past 2^53 arrives from the lossless parse as a `bigint`.
+    const v = typeof value === 'bigint' ? Number(value) : value
+    return values.includes(v as V[number]) ? (v as V[number]) : expected(path, what, value)
+  }
+  return { parse: check, dump: check }
 }
 export { literal as enum }
 
@@ -245,10 +303,13 @@ export function lazy<T>(get: () => Codec<T>): Codec<T> {
   }
 }
 
-/** Parse a raw JSON document; a syntax error is a `ValidationError` too, with the `SyntaxError` as `cause`. */
+/**
+ * Parse a raw JSON document losslessly (an unsafe integer literal is a `bigint`, see
+ * `parseJsonText`); a syntax error is a `ValidationError` too, with the `SyntaxError` as `cause`.
+ */
 export function parseJson<T>(codec: Codec<T>, text: string): T {
   let value: unknown
-  try { value = JSON.parse(text) } catch (e) {
+  try { value = parseJsonText(text) } catch (e) {
     throw new ValidationError(`invalid JSON: ${(e as Error).message}`, { cause: e })
   }
   return codec.parse(value)
@@ -256,5 +317,5 @@ export function parseJson<T>(codec: Codec<T>, text: string): T {
 
 /** Dump a typed value to a JSON document. */
 export function dumpJson<T>(codec: Codec<T>, value: T): string {
-  return JSON.stringify(codec.dump(value))
+  return stringifyJson(codec.dump(value))
 }

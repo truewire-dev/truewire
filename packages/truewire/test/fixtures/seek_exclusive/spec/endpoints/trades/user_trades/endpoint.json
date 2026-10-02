@@ -1,0 +1,53 @@
+{
+  "meta": {},
+  "notes": [
+    "aster's `userTrades` shape: `fromId` with `startTime` or `endTime` is refused, so the walk sends the range on its first request only and keeps `endTime` itself by each trade's `time`. Without `fromId` the venue answers the newest trades unless `startTime` is given, hence `first`."
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": ["http"],
+    "method": "GET",
+    "path": "/userTrades",
+    "description": "The account's trades, oldest first from `fromId` or `startTime`.",
+    "request": {
+      "title": "UserTradesRequest",
+      "type": "object",
+      "description": "Trade history request.",
+      "properties": {
+        "symbol": {"type": "string", "description": "Trading pair."},
+        "startTime": {"type": "integer", "format": "epoch-millis", "description": "Start of the time range."},
+        "endTime": {"type": "integer", "format": "epoch-millis", "description": "End of the time range."},
+        "fromId": {"type": "integer", "description": "Trade id to start from; cannot be combined with `startTime`/`endTime`."},
+        "limit": {"type": "integer", "default": 500, "maximum": 1000, "description": "Number of trades."}
+      },
+      "required": ["symbol"]
+    },
+    "response": {
+      "type": "array",
+      "description": "The trades.",
+      "items": {
+        "title": "Trade",
+        "type": "object",
+        "description": "One of the account's trades.",
+        "required": ["id", "price", "time"],
+        "properties": {
+          "id": {"type": "integer", "description": "Trade id."},
+          "price": {"type": "string", "format": "decimal-string", "description": "Trade price."},
+          "time": {"type": "integer", "format": "epoch-millis", "description": "Trade time."}
+        }
+      }
+    }
+  },
+  "pagination": {
+    "strategy": "seek",
+    "cursor": {"field": "[-1].id", "unique": true},
+    "bound": {"start": "fromId"},
+    "anchor": "start",
+    "size": {"parameter": "limit"},
+    "exclusive": {
+      "parameters": ["startTime", "endTime"],
+      "first": "startTime",
+      "far": {"parameter": "endTime", "field": "[-1].time"}
+    }
+  }
+}

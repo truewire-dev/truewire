@@ -283,20 +283,6 @@
       }
     }
   },
-  "pagination": {
-    "strategy": "offset",
-    "offset": {
-      "parameter": "ofs"
-    },
-    "size": {
-      "parameter": "limit"
-    },
-    "done": {
-      "kind": "total",
-      "path": "count",
-      "counts": "items"
-    }
-  },
   "envelope": {
     "payload": "result"
   },
@@ -304,6 +290,7 @@
     "`HistoricalTrade.type` gets `enum: [buy, sell]` even though upstream's OpenAPI leaves it a bare string -- its own `description` documents the closed set (\"Type of order (buy/sell)\"), and rule 2 treats that as documented. `ordertype`/`tradeordertype` stay bare: their descriptions give examples (`market`, `limit`) rather than an exhaustive list. `posstatus` similarly gets `enum: [open, closed]` from its documented \"Position status (open/closed)\" description.",
     "Request parameters are declared as `parameters`/`in: 'query'` here rather than as flat `requestBody` properties, unlike every sibling private endpoint in this client (S18 fix, production_standards.md): `typed_dev.codegen.python.Generator.paged_size_default` (shared, common/lib) only scans `operation.parameters` for a page-size parameter's declared `default`, and this endpoint's `limit` (default 50) needs that default found for `trades_history_paged` to generate at all -- `in: 'query'` states the parameter's role, not its literal wire placement (docs/spec/authoring.md rule 0), so this is spec-correct even though the wire request is still a form-urlencoded POST body via `authed_request`, unchanged. Deliberately narrow: many other private kraken endpoints declare a documented `default` on a `requestBody` parameter too (a stylistic pattern observed but not addressed here, since only this one endpoint's spec change was in scope for the S18 fix) -- if `trades_history`'s fix generalizes well, revisit whether the others should move too, as a separate, explicitly-scoped pass.",
     "`paged_page1`/`paged_page2` examples are synthetic, not real captures -- built purely to exercise `trades_history_paged`'s multi-page walk against the mock server (production_standards.md S18), since the real account behind `default` has only a single real trade (below), not enough for a genuine multi-page series. Schema-valid, plausible-shaped `HistoricalTrade` rows, but the txids/prices/timestamps are invented, not venue-observed.",
-    "`time` is required: `default` now records one genuine trade (a real tiny XBTUSDC market buy, placed specifically to settle this field -- the account previously had zero real trade history, `count: 0, trades: {}`), and `time` is present on it, matching every other trade-record type in this client treating time as fundamental and the endpoint's own semantics ('the most recent trades are returned'). Also notable: this real trade's `leverage` is `\"0\"`, not the `\"none\"` seen on `closed_orders`' real capture -- confirms `leverage` genuinely mixes literal words and numbers across real responses and stays a bare `string`, not `decimal-string`."
+    "`time` is required: `default` now records one genuine trade (a real tiny XBTUSDC market buy, placed specifically to settle this field -- the account previously had zero real trade history, `count: 0, trades: {}`), and `time` is present on it, matching every other trade-record type in this client treating time as fundamental and the endpoint's own semantics ('the most recent trades are returned'). Also notable: this real trade's `leverage` is `\"0\"`, not the `\"none\"` seen on `closed_orders`' real capture -- confirms `leverage` genuinely mixes literal words and numbers across real responses and stays a bare `string`, not `decimal-string`.",
+    "ADR 0013 (2026-09-15): no `pagination` declared. The response carries its rows as a map keyed by trade id (`trades: {<txid>: {...}}`) beside `count`, and a `PaginatedResponse`-shaped walk needs an array row collection to yield, so the previous `offset` declaration can no longer be rendered. A caller pages by hand with `ofs`/`count`."
   ]
 }

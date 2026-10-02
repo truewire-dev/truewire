@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 import asyncio
 
 from truewire_core.util import Stream, StreamManager
+from truewire_core.exceptions import NetworkError
 from .socket import Socket
 
 Request = TypeVar('Request', default=Any)
@@ -76,18 +77,22 @@ class StreamsRpc(Socket, Generic[Request, Reply, Notification, SubscriptionParam
   async def rpc_request(self, request: Request) -> Reply:
     id = self.counter
     self.counter += 1
-    self.replies[id] = asyncio.Future()
-    await self.rpc_send(id, request)
-    response = await self.wait(self.replies[id])
-    del self.replies[id]
-    return response
+    self.replies[id] = reply = asyncio.Future[Reply]()
+    try:
+      await self.rpc_send(id, request)
+      return await self.wait(reply)
+    finally:
+      # Cancelled, failed or answered: the id is done either way, and a late reply for it is dropped.
+      self.replies.pop(id, None)
+      reply.cancel()
 
   def on_msg(self, msg: str | bytes):
     res = self.parse_msg(msg)
     if res is None:
       return
     elif res['kind'] == 'response':
-      self.replies[res['id']].set_result(res['response'])
+      if (reply := self.replies.get(res['id'])) is not None and not reply.done():
+        reply.set_result(res['response'])
     elif res['kind'] == 'subscription':
       channel = res['channel']
       if (key := self.message_keys.get(channel)) is not None:
@@ -113,37 +118,70 @@ class StreamsRpc(Socket, Generic[Request, Reply, Notification, SubscriptionParam
       raise RuntimeError(f'Already subscribed to channel "{channel}"')
 
     self.subscriptions[channel] = queue = asyncio.Queue[Notification]()
+
+    def forget():
+      """Drop this stream's queue, unless the channel was since subscribed anew."""
+      if self.subscriptions.get(channel) is queue:
+        del self.subscriptions[channel]
+
     try:
-      reply = await self.wait(self.request_subscription(subscription_channel, params))
+      ctx = await self.ctx
+      reply = await self.wait(self.request_subscription(subscription_channel, params), ctx=ctx)
     except BaseException:
-      self.subscriptions.pop(channel, None)
+      forget()
       raise
 
-    unsubscribed = asyncio.Future[UnsubscriptionReply]()
+    unsubscribed = asyncio.Future[UnsubscriptionReply | None]()
 
     async def stream() -> AsyncIterable[Notification]:
       while True:
+        if unsubscribed.done():
+          # Ended by unsubscribe: the connection it was on may be gone since, which is not an error.
+          break
+        if not queue.empty():
+          # Notifications that arrived before a drop are delivered before the drop is reported.
+          yield queue.get_nowait()
+          continue
         try:
           queue_get = asyncio.create_task(queue.get())
           done, _ = await self.wait(
-            asyncio.wait([unsubscribed, queue_get], return_when='FIRST_COMPLETED')
+            asyncio.wait([unsubscribed, queue_get], return_when='FIRST_COMPLETED'), ctx=ctx
           )
         except BaseException:
-          self.subscriptions.pop(channel, None)
+          forget()
           raise
+        finally:
+          queue_get.cancel()
+          await asyncio.gather(queue_get, return_exceptions=True)
         if queue_get in done:
           yield queue_get.result()
         else: # unsubscribed
           break
 
     async def unsubscribe() -> UnsubscriptionReply | None:
+      """Unsubscribe on the connection the stream was made on; a no-op once it is gone.
+
+      If the request fails while that connection is still alive, the subscription still
+      stands: the queue is kept and `unsubscribe` can be retried.
+      """
       if unsubscribed.done():
         return unsubscribed.result()
-      
-      reply = await self.wait(self.request_unsubscription(subscription_channel, params))
-      unsubscribed.set_result(reply)
-      self.subscriptions.pop(channel, None)
-      return reply
+      reply = None
+      finished = False
+      try:
+        if ctx.alive:
+          try:
+            reply = await self.wait(self.request_unsubscription(subscription_channel, params), ctx=ctx)
+          except NetworkError:
+            if ctx.alive:
+              raise
+        finished = True
+        return reply
+      finally:
+        if finished or not ctx.alive:
+          if not unsubscribed.done():
+            unsubscribed.set_result(reply)
+          forget()
 
     return Stream(reply, stream(), unsubscribe)
 

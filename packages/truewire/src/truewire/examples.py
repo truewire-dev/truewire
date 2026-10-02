@@ -100,6 +100,32 @@ def _sole_body_parameter(signature: inspect.Signature) -> str | None:
   return names[0] if len(names) == 1 else None
 
 
+PARAMETER_NOTE = 'parameter: '
+"""Prefix of the note `_bind_and_coerce` adds to a `ValidationError`, naming the Python
+parameter whose value failed, so a caller can say which argument was wrong."""
+
+
+def _coerce_value(adapter: TypeAdapter[Any], value: Any) -> Any:
+  """Validate one bound value against its parameter's type.
+
+  An API can JSON-encode an array-typed query param into one wire string
+  (`symbols=["BTCUSDT","ETHUSDT"]`) while the generated method takes a
+  real `list[str]` -- validating the recorded string against that type always
+  fails. Retry once against the parsed value; a genuine mismatch (not just a
+  JSON-encoded one) still surfaces the *original* error, not a `JSONDecodeError`.
+  """
+  try:
+    return adapter.validate_python(value)
+  except ValidationError as error:
+    if not isinstance(value, str):
+      raise
+    try:
+      parsed = json.loads(value)
+    except json.JSONDecodeError:
+      raise error from None
+    return adapter.validate_python(parsed)
+
+
 def _bind_and_coerce(
   signature: inspect.Signature,
   args: 'list[Any] | tuple[Any, ...]',
@@ -169,22 +195,11 @@ def _bind_and_coerce(
     annotation = signature.parameters[name].annotation
     if annotation is inspect.Signature.empty:
       continue
-    adapter = TypeAdapter(annotation)
     try:
-      bound.arguments[name] = adapter.validate_python(value)
+      bound.arguments[name] = _coerce_value(TypeAdapter(annotation), value)
     except ValidationError as error:
-      # An API can JSON-encode an array-typed query param into one wire string
-      # (`symbols=["BTCUSDT","ETHUSDT"]`) while the generated method takes a
-      # real `list[str]` -- validating the recorded string against that type always
-      # fails. Retry once against the parsed value; a genuine mismatch (not just a
-      # JSON-encoded one) still surfaces the *original* error, not a `JSONDecodeError`.
-      if not isinstance(value, str):
-        raise
-      try:
-        parsed = json.loads(value)
-      except json.JSONDecodeError:
-        raise error from None
-      bound.arguments[name] = adapter.validate_python(parsed)
+      error.add_note(f'{PARAMETER_NOTE}{name}')
+      raise
 
   return bound
 

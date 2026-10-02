@@ -15,6 +15,14 @@ name = "petstore"
 [spec]
 dir = "spec"
 
+[secrets]
+required = ["PETSTORE_API_KEY"]
+
+[policy]
+rate = 10
+retry = false
+refuse = ["pets.delete"]
+
 [cores.default]
 meta = { type = "object", additionalProperties = false }
 
@@ -27,8 +35,12 @@ name = "Petstore"
 base = "petstore.core:Endpoint"
 ```
 """
+import math
+import re
 import tomllib
+from collections import Counter
 from dataclasses import dataclass
+from datetime import date, datetime
 from pathlib import Path
 from typing_extensions import TYPE_CHECKING, Any
 
@@ -41,9 +53,47 @@ PROJECT_FILE = 'truewire.toml'
 STATE_DIR = '.truewire'
 """Per-project working directory (generated-file manifests and the like), under `root`."""
 
+CODEGEN_DIR = f'{STATE_DIR}/codegen'
+"""Where the generated-file manifests live, one per language; committed, unlike
+`.truewire/cache/` (W16)."""
+
+
+ENV_NAME = re.compile(r'[A-Za-z_][A-Za-z0-9_]*')
+"""What `[secrets]` may list: an environment variable's name, never its value or a path."""
+
 
 class NotAProject(Exception):
   """Raised when no `truewire.toml` can be found for a path, or the one found is invalid."""
+
+
+@dataclass(frozen=True)
+class Secrets:
+  """`[secrets]`: the environment variables a caller sets, by name only (W14).
+
+  The values live in `.env`, which `truewire init` ignores, or in the caller's environment.
+  """
+  required: tuple[str, ...] = ()
+  """`[secrets].required`: variables the client cannot run without."""
+  optional: tuple[str, ...] = ()
+  """`[secrets].optional`: variables that unlock more of the API when set."""
+
+
+@dataclass(frozen=True)
+class Policy:
+  """`[policy]`: what the client may do on its own behalf (W15).
+
+  `refuse` is generated: each endpoint it names fails with the package's `RefusedByPolicy`
+  before any request (`truewire.codegen.policy`). `rate` and `retry` are generated as the
+  root's `RATE`/`RETRY`, which the hand-written core passes to the runtime's `HttpClient`
+  (Python, TypeScript and Rust; packages clause P19). `truewire check` fails on a `refuse`
+  id that names no endpoint in the spec.
+  """
+  rate: float | None = None
+  """`[policy].rate`: requests per second the client paces itself to, or `None` for no pacing."""
+  retry: bool = False
+  """`[policy].retry`: whether the client retries a failed request on its own."""
+  refuse: tuple[str, ...] = ()
+  """`[policy].refuse`: endpoint function ids (`account.withdraw`) the client refuses to call."""
 
 
 @dataclass(frozen=True)
@@ -61,12 +111,17 @@ class Project:
   spec_dir: Path
   """`root / [spec].dir`, `spec` by default -- holds `endpoints/` and `schemas.json`."""
   config: 'CodegenConfig'
-  """The `[cores.*]`, `[python]`, `[typescript]` and `[rust]` sections, validated."""
+  """The `[cores.*]`, `[python]`, `[typescript]`, `[rust]` and `[go]` sections, validated."""
   python_src: Path
   """`root / [python].src`, `src` by default -- the directory the generated package lives
   under. Meaningful only when `[python]` is declared."""
-  secrets: dict[str, Any]
-  """The raw `[secrets]` table (credential variable *names*, never values), or `{}`."""
+  secrets: Secrets
+  """`[secrets]`: credential variable *names*, never values; empty when absent."""
+  policy: Policy
+  """`[policy]`: rate, retry and refusals; the defaults when absent."""
+  stranger: date | None = None
+  """`[score].stranger`: the day a newcomer last completed the quickstart from the published
+  package and docs alone (`docs/shape/score.md` S12), or `None` when nobody has."""
 
   @property
   def endpoints_dir(self) -> Path:
@@ -144,12 +199,38 @@ class Project:
     return self.root / rust.src / (rust.package or self.name)
 
   @property
+  def go(self):
+    """The `[go]` section, or `None` when the project generates no Go package."""
+    return self.config.go
+
+  @property
+  def go_package_dir(self) -> Path:
+    """`root / [go].src / [go].package` -- the directory of the generated root Go package
+    (`client.go`), every other generated package beneath it.
+
+    Raises:
+      NotAProject: When `truewire.toml` declares no `[go]` section.
+    """
+    go = self.config.go
+    if go is None:
+      raise NotAProject(
+        f'{self.root / PROJECT_FILE}: no [go] section, so no Go package to generate'
+      )
+    return self.root / go.src / (go.package or self.name)
+
+  @property
   def state_dir(self) -> Path:
     """`root / .truewire` -- created on demand by whatever writes into it."""
     return self.root / STATE_DIR
 
   def manifest_path(self, language: str) -> Path:
-    """The generated-file ownership manifest for one language: `.truewire/<language>-files.json`."""
+    """The generated-file ownership manifest for one language, committed:
+    `.truewire/codegen/<language>.json`."""
+    return self.root / CODEGEN_DIR / f'{language}.json'
+
+  def legacy_manifest_path(self, language: str) -> Path:
+    """Where the manifest lived before W16, git-ignored: `.truewire/<language>-files.json`.
+    `generate` moves one it finds to `manifest_path`."""
     return self.state_dir / f'{language}-files.json'
 
   @property
@@ -206,28 +287,123 @@ def load_project_data(data: dict[str, Any], *, root: Path) -> Project:
     project = {'name': root.name or 'project'}
   if not isinstance(project, dict) or not isinstance(project.get('name'), str) or not project['name']:
     raise NotAProject(f'{root / PROJECT_FILE}: [project].name is required')
-  spec = data.get('spec') or {}
-  if not isinstance(spec, dict):
-    raise NotAProject(f'{root / PROJECT_FILE}: [spec] must be a table')
-  spec_dir = root / str(spec.get('dir', 'spec'))
-  secrets = data.get('secrets') or {}
-  if not isinstance(secrets, dict):
-    raise NotAProject(f'{root / PROJECT_FILE}: [secrets] must be a table')
-  known = {'project', 'spec', 'secrets', 'cores', 'python', 'typescript', 'rust'}
+  _table(project, 'project', {'name'}, file=root / PROJECT_FILE)
+  spec = _table(data.get('spec'), 'spec', {'dir'}, file=root / PROJECT_FILE)
+  spec_value = spec.get('dir', 'spec')
+  if not isinstance(spec_value, str) or not spec_value:
+    raise NotAProject(f'{root / PROJECT_FILE}: [spec].dir must be a directory path; got {spec_value!r}')
+  spec_dir = root / spec_value
+  secrets = _secrets(data.get('secrets'), file=root / PROJECT_FILE)
+  policy = _policy(data.get('policy'), file=root / PROJECT_FILE)
+  stranger = _stranger(data.get('score'), file=root / PROJECT_FILE)
+  known = {'project', 'spec', 'secrets', 'policy', 'score', 'cores', 'python', 'typescript', 'rust', 'go'}
   unknown = sorted(set(data) - known)
   if unknown:
     raise NotAProject(f'{root / PROJECT_FILE}: unknown top-level section(s): {", ".join(unknown)}')
   try:
     config = load_codegen_config(
-      {key: data[key] for key in ('cores', 'python', 'typescript', 'rust') if key in data}
+      {key: data[key] for key in ('cores', 'python', 'typescript', 'rust', 'go') if key in data}
     )
   except ValidationError as exc:
     raise NotAProject(f'{root / PROJECT_FILE}: {exc}') from exc
   python_src = root / (config.python.src if config.python is not None else 'src')
   return Project(
     root=root, name=project['name'], spec_dir=spec_dir, config=config,
-    python_src=python_src, secrets=dict(secrets),
+    python_src=python_src, secrets=secrets, policy=policy, stranger=stranger,
   )
+
+
+def _table(value: Any, section: str, keys: set[str], *, file: Path) -> dict[str, Any]:
+  """A `truewire.toml` table holding only `keys`, `{}` when absent.
+
+  Raises:
+    NotAProject: When `value` is not a table, or carries a key outside `keys`.
+  """
+  if value is None:
+    return {}
+  if not isinstance(value, dict):
+    raise NotAProject(f'{file}: [{section}] must be a table')
+  unknown = sorted(set(value) - keys)
+  if unknown:
+    raise NotAProject(f'{file}: unknown [{section}] key(s): {", ".join(unknown)}')
+  return value
+
+
+def _names(value: Any, where: str, *, file: Path, pattern: re.Pattern[str] | None = None) -> tuple[str, ...]:
+  """A list of distinct non-empty strings, each matching `pattern` when given, as a tuple.
+
+  Raises:
+    NotAProject: When `value` is not such a list.
+  """
+  if value is None:
+    return ()
+  if not isinstance(value, list) or not all(isinstance(item, str) and item for item in value):
+    raise NotAProject(f'{file}: {where} must be a list of strings; got {value!r}')
+  if pattern is not None:
+    bad = [item for item in value if not pattern.fullmatch(item)]
+    if bad:
+      raise NotAProject(
+        f'{file}: {where} names environment variables only; not a variable name: '
+        + ', '.join(repr(item) for item in bad)
+      )
+  repeated = sorted(item for item, count in Counter(value).items() if count > 1)
+  if repeated:
+    raise NotAProject(f'{file}: {where} lists {", ".join(repeated)} more than once')
+  return tuple(value)
+
+
+def _secrets(value: Any, *, file: Path) -> Secrets:
+  """Read `[secrets]`: `required` and `optional`, lists of environment variable names."""
+  table = _table(value, 'secrets', {'required', 'optional'}, file=file)
+  required = _names(table.get('required'), '[secrets].required', file=file, pattern=ENV_NAME)
+  optional = _names(table.get('optional'), '[secrets].optional', file=file, pattern=ENV_NAME)
+  both = sorted(set(required) & set(optional))
+  if both:
+    raise NotAProject(f'{file}: [secrets] lists {", ".join(both)} as both required and optional')
+  return Secrets(required=required, optional=optional)
+
+
+def _policy(value: Any, *, file: Path) -> Policy:
+  """Read `[policy]`: `rate` (a positive number), `retry` (a bool), `refuse` (endpoint ids).
+
+  Whether each `refuse` id names an endpoint is `truewire check`'s to say; the spec is not
+  loaded here.
+  """
+  table = _table(value, 'policy', {'rate', 'retry', 'refuse'}, file=file)
+  rate = table.get('rate')
+  if rate is not None and (
+    isinstance(rate, bool) or not isinstance(rate, int | float) or not math.isfinite(rate) or not rate > 0
+  ):
+    raise NotAProject(f'{file}: [policy].rate must be a positive number of requests per second; got {rate!r}')
+  retry = table.get('retry', False)
+  if not isinstance(retry, bool):
+    raise NotAProject(f'{file}: [policy].retry must be true or false; got {retry!r}')
+  refuse = _names(table.get('refuse'), '[policy].refuse', file=file)
+  return Policy(rate=None if rate is None else float(rate), retry=retry, refuse=refuse)
+
+
+def _stranger(score: Any, *, file: Path) -> date | None:
+  """Read `[score].stranger`: a TOML date (`2026-10-12`) or the same as a string.
+
+  Raises:
+    NotAProject: When `[score]` is not a table, carries another key, or the date is not one.
+  """
+  if score is None:
+    return None
+  if not isinstance(score, dict):
+    raise NotAProject(f'{file}: [score] must be a table')
+  unknown = sorted(set(score) - {'stranger'})
+  if unknown:
+    raise NotAProject(f'{file}: unknown [score] key(s): {", ".join(unknown)}')
+  value = score.get('stranger')
+  if value is None or (isinstance(value, date) and not isinstance(value, datetime)):
+    return value
+  if isinstance(value, str):
+    try:
+      return date.fromisoformat(value)
+    except ValueError:
+      pass
+  raise NotAProject(f'{file}: [score].stranger must be a date, YYYY-MM-DD; got {value!r}')
 
 
 def load_project(path: Path) -> Project:

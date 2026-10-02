@@ -7,10 +7,12 @@
 //! | `epoch-millis`   | [`TimestampMillis`]  | `DateTime<Utc>`   | integer milliseconds                 |
 //! | `epoch-micros`   | [`TimestampMicros`]  | `DateTime<Utc>`   | integer microseconds                 |
 //! | `epoch-nanos`    | [`TimestampNanos`]   | `DateTime<Utc>`   | integer nanoseconds                  |
+//! | `epoch-*` on a `string` | [`TimestampSecondsString`] ... [`TimestampNanosString`] | `DateTime<Utc>` | the same count, as a numeral string |
+//! | `epoch-*` on a `number` | [`TimestampSecondsFloat`] ... [`TimestampNanosFloat`] | `DateTime<Utc>` | the count, fractional when it has a fraction |
 //! | `date-time`      | [`TimestampIso`]     | `DateTime<Utc>`   | RFC 3339 date-time string            |
 //! | `date`           | [`DateIso`]          | `NaiveDate`       | RFC 3339 full-date string            |
-//! | `decimal-string` | [`DecimalString`]    | `Decimal`         | the digits, as a string              |
-//! | `integer-string` | [`IntegerString`]    | `i64`             | `"42"`                               |
+//! | `decimal-string` | [`DecimalString`]    | `BigDecimal`      | the digits, verbatim, any precision  |
+//! | `integer-string` | [`IntegerString`]    | `BigInt`          | `"42"`, any size                     |
 //! | `boolean-string` | [`BooleanString`]    | `bool`            | `"true"` / `"false"`                 |
 //!
 //! Each is a transparent wrapper: it derefs to the value inside, converts `From` it (so a
@@ -24,12 +26,14 @@ use std::fmt;
 use std::ops::Deref;
 
 use chrono::{DateTime, NaiveDate, Utc};
+use num_bigint::BigInt;
+use num_traits::ToPrimitive;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 pub use crate::decimal::DecimalString;
 use crate::times::{
-    EpochConverter, EpochValue, DATE_ISO_PATTERN, TIMESTAMP_ISO, TIMESTAMP_MICROS, TIMESTAMP_MILLIS, TIMESTAMP_NANOS,
-    TIMESTAMP_SECONDS,
+    EpochConverter, EpochNumber, EpochValue, DATE_ISO_PATTERN, TIMESTAMP_ISO, TIMESTAMP_MICROS, TIMESTAMP_MILLIS,
+    TIMESTAMP_NANOS, TIMESTAMP_SECONDS,
 };
 
 /// The JSON forms an epoch field arrives in.
@@ -95,6 +99,8 @@ macro_rules! epoch_newtype {
         }
 
         impl Serialize for $name {
+            /// Whole units, floored: an `integer` schema never receives a fraction, whatever
+            /// precision the `DateTime` holds.
             fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
                 serializer.serialize_i64(Self::CONVERTER.dump(&self.0))
             }
@@ -113,9 +119,102 @@ macro_rules! epoch_newtype {
     };
 }
 
+macro_rules! epoch_string_newtype {
+    ($(#[$doc:meta])* $name:ident, $converter:expr) => {
+        timestamp_newtype!($(#[$doc])* $name);
+
+        impl $name {
+            /// The converter behind this type.
+            pub const CONVERTER: EpochConverter = $converter;
+        }
+
+        impl Serialize for $name {
+            fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                serializer.serialize_str(&Self::CONVERTER.dump_number(&self.0).to_string())
+            }
+        }
+
+        impl<'de> Deserialize<'de> for $name {
+            fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+                let wire = EpochWire::deserialize(deserializer)
+                    .map_err(|_| serde::de::Error::custom("expected epoch timestamp"))?;
+                Self::CONVERTER
+                    .parse(EpochValue::from(wire))
+                    .map(Self)
+                    .map_err(|e| serde::de::Error::custom(format!("expected epoch timestamp: {}", e.message())))
+            }
+        }
+    };
+}
+
+macro_rules! epoch_float_newtype {
+    ($(#[$doc:meta])* $name:ident, $converter:expr) => {
+        timestamp_newtype!($(#[$doc])* $name);
+
+        impl $name {
+            /// The converter behind this type.
+            pub const CONVERTER: EpochConverter = $converter;
+        }
+
+        impl Serialize for $name {
+            /// Whole units as an integer, a fractional count as the float it came as.
+            fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                match Self::CONVERTER.dump_number(&self.0) {
+                    EpochNumber::Int(i) => serializer.serialize_i64(i),
+                    EpochNumber::Float(f) => serializer.serialize_f64(f),
+                }
+            }
+        }
+
+        impl<'de> Deserialize<'de> for $name {
+            fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+                let wire = EpochWire::deserialize(deserializer)
+                    .map_err(|_| serde::de::Error::custom("expected epoch timestamp"))?;
+                Self::CONVERTER
+                    .parse(EpochValue::from(wire))
+                    .map(Self)
+                    .map_err(|e| serde::de::Error::custom(format!("expected epoch timestamp: {}", e.message())))
+            }
+        }
+    };
+}
+
+epoch_float_newtype!(
+    /// An `epoch-seconds` field on a `number` schema: fractional seconds (`1763410056.903966`).
+    TimestampSecondsFloat, TIMESTAMP_SECONDS
+);
+epoch_float_newtype!(
+    /// An `epoch-millis` field on a `number` schema.
+    TimestampMillisFloat, TIMESTAMP_MILLIS
+);
+epoch_float_newtype!(
+    /// An `epoch-micros` field on a `number` schema.
+    TimestampMicrosFloat, TIMESTAMP_MICROS
+);
+epoch_float_newtype!(
+    /// An `epoch-nanos` field on a `number` schema.
+    TimestampNanosFloat, TIMESTAMP_NANOS
+);
+
 epoch_newtype!(
     /// An `epoch-seconds` field.
     TimestampSeconds, TIMESTAMP_SECONDS
+);
+epoch_string_newtype!(
+    /// An `epoch-seconds` field on a `string` schema: the count as a numeral string.
+    TimestampSecondsString, TIMESTAMP_SECONDS
+);
+epoch_string_newtype!(
+    /// An `epoch-millis` field on a `string` schema.
+    TimestampMillisString, TIMESTAMP_MILLIS
+);
+epoch_string_newtype!(
+    /// An `epoch-micros` field on a `string` schema.
+    TimestampMicrosString, TIMESTAMP_MICROS
+);
+epoch_string_newtype!(
+    /// An `epoch-nanos` field on a `string` schema (kraken's `trades.last`).
+    TimestampNanosString, TIMESTAMP_NANOS
 );
 epoch_newtype!(
     /// An `epoch-millis` field.
@@ -222,37 +321,69 @@ impl<'de> Deserialize<'de> for DateIso {
     }
 }
 
-/// An `integer-string` field: `"42"` on the wire, `42` in the client.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub struct IntegerString(pub i64);
+/// An `integer-string` field: `"42"` on the wire, an arbitrary-precision integer in the
+/// client, so a wei amount or a uint256 token id survives exactly. The wire form is a
+/// string of optional sign and ASCII digits; a JSON number is refused, as the format says.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct IntegerString(pub BigInt);
 
 impl IntegerString {
-    pub fn new(value: i64) -> Self {
-        Self(value)
+    pub fn new(value: impl Into<BigInt>) -> Self {
+        Self(value.into())
     }
 
-    pub fn into_inner(self) -> i64 {
+    pub fn into_inner(self) -> BigInt {
         self.0
+    }
+
+    /// The value as an `i64`, when it fits.
+    pub fn to_i64(&self) -> Option<i64> {
+        self.0.to_i64()
+    }
+
+    /// The value as an `i64`, clamped to its range: what a page walk's `total` needs.
+    pub fn saturating_i64(&self) -> i64 {
+        self.0.to_i64().unwrap_or(if self.0.sign() == num_bigint::Sign::Minus {
+            i64::MIN
+        } else {
+            i64::MAX
+        })
     }
 }
 
 impl Deref for IntegerString {
-    type Target = i64;
+    type Target = BigInt;
 
-    fn deref(&self) -> &i64 {
+    fn deref(&self) -> &BigInt {
         &self.0
     }
 }
 
-impl From<i64> for IntegerString {
-    fn from(value: i64) -> Self {
-        Self(value)
-    }
+macro_rules! integer_string_from {
+    ($($t:ty),*) => {$(
+        impl From<$t> for IntegerString {
+            fn from(value: $t) -> Self {
+                Self(BigInt::from(value))
+            }
+        }
+    )*};
 }
 
-impl From<IntegerString> for i64 {
-    fn from(value: IntegerString) -> Self {
-        value.0
+integer_string_from!(i8, i16, i32, i64, i128, u8, u16, u32, u64, u128, BigInt);
+
+impl std::str::FromStr for IntegerString {
+    type Err = crate::errors::Error;
+
+    fn from_str(text: &str) -> crate::errors::Result<Self> {
+        let unsigned = text.strip_prefix(['+', '-']).unwrap_or(text);
+        if unsigned.is_empty() || !unsigned.bytes().all(|b| b.is_ascii_digit()) {
+            return Err(crate::errors::Error::validation(format!(
+                "expected integer string, got {text:?}"
+            )));
+        }
+        text.parse::<BigInt>()
+            .map(Self)
+            .map_err(|_| crate::errors::Error::validation(format!("expected integer string, got {text:?}")))
     }
 }
 
@@ -273,9 +404,8 @@ impl<'de> Deserialize<'de> for IntegerString {
         let text =
             String::deserialize(deserializer).map_err(|_| serde::de::Error::custom("expected integer string"))?;
         text.trim()
-            .parse::<i64>()
-            .map(Self)
-            .map_err(|_| serde::de::Error::custom(format!("expected integer string, got {text:?}")))
+            .parse::<IntegerString>()
+            .map_err(|e| serde::de::Error::custom(e.message().to_string()))
     }
 }
 

@@ -6,7 +6,7 @@ from truewire.generation.schema import (
 )
 from truewire.generation.types import RenderedTypes
 from truewire.generation.openapi import BODY_KEY
-from truewire.generation.python.types.parser import TIMESTAMP_FORMATS, DECIMAL_STRING_FORMATS
+from truewire.generation.python.types.parser import TIMESTAMP_FORMATS, DECIMAL_STRING_FORMATS, timestamp_alias
 from truewire.generation.python.util import safe_identifier, body_param_name
 from truewire.generation.util import indent
 
@@ -35,6 +35,10 @@ TIMESTAMP_HELPERS: Mapping[str, str] = {
   'TimestampMillis': 'timestamp_millis',
   'TimestampMicros': 'timestamp_micros',
   'TimestampNanos': 'timestamp_nanos',
+  'TimestampSecondsFloat': 'timestamp_seconds_float',
+  'TimestampMillisFloat': 'timestamp_millis_float',
+  'TimestampMicrosFloat': 'timestamp_micros_float',
+  'TimestampNanosFloat': 'timestamp_nanos_float',
   'TimestampIso': 'timestamp_iso',
   'DateIso': 'date_iso',
 }
@@ -84,7 +88,9 @@ def _merge_formatted_props(variants: list[Schema]) -> tuple[dict[str, str], list
   at runtime already tells the generated code whether *this* call's variant actually has
   it, so collecting the union needs no per-variant branching in the emitted code. A
   property name declared with two different formats across variants is dropped from both
-  results rather than guessing which declaration is right.
+  results rather than guessing which declaration is right. One epoch format on a `number`
+  in one variant and an `integer` in another is not a conflict: it keeps the `integer`
+  alias, since a whole count is valid on both wires.
   """
   formats: dict[str, str] = {}
   conflicts: set[str] = set()
@@ -95,17 +101,20 @@ def _merge_formatted_props(variants: list[Schema]) -> tuple[dict[str, str], list
       if not isinstance(prop_schema, Schema) or prop_schema.format is None:
         continue
       fmt = prop_schema.format
-      if fmt not in TIMESTAMP_FORMATS and fmt not in DECIMAL_STRING_FORMATS:
+      if fmt in TIMESTAMP_FORMATS:
+        fmt = timestamp_alias(fmt, prop_schema.type)
+      elif fmt not in DECIMAL_STRING_FORMATS:
         continue
-      if prop_name in formats and formats[prop_name] != fmt:
-        conflicts.add(prop_name)
+      seen = formats.get(prop_name, fmt)
+      if seen.removesuffix('Float') == fmt.removesuffix('Float'):
+        # A whole count is valid for both an `integer` and a `number` epoch.
+        formats[prop_name] = fmt if seen == fmt else fmt.removesuffix('Float')
       else:
-        formats[prop_name] = fmt
+        conflicts.add(prop_name)
   for prop_name in conflicts:
     formats.pop(prop_name, None)
   timestamp_props = {
-    prop_name: TIMESTAMP_FORMATS[fmt]
-    for prop_name, fmt in formats.items() if fmt in TIMESTAMP_FORMATS
+    prop_name: render_id for prop_name, render_id in formats.items() if render_id in TIMESTAMP_HELPERS
   }
   decimal_props = [prop_name for prop_name, fmt in formats.items() if fmt in DECIMAL_STRING_FORMATS]
   return timestamp_props, decimal_props

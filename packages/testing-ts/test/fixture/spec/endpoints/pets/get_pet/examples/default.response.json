@@ -1,0 +1,4 @@
+{
+  "status": 200,
+  "payload": {"jsonrpc": "2.0", "id": 1, "result": {"id": 42, "name": "Fido"}}
+}

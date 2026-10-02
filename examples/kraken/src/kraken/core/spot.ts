@@ -3,7 +3,8 @@
  * ones (form-urlencoded, or JSON for the two paths Kraken rejects a form body on), the
  * `{error, result}` envelope unwrapped and the reply validated.
  */
-import { AuthError, HttpClient, t, type HttpCall, type HttpEndpoint, type Query } from '@truewire/core'
+import { AuthError, HttpClient, LogicError, t, type HttpCall, type HttpEndpoint, type Query, stringifyJson } from '@truewire/core'
+import { Kraken } from '../main.js'
 import type { SpotMeta } from '../meta.js'
 import { Nonce, sign, type Credentials, type WsToken } from './auth.js'
 import { unwrap } from './envelope.js'
@@ -23,7 +24,7 @@ export interface SpotOptions {
   credentials?: Credentials
   /** Validate responses by default; a call's own `validate` option overrides it. */
   validate?: boolean
-  /** The `fetch` wrapper to send through; one is made when omitted. */
+  /** The `fetch` wrapper to send through; one paced and retrying as `Kraken.RATE` and `Kraken.RETRY` say when omitted. */
   http?: HttpClient
 }
 
@@ -39,7 +40,7 @@ export class SpotCore implements HttpEndpoint<SpotMeta> {
     this.baseUrl = (options.baseUrl ?? SPOT_API_URL).replace(/\/+$/, '')
     this.credentials = options.credentials
     this.validate = options.validate ?? true
-    this.http = options.http ?? new HttpClient()
+    this.http = options.http ?? new HttpClient({ rate: Kraken.RATE, retry: Kraken.RETRY })
   }
 
   /** Send one call; the envelope's `result`, validated unless `validate` is off. */
@@ -66,26 +67,51 @@ export class SpotCore implements HttpEndpoint<SpotMeta> {
   }
 
   /**
+   * A signed private POST whose success body is the raw bytes, not the JSON envelope
+   * (`spot.account.retrieve_export`'s zip). A JSON reply is Kraken reporting an error, and
+   * is raised as one.
+   */
+  async signedBytes(path: string, values: Record<string, unknown>, signal?: AbortSignal): Promise<Uint8Array> {
+    const response = await this.post(path, values, signal)
+    if (!response.ok || (response.headers.get('content-type') ?? '').includes('json')) {
+      unwrap(response.status, await response.text())
+      throw new LogicError(`${path} answered with a JSON body where a binary one was expected`)
+    }
+    return new Uint8Array(await response.arrayBuffer())
+  }
+
+  private async signed(path: string, values: Record<string, unknown>, signal?: AbortSignal): Promise<unknown> {
+    const response = await this.post(path, values, signal)
+    return unwrap(response.status, await response.text())
+  }
+
+  /**
    * Sign and send a private POST. The body is encoded once, and that string is both what
    * the signature covers and what is sent.
    */
-  private async signed(path: string, values: Record<string, unknown>, signal?: AbortSignal): Promise<unknown> {
+  private async post(path: string, values: Record<string, unknown>, signal?: AbortSignal): Promise<Response> {
     if (this.credentials === undefined) throw new AuthError('No credentials: this client can only call public endpoints.')
-    const nonce = this.nonce.next()
-    const json = JSON_BODY_PATHS.has(path)
-    const body = json
-      ? JSON.stringify({ nonce, ...values })
-      : new URLSearchParams(query({ nonce, ...values }) as Record<string, string>).toString()
-    const response = await this.http.request('POST', this.baseUrl + path, {
-      body,
-      headers: {
-        'API-Key': this.credentials.apiKey,
-        'API-Sign': sign(path, nonce, body, this.credentials.privateKey),
-        'Content-Type': json ? 'application/json' : 'application/x-www-form-urlencoded',
-      },
+    const credentials = this.credentials
+    return this.http.request('POST', this.baseUrl + path, {
       signal,
+      prepare: request => {
+        const nonce = this.nonce.next()
+        const payload = { nonce, ...values }
+        payload.nonce = nonce
+        const json = JSON_BODY_PATHS.has(path)
+        const body = json
+          ? stringifyJson(payload)
+          : new URLSearchParams(query(payload) as Record<string, string>).toString()
+        return new Request(request, {
+          body,
+          headers: {
+            'API-Key': credentials.apiKey,
+            'API-Sign': sign(path, nonce, body, credentials.privateKey),
+            'Content-Type': json ? 'application/json' : 'application/x-www-form-urlencoded',
+          },
+        })
+      },
     })
-    return unwrap(response.status, await response.text())
   }
 }
 
@@ -94,7 +120,7 @@ function query(values: Record<string, unknown>): Query {
   const out: Record<string, string> = {}
   for (const [name, value] of Object.entries(values)) {
     if (value === null || value === undefined) continue
-    out[name] = typeof value === 'object' ? JSON.stringify(value) : String(value)
+    out[name] = typeof value === 'object' ? stringifyJson(value) : String(value)
   }
   return out
 }

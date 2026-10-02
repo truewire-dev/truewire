@@ -1,10 +1,33 @@
-from .types import TimestampIso, timestamp_iso, TimestampSeconds, timestamp_seconds, TimestampNanos, timestamp_nanos
+from .types import (
+  TimestampIso,
+  TimestampMicrosFloat,
+  TimestampMillisFloat,
+  TimestampNanos,
+  TimestampNanosFloat,
+  TimestampSeconds,
+  TimestampSecondsFloat,
+  timestamp_iso,
+  timestamp_micros_float,
+  timestamp_millis_float,
+  timestamp_nanos,
+  timestamp_nanos_float,
+  timestamp_seconds,
+  timestamp_seconds_float,
+)
 
 __all__ = [
   'TimestampIso',
-  'timestamp_iso',
-  'TimestampSeconds',
-  'timestamp_seconds',
+  'TimestampMicrosFloat',
+  'TimestampMillisFloat',
   'TimestampNanos',
+  'TimestampNanosFloat',
+  'TimestampSeconds',
+  'TimestampSecondsFloat',
+  'timestamp_iso',
+  'timestamp_micros_float',
+  'timestamp_millis_float',
   'timestamp_nanos',
+  'timestamp_nanos_float',
+  'timestamp_seconds',
+  'timestamp_seconds_float',
 ]

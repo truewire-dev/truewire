@@ -11,20 +11,29 @@ Layout, mirroring the Python package one file per spec node:
 - `<router>/<endpoint>.ts`: one endpoint's interfaces, codecs and class.
 - `<router>/index.ts`: a router class delegating to its endpoints; `main.ts` the root.
 - `meta.ts`: one interface per core that declares a `meta` schema.
+- `policy.ts`: `RefusedByPolicy`, when `[policy].refuse` names an endpoint (W15).
+- `proto.ts`: the `spec/proto` sources, when the project has any (ADR 0016).
 - `index.ts`: the package's exports.
 
-What this backend leaves out is reported in `Rendered.skipped` so the CLI can say so: an
-`rpc` endpoint declaring both `http` and `ws` transports is rendered for HTTP only.
+What this backend leaves out is reported in `Rendered.skipped` so the CLI can say so;
+nothing is today. An `rpc` endpoint declaring both `http` and `ws` transports is rendered
+in full: its class takes a `DualEndpoint<Meta>` and its method a `transport` option. An
+endpoint whose spec declares `surface: handwritten` is not rendered, as in Python: the
+project serves it through `[typescript.extras]`, which each router folds in.
 """
 from dataclasses import dataclass, field
 
 from truewire.plan.model import PackagePlan
 from truewire.project import Project
 
-from .endpoint import META_FILE, EndpointModule, render_endpoint, render_stream
+from .endpoint import META_FILE, POLICY_FILE, EndpointModule, render_endpoint, render_stream
+from .grpc import render_grpc
 from .meta import meta_module
+from ..policy import extras_replaced, refusal_problems, refused_functions, typescript_module, typescript_rate
 from .names import pascal_case
 from .printer import BANNER
+from .protos import PROTO_FILE, proto_module
+from ..protos import proto_sources
 from .routers import INDEX_FILE, core_shapes, render_index, render_router, router_file
 from .types import Module, scope_file
 
@@ -48,6 +57,12 @@ def render_package(plan: PackagePlan, project: Project | None = None) -> Rendere
   """Every file of the TypeScript package for `plan`."""
   out = Rendered()
   root_class = root_class_name(plan, project)
+  typescript = project.typescript if project is not None else None
+  problems = refusal_problems(plan, project, handwritten=extras_replaced(typescript.extras if typescript is not None else None))
+  if problems:
+    raise ValueError('; '.join(problems))
+  if refused_functions(plan):
+    out.files[POLICY_FILE] = typescript_module()
 
   for scope, types in plan.schemas.items():
     file = scope_file(scope)
@@ -59,6 +74,9 @@ def render_package(plan: PackagePlan, project: Project | None = None) -> Rendere
   meta = meta_module(plan.cores)
   if meta is not None:
     out.files[META_FILE] = meta
+  protos = proto_module(proto_sources(project))
+  if protos is not None:
+    out.files[PROTO_FILE] = protos
 
   class_by_child = {
     (*router.path, child.name): child.class_
@@ -66,14 +84,18 @@ def render_package(plan: PackagePlan, project: Project | None = None) -> Rendere
   }
   endpoints: dict[str, EndpointModule] = {}
   for endpoint in plan.endpoints:
+    if endpoint.surface == 'handwritten':
+      continue
     class_name = class_by_child.get(tuple(endpoint.path), pascal_case(endpoint.path[-1]))
-    if endpoint.kind == 'stream':
+    if endpoint.kind == 'grpc':
+      try:
+        rendered = render_grpc(plan, endpoint, class_name=class_name)
+      except ValueError as exc:
+        out.skipped.append(str(exc))
+        continue
+    elif endpoint.kind == 'stream':
       rendered = render_stream(plan, endpoint, class_name=class_name)
     else:
-      if 'http' in endpoint.transports and 'ws' in endpoint.transports:
-        out.skipped.append(
-          f'{endpoint.function}: an rpc endpoint with both transports is generated for HTTP only'
-        )
       rendered = render_endpoint(plan, endpoint, class_name=class_name)
     endpoints[endpoint.function] = rendered
     out.files[rendered.file] = rendered.source
@@ -83,13 +105,19 @@ def render_package(plan: PackagePlan, project: Project | None = None) -> Rendere
     for router in plan.routers
   }
   shapes = core_shapes(plan, endpoints)
+  extras = dict((project.typescript.extras or {}) if project is not None and project.typescript is not None else {})
+  unknown = sorted(set(extras) - {'.'.join(router.path) for router in plan.routers})
+  if unknown:
+    raise ValueError(f'[typescript.extras] names no router node: {", ".join(repr(node) for node in unknown)}')
   for router in plan.routers:
     out.files[router_file(router.path)] = render_router(
       plan, router, class_name=routers[tuple(router.path)], endpoints=endpoints, routers=routers,
-      shapes=shapes,
+      shapes=shapes, extras=extras.get('.'.join(router.path), []),
+      policy=None if router.path else (typescript_rate(project), project is not None and project.policy.retry),
     )
   out.files[INDEX_FILE] = render_index(
     plan, root_class=root_class, has_meta=meta is not None, root_composite=shapes[()].composite,
+    has_policy=POLICY_FILE in out.files,
   )
   return out
 

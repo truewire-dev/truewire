@@ -1,0 +1,56 @@
+{
+  "meta": {},
+  "spec": {
+    "kind": "rpc",
+    "transports": ["http"],
+    "path": "/instruments",
+    "method": "GET",
+    "description": "Instruments of one category, one payload shape per category, by cursor.",
+    "request": {
+      "title": "InstrumentsRequest",
+      "type": "object",
+      "properties": {
+        "category": {"type": "string"},
+        "cursor": {"type": "string"},
+        "limit": {"type": "integer"}
+      },
+      "required": ["category"]
+    },
+    "response": {
+      "anyOf": [
+        {
+          "title": "SpotPage",
+          "type": "object",
+          "properties": {
+            "list": {"type": "array", "items": {"title": "SpotRow", "type": "object", "properties": {"symbol": {"type": "string"}}, "required": ["symbol"]}}
+          },
+          "required": ["list"]
+        },
+        {
+          "title": "ContractPage",
+          "type": "object",
+          "properties": {
+            "list": {"type": "array", "items": {"title": "ContractRow", "type": "object", "properties": {"symbol": {"type": "string"}, "leverage": {"type": "string"}}, "required": ["symbol", "leverage"]}},
+            "nextPageCursor": {"type": "string"}
+          },
+          "required": ["list", "nextPageCursor"]
+        },
+        {
+          "title": "OptionPage",
+          "type": "object",
+          "properties": {
+            "list": {"type": "array", "items": {"title": "OptionRow", "type": "object", "properties": {"symbol": {"type": "string"}, "strike": {"type": "string"}}, "required": ["symbol", "strike"]}},
+            "nextPageCursor": {"type": ["string", "null"]}
+          },
+          "required": ["list"]
+        }
+      ]
+    }
+  },
+  "pagination": {
+    "strategy": "token",
+    "cursor": {"parameter": "cursor", "from": "nextPageCursor"},
+    "size": {"parameter": "limit"},
+    "done": {"kind": "absent_cursor", "rows": "list"}
+  }
+}

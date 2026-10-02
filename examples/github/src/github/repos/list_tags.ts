@@ -30,6 +30,7 @@ export interface Tag {
   zipball_url?: string
   /** Tar archive of the tagged tree. */
   tarball_url?: string
+  /** Tagged commit. */
   commit: CommitRef
   /** GraphQL node id. */
   node_id?: string
@@ -68,7 +69,7 @@ export class ListTags {
     const next = async (page: number): Promise<[Tag[], number | null]> => {
       const response = await this.listTags({ ...request, page }, options)
       const rows = response
-      if (rows.length === 0 || rows.length < (request.per_page ?? 30)) return [rows, null]
+      if (rows.length === 0 || rows.length < Math.min((request.per_page ?? 30), 100)) return [rows, null]
       return [rows, page + 1]
     }
     return new PaginatedResponse(1, next)

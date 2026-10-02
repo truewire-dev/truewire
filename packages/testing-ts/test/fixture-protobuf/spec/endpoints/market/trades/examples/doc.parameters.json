@@ -1,0 +1,13 @@
+{
+  "description": "Docs-derived aggregate trade subscription for BTCUSDT at 100ms cadence.",
+  "parameters": {
+    "aggregation": "100ms",
+    "symbol": "BTCUSDT"
+  },
+  "payload": {
+    "method": "SUBSCRIPTION",
+    "params": [
+      "spot@public.aggre.deals.v3.api.pb@100ms@BTCUSDT"
+    ]
+  }
+}

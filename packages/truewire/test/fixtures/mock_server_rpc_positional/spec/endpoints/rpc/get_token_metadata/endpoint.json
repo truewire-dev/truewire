@@ -1,0 +1,21 @@
+{
+  "meta": {},
+  "function": "acme.get_token_metadata",
+  "spec": {
+    "kind": "rpc",
+    "transports": ["http"],
+    "path": "acme_getTokenMetadata",
+    "method": "POST",
+    "request": {
+      "title": "GetTokenMetadataRequest",
+      "type": "object",
+      "properties": {
+        "contractAddress": {"type": "string"}
+      },
+      "required": ["contractAddress"]
+    },
+    "response": {"type": "object"},
+    "description": "One property sent as the sole positional argument, unwrapped: `[contractAddress]`."
+  },
+  "envelope": {"payload": "result", "correlate": "id", "positional": ["contractAddress"]}
+}

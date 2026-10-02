@@ -4,7 +4,13 @@ name: Release @truewire/core
 # packages/core-ts/package.json is not on npm yet, this builds, publishes through npm
 # trusted publishing (which mints its own short-lived credential from this job's OIDC
 # token and attests provenance), tags `core-ts-v<version>` and creates the GitHub release.
+#
+# Also runnable by hand, so one release pull request can carry every package and the
+# workflows are dispatched in dependency order. The version in
+# `packages/core-ts/package.json` is the single source either way, and an already-published
+# version is a no-op.
 on:
+  workflow_dispatch:
   pull_request:
     types: [closed]
     branches: [main]
@@ -16,7 +22,7 @@ permissions:
 
 jobs:
   check:
-    if: github.event.pull_request.merged == true && github.head_ref == 'release/core-ts'
+    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.merged == true && github.head_ref == 'release/core-ts')
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}

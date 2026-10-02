@@ -28,6 +28,7 @@ class Repository(TypedDict):
   private: bool
   """Whether the repository is private."""
   owner: SimpleUser
+  """Owning account."""
   html_url: str
   """Web page of the repository."""
   description: NotRequired[str | None]

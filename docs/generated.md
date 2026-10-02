@@ -610,7 +610,7 @@ class Endpoint:
 
 This is the only place that knows how to reach GitHub: the media type header, the API version, the bearer token, the placeholder filling, the query encoding, and which statuses become which errors. The generated code never imports it in TypeScript; it names an interface and receives an object. In Python, `truewire.toml` says which class each generated class extends (`[python.cores.default] base = "github.core:Endpoint"`, `[python.cores.root] base = "github.core:ClientBase"`), and the generator never imports your package to find out (ADR 0011). Validation happens here too: the core reads the per-call `validate`, falls back to its own default, and runs the runtime's validator over the raw bytes against the type the generated call passed.
 
-Ownership is explicit. `.truewire/python-files.json` lists the ten files the generator wrote; `core/` is not among them, so regeneration never touches it. `truewire init` scaffolds this core for a new project, and the example's differs from the scaffold in two places: the `headers` method and the default `base_url`.
+Ownership is explicit. `.truewire/codegen/python.json`, committed with the example, lists the eleven files the generator wrote; `core/` is not among them, so regeneration never touches it. `truewire init` scaffolds this core for a new project, and the example's differs from the scaffold in two places: the `headers` method and the default `base_url`.
 
 ## One shared record
 

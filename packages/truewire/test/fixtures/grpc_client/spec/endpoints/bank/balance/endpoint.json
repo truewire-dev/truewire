@@ -1,0 +1,15 @@
+{
+  "meta": {
+    "public": true
+  },
+  "docs": "https://docs.cosmos.network/main/build/modules/bank",
+  "spec": {
+    "kind": "grpc",
+    "service": "demo.bank.v1.Query",
+    "rpc": "Balance",
+    "request": "demo.bank.v1.QueryBalanceRequest",
+    "response": "demo.bank.v1.QueryBalanceResponse",
+    "proto": "demo/bank/v1/query.proto",
+    "description": "Query one denomination's balance of an address."
+  }
+}

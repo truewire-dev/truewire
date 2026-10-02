@@ -1,0 +1,8 @@
+[
+  {
+    "content_type": "application/x-protobuf",
+    "encoding": "base64",
+    "data": "Ci9zcG90QHB1YmxpYy5hZ2dyZS5kZWFscy52My5hcGkucGJAMTAwbXNAQlRDVVNEVNITSgofCgg5MzIyMC4wMBIKMC4wNDQzODI0MxgCILup2dDEMhInc3BvdEBwdWJsaWMuYWdncmUuZGVhbHMudjMuYXBpLnBiQDEwMG1zGgdCVENVU0RUMLyp2dDEMg==",
+    "description": "Docs-derived aggregate trade update encoded as a PushDataV3ApiWrapper protobuf frame."
+  }
+]

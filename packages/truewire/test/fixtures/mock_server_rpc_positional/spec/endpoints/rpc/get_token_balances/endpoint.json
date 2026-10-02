@@ -1,0 +1,28 @@
+{
+  "meta": {},
+  "function": "acme.get_token_balances",
+  "spec": {
+    "kind": "rpc",
+    "transports": ["http"],
+    "path": "acme_getTokenBalances",
+    "method": "POST",
+    "request": {
+      "title": "GetTokenBalancesRequest",
+      "type": "object",
+      "properties": {
+        "address": {"type": "string"},
+        "tokenSpec": {"type": "string"},
+        "pageKey": {"type": "string"},
+        "maxCount": {"type": "integer"}
+      },
+      "required": ["address"]
+    },
+    "response": {"type": "object"},
+    "description": "Positional `[address, tokenSpec, {pageKey?, maxCount?}?]`: the trailing options object is folded and omitted when empty."
+  },
+  "envelope": {
+    "payload": "result",
+    "correlate": "id",
+    "positional": ["address", "tokenSpec", {"fold": ["pageKey", "maxCount"]}]
+  }
+}

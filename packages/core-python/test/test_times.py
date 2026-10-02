@@ -252,3 +252,14 @@ class TestParseAcceptsAlreadyParsedValues:
     from truewire_core.types import DateIso
     with pytest.raises(ValidationError, match='no time of day'):
       TypeAdapter(DateIso).validate_python(datetime(2024, 1, 1, 13, 0))
+
+
+def test_epoch_seconds_parse_keeps_the_fraction():
+  """A fractional epoch keeps its sub-second part instead of truncating through `int()`."""
+  converter = EpochConverter.seconds(tz=timezone.utc)
+  parsed = converter.parse(1786600000.1234)
+  assert parsed == datetime(2026, 8, 13, 5, 46, 40, 123400, tzinfo=timezone.utc)
+  assert converter.parse('1786600000.5') == datetime(2026, 8, 13, 5, 46, 40, 500000, tzinfo=timezone.utc)
+  assert converter.parse(1786600000) == datetime(2026, 8, 13, 5, 46, 40, tzinfo=timezone.utc)
+  with pytest.raises(ValueError):
+    converter.parse('not-a-number')

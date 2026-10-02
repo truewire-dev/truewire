@@ -1,0 +1,66 @@
+{
+  "meta": {},
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/withdrawals",
+    "method": "GET",
+    "description": "Withdrawals by row offset, ended by a total.",
+    "request": {
+      "title": "WithdrawalsRequest",
+      "type": "object",
+      "properties": {
+        "from": {
+          "type": "integer"
+        },
+        "count": {
+          "type": "integer"
+        }
+      }
+    },
+    "response": {
+      "title": "Withdrawals",
+      "type": "object",
+      "properties": {
+        "total": {
+          "type": "integer"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "title": "Withdrawal",
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id"
+            ]
+          }
+        }
+      },
+      "required": [
+        "items"
+      ]
+    }
+  },
+  "pagination": {
+    "strategy": "offset",
+    "offset": {
+      "parameter": "from"
+    },
+    "size": {
+      "parameter": "count"
+    },
+    "done": {
+      "kind": "total",
+      "path": "total",
+      "rows": "items",
+      "counts": "items"
+    }
+  }
+}

@@ -100,6 +100,10 @@ class Imports:
     """`import * as alias from specifier`."""
     self._namespaces[specifier] = alias
 
+  def bound(self) -> set[str]:
+    """Every name the imports bind in the module's scope so far."""
+    return {name for names in self._names.values() for name in names} | set(self._namespaces.values())
+
   def render(self) -> list[str]:
     lines: list[str] = []
     for specifier in sorted(set(self._names) | set(self._namespaces), key=_import_order):

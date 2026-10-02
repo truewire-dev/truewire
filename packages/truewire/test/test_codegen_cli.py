@@ -4,6 +4,8 @@ from pathlib import Path
 from types import SimpleNamespace
 import importlib
 import json
+import shutil
+import subprocess
 import sys
 
 import pytest
@@ -397,8 +399,8 @@ def test_check_reports_an_owned_file_whose_content_differs_from_the_plan(
 def test_check_without_a_manifest_takes_the_plan_as_the_owned_files(
   tmp_path: Path, monkeypatch, capsys,
 ):
-  """A fresh clone has no `.truewire/` (gitignored); `--check` still verifies existence
-  and content, saying the plan stood in, and never writes the manifest itself."""
+  """A clone of a project that never committed its manifest; `--check` still verifies
+  existence and content, saying the plan stood in, and never writes the manifest itself."""
   client_root = write_backend_project(tmp_path)
   output_root = client_root / 'pkg' / 'src' / 'venue'
   monkeypatch.setattr(codegen_module, 'format_generated_files', lambda *a, **k: None)
@@ -410,7 +412,7 @@ def test_check_without_a_manifest_takes_the_plan_as_the_owned_files(
   codegen_module.generate('python', project=str(client_root), verbose=0, check=True)
   out = capsys.readouterr().out
   assert 'Generated files match the plan for venue (3 files).' in out
-  assert 'No manifest at .truewire/python-files.json; the plan stood in for it' in out
+  assert 'No manifest at .truewire/codegen/python.json; the plan stood in for it' in out
   assert not manifest.exists()
 
   (output_root / 'market' / 'time.py').write_text('class Time:\n  edited = True\n')
@@ -423,6 +425,142 @@ def test_check_without_a_manifest_takes_the_plan_as_the_owned_files(
   assert '- out of date: market/time.py' in err
   assert 'no longer planned' not in err
   assert not manifest.exists()
+
+
+def _legacy_manifest_project(tmp_path: Path, monkeypatch) -> tuple[Path, Path, Path, Path]:
+  """A generated backend project whose manifest sits at its pre-W16 path, also owning a
+  `gone.py` the plan no longer emits. Returns the root, output root and both manifests."""
+  client_root = write_backend_project(tmp_path)
+  output_root = client_root / 'pkg' / 'src' / 'venue'
+  monkeypatch.setattr(codegen_module, 'format_generated_files', lambda *a, **k: None)
+  monkeypatch.setattr(codegen_module, 'typecheck_project', lambda project: None)
+  codegen_module.generate('python', project=str(client_root), verbose=0)
+  project = resolve(client_root)
+  manifest, legacy = project.manifest_path('python'), project.legacy_manifest_path('python')
+  owned = codegen_module.load_generated_manifest(manifest) | {Path('gone.py')}
+  codegen_module.write_generated_manifest(legacy, owned)
+  manifest.unlink()
+  manifest.parent.rmdir()
+  (output_root / 'gone.py').write_text('GONE = 1\n')
+  return client_root, output_root, manifest, legacy
+
+
+def test_generate_moves_a_legacy_manifest_and_check_reports_it_stale(
+  tmp_path: Path, monkeypatch, capsys,
+):
+  """W16: `--check` reads the manifest at `.truewire/<language>-files.json` when the new
+  path has none, and reports the old path stale; `generate` moves it to
+  `.truewire/codegen/<language>.json`, saying so, and reconciles against what it recorded."""
+  client_root, output_root, manifest, legacy = _legacy_manifest_project(tmp_path, monkeypatch)
+  capsys.readouterr()
+
+  with pytest.raises(codegen_module.typer.Exit) as raised:
+    codegen_module.generate('python', project=str(client_root), verbose=0, check=True)
+  assert raised.value.exit_code == 1
+  err = capsys.readouterr().err
+  assert (
+    '- stale manifest: .truewire/python-files.json '
+    '(generate moves it to .truewire/codegen/python.json)'
+  ) in err
+  assert '- no longer planned: gone.py' in err
+  assert legacy.is_file() and not manifest.exists()
+  recorded = codegen_module.load_generated_manifest(legacy)
+
+  codegen_module.generate('python', project=str(client_root), verbose=0)
+  out = capsys.readouterr().out
+  moved = 'Moved manifest .truewire/python-files.json to .truewire/codegen/python.json.'
+  assert out.count(moved) == 1
+  assert 'Initialized' not in out
+  assert not legacy.exists()
+  assert codegen_module.load_generated_manifest(manifest) == recorded - {Path('gone.py')}
+  assert not (output_root / 'gone.py').exists()
+
+  codegen_module.generate('python', project=str(client_root), verbose=0, check=True)
+  assert 'Generated files match the plan for venue (3 files).' in capsys.readouterr().out
+
+
+def test_generate_says_the_moved_manifest_is_still_ignored(tmp_path: Path, monkeypatch, capsys):
+  """A project from before W16 keeps the `.truewire/` line an older `init` wrote, which
+  still ignores the manifest `generate` moves into `.truewire/codegen/`; the `Moved` line
+  names the rule and the fix. Once `init` has narrowed the line, it is the plain one."""
+  git = shutil.which('git')
+  if git is None:
+    pytest.skip('git is not installed')
+  client_root, _, manifest, legacy = _legacy_manifest_project(tmp_path, monkeypatch)
+  subprocess.run([git, 'init', '-q'], cwd=client_root, check=True)
+  (client_root / '.gitignore').write_text('*.log\n.truewire/\n')
+  owned = codegen_module.load_generated_manifest(legacy)
+  capsys.readouterr()
+
+  codegen_module.generate('python', project=str(client_root), verbose=0)
+  assert (
+    'Moved manifest .truewire/python-files.json to .truewire/codegen/python.json, but git '
+    'still ignores it (.gitignore:2:.truewire/), so it will not be committed: run '
+    '`truewire init .` to narrow a `.truewire/` line in .gitignore to `.truewire/cache/`.'
+  ) in capsys.readouterr().out
+  assert subprocess.run([git, 'check-ignore', '-q', str(manifest)], cwd=client_root).returncode == 0
+
+  (client_root / '.gitignore').write_text('*.log\n.truewire/cache/\n')
+  manifest.unlink()
+  codegen_module.write_generated_manifest(legacy, owned)
+  codegen_module.generate('python', project=str(client_root), verbose=0)
+  out = capsys.readouterr().out
+  assert 'Moved manifest .truewire/python-files.json to .truewire/codegen/python.json.\n' in out
+  assert 'ignores' not in out
+
+
+def test_generate_drops_a_legacy_manifest_beside_the_new_one(
+  tmp_path: Path, monkeypatch, capsys,
+):
+  """When both manifests exist the new one is the manifest: `--check` reports the old one
+  stale and `generate` removes it without reading it."""
+  client_root, output_root, manifest, legacy = _legacy_manifest_project(tmp_path, monkeypatch)
+  (output_root / 'gone.py').unlink()
+  manifest.parent.mkdir()
+  owned = codegen_module.load_generated_manifest(legacy) - {Path('gone.py')}
+  codegen_module.write_generated_manifest(manifest, owned)
+  capsys.readouterr()
+
+  with pytest.raises(codegen_module.typer.Exit):
+    codegen_module.generate('python', project=str(client_root), verbose=0, check=True)
+  err = capsys.readouterr().err
+  assert '- stale manifest: .truewire/python-files.json (generate removes it)' in err
+  assert 'gone.py' not in err
+
+  codegen_module.generate('python', project=str(client_root), verbose=0)
+  out = capsys.readouterr().out
+  assert (
+    'Removed stale manifest .truewire/python-files.json; '
+    '.truewire/codegen/python.json is the manifest.'
+  ) in out
+  assert not legacy.exists() and manifest.is_file()
+
+
+def test_generate_leaves_a_legacy_manifest_of_another_version_in_place(
+  tmp_path: Path, monkeypatch, capsys,
+):
+  """An old manifest `generate` cannot read stops the run before anything moves."""
+  client_root, _, manifest, legacy = _legacy_manifest_project(tmp_path, monkeypatch)
+  data = json.loads(legacy.read_text())
+  legacy.write_text(json.dumps({**data, 'version': 99}))
+  capsys.readouterr()
+  with pytest.raises(codegen_module.typer.Exit):
+    codegen_module.generate('python', project=str(client_root), verbose=0)
+  assert 'Unsupported codegen manifest version' in capsys.readouterr().err
+  assert json.loads(legacy.read_text())['version'] == 99
+  assert not manifest.exists()
+
+
+def test_delete_reads_a_legacy_manifest(tmp_path: Path, monkeypatch, capsys):
+  """`--delete` before any `generate` has moved the manifest still finds what it owns."""
+  client_root, output_root, manifest, legacy = _legacy_manifest_project(tmp_path, monkeypatch)
+  capsys.readouterr()
+
+  codegen_module.generate('python', project=str(client_root), verbose=0, delete=True)
+  out = capsys.readouterr().out
+  assert 'Deleted 4 generated files for venue; removed .truewire/python-files.json.' in out
+  assert not legacy.exists() and not manifest.exists()
+  assert not (output_root / 'main.py').exists() and not (output_root / 'gone.py').exists()
 
 
 def test_check_renders_the_plan_the_way_generate_writes_it(tmp_path: Path, monkeypatch):
@@ -1073,3 +1211,74 @@ def test_codegen_rejects_a_directory_that_is_both_a_leaf_and_a_router(
   # Neither file was ever written -- the raise fires before either is planned.
   assert not (output_root / 'wallet.py').exists()
   assert not (output_root / 'wallet').exists()
+
+
+def _repo_root_rule(repo: Path, client: Path):
+  (repo / '.gitignore').write_text('.truewire/\n')
+
+
+def _info_exclude(repo: Path, client: Path):
+  (repo / '.git' / 'info' / 'exclude').write_text('.truewire\n')
+
+
+def _unnarrowable_own_line(repo: Path, client: Path):
+  (client / '.gitignore').write_text('.truewire/*\n')
+
+
+@pytest.mark.skipif(shutil.which('git') is None, reason='git is not installed')
+@pytest.mark.parametrize('ignore', [_repo_root_rule, _info_exclude, _unnarrowable_own_line])
+def test_following_the_moved_manifest_advice_unignores_it(
+  tmp_path: Path, monkeypatch, capsys, ignore,
+):
+  """Finding 1: the workspace is `venue/` inside a repository. When the `Moved manifest`
+  line tells the user to run `truewire init .`, doing so must leave the manifest committable;
+  otherwise the line must not name `truewire init .`."""
+  client_root, _, manifest, _ = _legacy_manifest_project(tmp_path, monkeypatch)
+  subprocess.run([shutil.which('git'), 'init', '-q'], cwd=tmp_path, check=True)
+  ignore(tmp_path, client_root)
+  capsys.readouterr()
+  codegen_module.generate('python', project=str(client_root), verbose=0)
+  out = capsys.readouterr().out
+  assert subprocess.run([shutil.which('git'), 'check-ignore', '-q', str(manifest)], cwd=client_root).returncode == 0
+  assert 'change the rule in ' in out
+  assert 'truewire init .' not in out
+
+
+
+@pytest.mark.skipif(shutil.which('git') is None, reason='git is not installed')
+def test_moved_manifest_names_the_rule_file_as_seen_from_the_workspace(
+  tmp_path: Path, monkeypatch, capsys,
+):
+  """Finding 1: git prints the rule's source relative to the repository top level, so a rule
+  in the repository's `.gitignore` reads as the workspace's own `.gitignore:1`."""
+  client_root, _, _, _ = _legacy_manifest_project(tmp_path, monkeypatch)
+  subprocess.run([shutil.which('git'), 'init', '-q'], cwd=tmp_path, check=True)
+  (tmp_path / '.gitignore').write_text('.truewire/\n')
+  (client_root / '.gitignore').write_text('*.log\n')
+  capsys.readouterr()
+  codegen_module.generate('python', project=str(client_root), verbose=0)
+  out = capsys.readouterr().out
+  assert '(../.gitignore:1:.truewire/)' in out, out
+  assert 'change the rule in ../.gitignore at line 1' in out
+
+
+@pytest.mark.skipif(shutil.which('git') is None, reason='git is not installed')
+@pytest.mark.parametrize('own', [False, True])
+def test_moved_manifest_advice_for_absolute_and_nested_own_sources(tmp_path: Path, monkeypatch, capsys, own: bool):
+  client_root, _, _, _ = _legacy_manifest_project(tmp_path, monkeypatch)
+  git = shutil.which('git')
+  subprocess.run([git, 'init', '-q'], cwd=tmp_path, check=True)
+  source = client_root / '.gitignore' if own else tmp_path / 'global:ignore rules'
+  source.write_text('.truewire/\n')
+  if not own:
+    subprocess.run([git, 'config', 'core.excludesFile', str(source)], cwd=tmp_path, check=True)
+  capsys.readouterr()
+  codegen_module.generate('python', project=str(client_root), verbose=0)
+  out = capsys.readouterr().out
+  if own:
+    assert '(.gitignore:1:.truewire/)' in out
+    assert 'run `truewire init .`' in out
+  else:
+    assert f'({source}:1:.truewire/)' in out
+    assert f'change the rule in {source} at line 1' in out
+    assert 'truewire init .' not in out

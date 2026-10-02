@@ -58,7 +58,7 @@ def surface(
   project: str | None = PROJECT_OPTION,
   path: str | None = PATH_OPTION,
   verbose: bool = typer.Option(False, '--verbose', '-v'),
-  language: str = typer.Option('python', '--language', help='Codegen backend to resolve the layout with.'),
+  language: str = typer.Option('python', '--language', help='Codegen backend to resolve the layout with: `python`, `typescript`, `go` or `rust`.'),
 ):
   """Check that every in-scope spec produces something a caller can actually call.
 

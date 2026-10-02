@@ -1,0 +1,33 @@
+{
+  "meta": {},
+  "spec": {
+    "kind": "rpc",
+    "transports": ["http"],
+    "path": "/conversions",
+    "method": "GET",
+    "description": "Conversions by page number, with the page size and the page count sent as strings.",
+    "request": {
+      "title": "ConversionsRequest",
+      "type": "object",
+      "properties": {
+        "cursor": {"type": "integer"},
+        "size": {"type": "string"}
+      }
+    },
+    "response": {
+      "title": "Conversions",
+      "type": "object",
+      "properties": {
+        "lastPage": {"type": "string"},
+        "records": {"type": "array", "items": {"title": "Conversion", "type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]}}
+      },
+      "required": ["lastPage", "records"]
+    }
+  },
+  "pagination": {
+    "strategy": "page",
+    "index": {"parameter": "cursor", "start": 1},
+    "size": {"parameter": "size"},
+    "done": {"kind": "total", "path": "lastPage", "counts": "pages", "rows": "records"}
+  }
+}

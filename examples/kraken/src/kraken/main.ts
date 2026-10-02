@@ -18,6 +18,10 @@ export interface KrakenCore {
  * @see https://docs.kraken.com/api-reference/
  */
 export class Kraken {
+  /** `[policy].rate`: requests per second the core's `HttpClient` paces to; `undefined` for none. */
+  static readonly RATE: number | undefined = undefined
+  /** `[policy].retry`: whether the core's `HttpClient` retries on its own. */
+  static readonly RETRY: boolean = false
   /**
    * Kraken's Spot REST API: account data, funding, Earn, subaccounts, market data, and
    * trading, authenticated (where required) with the HMAC-SHA512 API-Key/API-Sign headers.

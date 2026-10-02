@@ -1,16 +1,23 @@
 name: CI
 
+# The fast gate only: lint and the Python unit tests. Everything heavier (the examples in four
+# languages, the Go, TypeScript and Rust runtimes, the clients) runs on the team's VM as the
+# `truewire/verify` commit status, which merges require.
 on:
   push:
     branches: [main]
   pull_request:
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python: ['3.11', '3.12']
+        python: ['3.11']
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
@@ -19,127 +26,8 @@ jobs:
           uv venv --python ${{ matrix.python }} .venv
           uv pip install --python .venv/bin/python -e packages/core-python[dev] -e 'packages/truewire[dev]'
       - name: Lint
-        run: .venv/bin/ruff check --config packages/truewire/src/truewire/resources/ruff.toml packages/truewire/src/truewire/cli packages/truewire/src/truewire/project.py packages/truewire/src/truewire/openapi.py packages/core-python/src
+        run: .venv/bin/ruff check --config packages/truewire/src/truewire/resources/ruff.toml packages/truewire/src/truewire/cli packages/truewire/src/truewire/score packages/truewire/src/truewire/project.py packages/truewire/src/truewire/openapi.py packages/core-python/src
       - name: Runtime tests
         run: .venv/bin/python -m pytest packages/core-python/test -q
       - name: Toolchain tests
         run: .venv/bin/python -m pytest packages/truewire/test -q
-
-  examples:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        example: [kraken, github]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
-      - name: Install
-        run: |
-          uv venv --python 3.12 .venv
-          uv pip install --python .venv/bin/python -e packages/core-python[dev] -e 'packages/truewire[dev]'
-      - name: Check
-        working-directory: examples/${{ matrix.example }}
-        run: ../../.venv/bin/truewire check
-      - name: Standards
-        working-directory: examples/${{ matrix.example }}
-        run: ../../.venv/bin/truewire standards
-      - name: Generated code is current
-        # A fresh checkout has no .truewire/ manifest; --check takes the plan as the owned
-        # file list and compares each file's content with what the plan renders.
-        working-directory: examples/${{ matrix.example }}
-        run: ../../.venv/bin/truewire generate python --check
-      - name: Test
-        working-directory: examples/${{ matrix.example }}
-        run: PYTHONPATH=src ../../.venv/bin/python -m pytest -q
-
-  examples-ts:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        example: [kraken, github]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Install the toolchain
-        run: |
-          uv venv --python 3.12 .venv
-          uv pip install --python .venv/bin/python -e packages/core-python[dev] -e 'packages/truewire[dev]'
-      - name: Build @truewire/core
-        working-directory: packages/core-ts
-        run: |
-          yarn install --frozen-lockfile
-          yarn build
-      - name: Install the example
-        working-directory: examples/${{ matrix.example }}
-        run: yarn install --frozen-lockfile
-      - name: Generated code is current
-        # A fresh checkout has no .truewire/ manifest; --check takes the plan as the owned
-        # file list and compares each file's content with what the plan renders.
-        working-directory: examples/${{ matrix.example }}
-        run: ../../.venv/bin/truewire generate typescript --check
-      - name: Type-check
-        working-directory: examples/${{ matrix.example }}
-        run: yarn typecheck
-      - name: Test
-        working-directory: examples/${{ matrix.example }}
-        run: yarn test
-
-  examples-rust:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
-      - name: Install the toolchain
-        run: |
-          uv venv --python 3.12 .venv
-          uv pip install --python .venv/bin/python -e packages/core-python[dev] -e 'packages/truewire[dev]'
-      - name: Generated code is current
-        # A fresh checkout has no .truewire/ manifest; --check takes the plan as the owned
-        # file list and compares each file's content with what the plan renders.
-        working-directory: examples/github
-        run: ../../.venv/bin/truewire generate rust --check
-      - name: Format
-        working-directory: examples/github
-        run: cargo fmt --check
-      - name: Lint
-        working-directory: examples/github
-        run: cargo clippy --all-targets -- -D warnings
-      - name: Test
-        # The tests spawn `truewire mock` from ../../.venv/bin/truewire.
-        working-directory: examples/github
-        run: cargo test
-
-  runtime-ts:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: packages/core-ts
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - run: yarn install --frozen-lockfile
-      - run: yarn typecheck
-      - run: yarn test
-      - run: yarn build
-
-  runtime-rust:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: crates/truewire-core
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
-      - run: cargo fmt --check
-      - run: cargo clippy -- -D warnings
-      - run: cargo test

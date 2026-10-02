@@ -1,0 +1,7 @@
+{
+  "description": "Login frame recorded with a stale timestamp and signature.",
+  "payload": {
+    "op": "login",
+    "args": [{"apiKey": "FAKE-KEY", "timestamp": "1700000000", "sign": "stale-signature"}]
+  }
+}

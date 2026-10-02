@@ -74,12 +74,15 @@ class GitCommit(TypedDict):
   """The git commit object behind a repository commit."""
 
   author: GitActor
+  """Who wrote the commit."""
   committer: GitActor
+  """Who committed it."""
   message: str
   """Full commit message."""
   comment_count: NotRequired[int]
   """Number of comments on the commit."""
   tree: CommitRef
+  """Root tree of the commit."""
   url: NotRequired[str]
   """API URL of the git commit object."""
 
@@ -94,6 +97,7 @@ class Commit(TypedDict):
   html_url: NotRequired[str]
   """Web page of the commit."""
   commit: GitCommit
+  """The underlying git commit."""
   author: NotRequired[SimpleUser | None]
   """GitHub account matched to the author, when known."""
   committer: NotRequired[SimpleUser | None]

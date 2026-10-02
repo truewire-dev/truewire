@@ -10,33 +10,69 @@ needs. A backend renders the result; it never recomputes it.
 The type pipeline lives under `truewire.generation.python.types` for historical reasons;
 since the `Scalar` node landed it emits no Python name, and the plan reuses it as is.
 """
+import re
 from pathlib import Path
-from typing_extensions import Any, Collection, Iterable, Mapping
+from typing_extensions import Any, Collection, Iterable, Literal, Mapping
 
 from truewire.codegen.layout import (
-  class_name as neutral_class_name, discover_schemas_files, load_schema_file, router_nodes,
-  schemas_scope,
+  class_name as neutral_class_name, discover_schemas_files, group_class_name, load_schema_file,
+  router_nodes, schemas_scope,
 )
 from truewire.generation.python.types import Normalizer, Parser, disambiguate
 from truewire.generation.schema import Reference, Schema
 from truewire.generation.types import Translate, generation_order
 from truewire.generation.util import pascal_case
 from truewire.project import Project, resolve
+from truewire.grpc.proto import ProtoField, ProtoMessage, ProtoTree
 from truewire.spec import (
-  Endpoint, Pagination, RpcEndpointSpec, RpcEnvelopeSpec, StreamEndpointSpec,
-  StreamEnvelopeSpec, endpoint_specs, load_endpoint, load_router, select_schema,
+  Endpoint, GrpcEndpointSpec, Pagination, RpcEndpointSpec, RpcEnvelopeSpec, StreamEndpointSpec,
+  StreamEnvelopeSpec, endpoint_specs, last_row_field, load_endpoint, load_router, select_schema,
 )
 from truewire.spec.request import PLACEHOLDER
 
 from .model import (
-  CorePlan, DocsPlan, EndpointPlan, NewParamPlan, PackagePlan, PaginationPlan, RequestFieldPlan,
+  CorePlan, DocsPlan, EndpointPlan, GrpcPagingPlan, GrpcPlan, NewParamPlan, ProtoFieldPlan, ProtoTypePlan, PackagePlan, PaginationPlan, RequestFieldPlan,
   RequestPlan, ResponsePlan, RouterChildPlan, RouterDocPlan, RouterPlan, StreamPlan, TypeSet,
   WirePlan,
 )
 from .types import Type, has_zero_value, is_null, strip_null
 
+PROTO_SCALAR_TYPES: Mapping[str, Type] = {
+  **{name: {'type': 'scalar', 'base': 'integer'} for name in (
+    'int32', 'int64', 'uint32', 'uint64', 'sint32', 'sint64', 'fixed32', 'fixed64', 'sfixed32', 'sfixed64',
+  )},
+  'double': {'type': 'scalar', 'base': 'number'}, 'float': {'type': 'scalar', 'base': 'number'},
+  'bool': {'type': 'scalar', 'base': 'boolean'}, 'string': {'type': 'scalar', 'base': 'string'},
+  'bytes': {'type': 'scalar', 'base': 'string', 'format': 'bytes'},
+}
+"""A proto scalar as the plan's type tree spells a walk's state: every integer width is an
+`integer`, `bytes` a base64 `string` (its proto JSON form)."""
+
+WELL_KNOWN_TYPES: Mapping[str, tuple[str, str]] = {
+  'google.protobuf.Any': ('message', 'google/protobuf/any.proto'),
+  'google.protobuf.Duration': ('message', 'google/protobuf/duration.proto'),
+  'google.protobuf.Timestamp': ('message', 'google/protobuf/timestamp.proto'),
+  'google.protobuf.Empty': ('message', 'google/protobuf/empty.proto'),
+  'google.protobuf.FieldMask': ('message', 'google/protobuf/field_mask.proto'),
+  'google.protobuf.Struct': ('message', 'google/protobuf/struct.proto'),
+  'google.protobuf.Value': ('message', 'google/protobuf/struct.proto'),
+  'google.protobuf.ListValue': ('message', 'google/protobuf/struct.proto'),
+  'google.protobuf.NullValue': ('enum', 'google/protobuf/struct.proto'),
+  **{f'google.protobuf.{name}': ('message', 'google/protobuf/wrappers.proto') for name in (
+    'DoubleValue', 'FloatValue', 'Int64Value', 'UInt64Value', 'Int32Value', 'UInt32Value',
+    'BoolValue', 'StringValue', 'BytesValue',
+  )},
+}
+"""The well-known types a `.proto` tree imports without holding: their kind and file."""
+
 _REF_DEPTH = 16
 """How many `Ref` hops a row-type walk follows before giving up on a cycle."""
+
+_ROW_SEGMENT = re.compile(r'\.?(?:\[(-?\d+)\]|([^.\[\]]+))')
+"""One segment at the start of a row-relative field path: `[0]` (the index) or `.t`/`t` (the key)."""
+
+INT64_MAX = 2**63 - 1
+"""The largest page-size cap a plan carries: the widest integer Rust and Go render a size as."""
 
 
 def needs_cast(t: Type) -> bool:
@@ -61,15 +97,19 @@ def is_nullable_last(t: Type) -> bool:
   return t['type'] == 'union' and bool(t['variants']) and is_null(t['variants'][-1]['type'])
 
 
+def _surface(endpoint: Endpoint) -> Literal['handwritten'] | None:
+  """`handwritten` when the endpoint declares its callable is written by hand."""
+  return 'handwritten' if endpoint.surface is not None and endpoint.surface.kind == 'handwritten' else None
+
+
 def driver_parameter(pagination: Pagination) -> str:
   """The wire name of the request parameter a paginated walk advances."""
   if pagination.strategy == 'page':
     return pagination.index.parameter
-  if pagination.strategy == 'token' or pagination.strategy == 'seek':
+  if pagination.strategy == 'token':
     return pagination.cursor.parameter
-  if pagination.strategy == 'window':
-    bound = pagination.bound
-    return bound.end if pagination.order == 'descending' else bound.start
+  if pagination.strategy == 'seek':
+    return pagination.moving
   return pagination.offset.parameter
 
 
@@ -274,6 +314,36 @@ class PlanBuilder:
       return self._walk(field['type'], segments[1:], types) if field is not None else None
     return None
 
+  def row_field_type(self, row: Type, field: str, types: TypeSet) -> Type | None:
+    """The type of `field` (a `cursor.field` with its `[-1]` stripped: `.t`, `[0]`,
+    `a.b[1]`) on one row of type `row`, without its `null`; `None` when the tree cannot
+    name it. An index steps into a tuple's position or a homogeneous list's item. A union
+    is walked through its one non-null variant only: two variants could type the field two
+    ways."""
+    resolved = self._deref(row, types)
+    if resolved is None:
+      return None
+    resolved = strip_null(resolved)
+    if resolved['type'] == 'ref':
+      return self.row_field_type(resolved, field, types)
+    match = _ROW_SEGMENT.match(field)
+    if match is None:
+      return None if field else resolved
+    index, name = match[1], match[2]
+    rest = field[match.end():]
+    if index is not None and resolved['type'] == 'tuple':
+      items = resolved['items']
+      at = int(index)
+      if not -len(items) <= at < len(items):
+        return None
+      return self.row_field_type(items[at], rest, types)
+    if index is not None and resolved['type'] == 'list':
+      return self.row_field_type(resolved['item'], rest, types)
+    if name is not None and resolved['type'] == 'record':
+      found = resolved['fields'].get(name)
+      return self.row_field_type(found['type'], rest, types) if found is not None else None
+    return None
+
   def rows_type(self, payload: Type, rows: str, types: TypeSet) -> Type | None:
     """One row's type at `rows` inside `payload` (`''` when the payload is the rows)."""
     segments = (rows.split('/') if '/' in rows else rows.split('.')) if rows else []
@@ -301,18 +371,165 @@ class PlanBuilder:
       return self._rpc(endpoint, spec, path, endpoint_dir)
     if isinstance(spec, StreamEndpointSpec):
       parameters = spec.parameters if spec.parameters is not None else spec.request
-      if parameters is not None or spec.payload is not None:
+      if spec.new_shape:
         return self._stream(endpoint, spec, path, endpoint_dir, parameters)
+    if isinstance(spec, GrpcEndpointSpec):
+      return self._grpc(endpoint, spec, path, endpoint_dir)
     return None, neutral_class_name(path[-1])
 
-  def _class_name(self, segment: str, schemas: Mapping[str, Schema], fixed: Mapping[str, str]) -> str:
+  # -- gRPC ---------------------------------------------------------------------------
+
+  @property
+  def proto_tree(self) -> ProtoTree:
+    """The project's `spec/proto/` tree, read once."""
+    cached = getattr(self, '_proto_tree', None)
+    if cached is None:
+      cached = ProtoTree(self.project.spec_dir / 'proto')
+      self._proto_tree = cached
+    return cached
+
+  def _proto_type(self, name: str, scope: str) -> ProtoTypePlan:
+    tree = self.proto_tree
+    kind, resolved = tree.resolve(name, scope)
+    if kind == 'scalar':
+      return ProtoTypePlan(kind='scalar', name=resolved)
+    if kind in ('message', 'enum'):
+      file = tree.type_file(resolved)
+      package = tree.files[file].package if file is not None else None
+      return ProtoTypePlan(kind=kind, name=resolved, file=file, package=package)  # type: ignore[arg-type]
+    well_known = WELL_KNOWN_TYPES.get(resolved)
+    if well_known is not None:
+      return ProtoTypePlan(kind=well_known[0], name=resolved, file=well_known[1], package='google.protobuf')  # type: ignore[arg-type]
+    return ProtoTypePlan(kind='message', name=resolved)
+
+  def _proto_field(self, message: ProtoMessage, f: ProtoField, optional_scalars: Collection[str] = ()) -> ProtoFieldPlan:
+    from truewire.grpc.proto import json_name
+
+    type_ = self._proto_type(f.type, message.full_name)
+    repeated = f.label == 'repeated'
+    return ProtoFieldPlan(
+      name=f.name, json_name=f.json_name or json_name(f.name), number=f.number, type=type_,
+      repeated=repeated, map_key=f.map_key, oneof=f.oneof, optional=f.label == 'optional',
+      presence=(
+        (type_.kind == 'message' and not repeated) or f.label == 'optional' or f.oneof is not None
+        or f.name in optional_scalars
+      ),
+    )
+
+  def _proto_path(self, message_name: str, dotted: str | None) -> list[ProtoFieldPlan] | None:
+    """A dotted path through `message_name`, one field per hop; `None` when a hop does not
+    resolve, or passes through a repeated field or a non-message before its last segment."""
+    if not dotted:
+      return None
+    hops: list[ProtoFieldPlan] = []
+    current: str | None = message_name
+    segments = dotted.split('.')
+    for index, segment in enumerate(segments):
+      message = self.proto_tree.messages.get(current) if current is not None else None
+      found = message.field(segment) if message is not None else None
+      if message is None or found is None:
+        return None
+      hop = self._proto_field(message, found)
+      hops.append(hop)
+      last = index == len(segments) - 1
+      if not last and (hop.type.kind != 'message' or hop.repeated or hop.map_key is not None):
+        return None
+      current = hop.type.name if hop.type.kind == 'message' else None
+    return hops
+
+  def _grpc(
+    self, endpoint: Endpoint, spec: GrpcEndpointSpec, path: list[str], endpoint_dir: Path,
+  ) -> tuple[EndpointPlan, str]:
+    """A gRPC endpoint's plan (ADR 0017), its proto names resolved against `spec/proto/`.
+    A name the tree does not declare is planned as written (no file, no fields) rather
+    than refused: `truewire check` and the stub build are where a broken tree is reported."""
+    tree = self.proto_tree
+    service = tree.services.get(spec.service)
+    request_message = tree.messages.get(spec.request)
+    package = spec.service.rsplit('.', 1)[0] if '.' in spec.service else ''
+    request_fields = [
+      self._proto_field(request_message, f, spec.optional_scalars) for f in request_message.fields
+    ] if request_message is not None else []
+    grpc = GrpcPlan(
+      service=spec.service, service_file=service.file if service is not None else spec.proto,
+      rpc=spec.rpc, streaming=spec.streaming,
+      request=self._proto_type(spec.request, package), response=self._proto_type(spec.response, package),
+      request_fields=request_fields, optional_scalars=list(spec.optional_scalars),
+    )
+    pagination = None
+    if endpoint.pagination is not None:
+      grpc, pagination = self._grpc_pagination(endpoint.pagination, grpc)
+    plan = EndpointPlan(
+      path=path, kind='grpc', transports=[], surface=_surface(endpoint),
+      wire=WirePlan(path=f'/{spec.service}/{spec.rpc}'),
+      core=self.core_name(endpoint_dir),
+      meta=endpoint.meta if isinstance(endpoint.meta, dict) else {},
+      deprecated=bool(endpoint.deprecated), refused=self.refused(path),
+      request=RequestPlan(shape='message'), response=ResponsePlan(),
+      grpc=grpc, pagination=pagination,
+      docs=DocsPlan(description=spec.description, url=endpoint.docs, notes=list(endpoint.notes or [])),
+    )
+    return plan, neutral_class_name(path[-1])
+
+  def _grpc_pagination(self, pagination: Pagination, grpc: GrpcPlan) -> tuple[GrpcPlan, PaginationPlan]:
+    """The walk over a gRPC call: the same `PaginationPlan` an `rpc` endpoint gets, its
+    paths resolved through the request and response messages into `grpc.paging`."""
+    strategy = pagination.strategy
+    driver = driver_parameter(pagination)
+    done = pagination.done if strategy != 'seek' else None
+    rows = done.rows if done is not None else None
+    request, response = grpc.request.name, grpc.response.name
+    size_path = pagination.size.parameter if getattr(pagination, 'size', None) is not None else None
+    cursor_from = pagination.cursor.from_ if strategy == 'token' else None
+    paging_driver = self._proto_path(request, driver)
+    paging = None
+    if paging_driver is not None:
+      paging = GrpcPagingPlan(
+        driver=paging_driver,
+        size=self._proto_path(request, size_path),
+        cursor=self._proto_path(response, cursor_from),
+        rows=self._proto_path(response, rows),
+        total=self._proto_path(response, getattr(done, 'path', None)) if done is not None and done.kind == 'total' else None,
+      )
+    leaf = paging_driver[-1] if paging_driver else None
+    state_type: Type = {'type': 'scalar', 'base': 'string'}
+    if leaf is not None and leaf.type.kind == 'scalar':
+      state_type = PROTO_SCALAR_TYPES.get(leaf.type.name, state_type)
+    rows_ok = paging is not None and paging.rows is not None and paging.rows[-1].repeated
+    kind = done.kind if done is not None else None
+    walkable = paging is not None and leaf is not None and leaf.type.kind == 'scalar' and not leaf.repeated and (
+      (strategy == 'token' and kind == 'absent_cursor' and paging.cursor is not None)
+      or (strategy == 'token' and kind == 'empty' and rows_ok and paging.cursor is not None)
+      or (strategy == 'page' and kind == 'total' and paging.total is not None and rows_ok)
+      or (strategy == 'page' and kind == 'short_page' and rows_ok and paging.size is not None)
+      or (strategy == 'page' and kind == 'empty' and rows_ok)
+    )
+    walker: Literal['paginated', 'generator', 'none'] = (
+      'paginated' if walkable and rows_ok else 'generator' if walkable else 'none'
+    )
+    plan = PaginationPlan(
+      strategy=strategy, driver=driver, driver_required=False,
+      size=size_path if paging is not None and paging.size is not None else None,
+      start=pagination.index.start if strategy == 'page' else None,
+      done=_dump(done) or {}, rows=rows, cursor_from=cursor_from,
+      state_type=state_type, seedable=True, walker=walker,
+    )
+    return grpc.model_copy(update={'paging': paging}), plan
+
+  def _class_name(
+    self, segment: str, schemas: Mapping[str, Schema], fixed: Mapping[str, str],
+    refs: Iterable[str | None] = (),
+  ) -> str:
     """The endpoint class: PascalCase of the leaf, grown past any record or shared type
-    the module would otherwise shadow, the way every backend names it."""
+    the module would otherwise shadow, the way every backend names it. `refs` are the bare
+    shared references the endpoint returns directly (a response, payload or reply that is
+    only a `$ref`), which the module imports under their own name too."""
     name = neutral_class_name(segment)
-    if not schemas:
+    taken = {fixed.get(ref, ref) for ref in refs if ref is not None}
+    if not schemas and name not in taken:
       return name
-    types, _ = self.type_set(schemas, forbidden=(), fixed=fixed)
-    taken = {id for id, t in types.items() if t['type'] == 'record'}
+    types, _ = self.type_set(schemas, forbidden=(), fixed=fixed) if schemas else ({}, None)
+    taken.update(id for id, t in types.items() if t['type'] == 'record')
     taken.update(self._referenced(types.values(), fixed))
     while name in taken:
       name += 'Endpoint'
@@ -359,7 +576,7 @@ class PlanBuilder:
       schemas['$request'] = request_schema.model_copy(update={'title': None})
     if returned is not None and response_ref is None:
       schemas['$response'] = Schema.model_validate(returned)
-    class_ = self._class_name(path[-1], schemas, fixed)
+    class_ = self._class_name(path[-1], schemas, fixed, refs=(response_ref,))
     types, translations = self.type_set(schemas, forbidden={class_}, fixed=fixed)
     request_id = translations.get('$request')
     response_id = translations.get('$response')
@@ -394,13 +611,13 @@ class PlanBuilder:
         endpoint.pagination, request, request_schema, payload_id, payload_type, types, fixed,
       )
     plan = EndpointPlan(
-      path=path, kind='rpc', transports=list(spec.transports),
+      path=path, kind='rpc', transports=list(spec.transports), surface=_surface(endpoint),
       wire=WirePlan(
         path=spec.path, method=spec.method, placeholders=PLACEHOLDER.findall(spec.path),
       ),
       core=self.core_name(endpoint_dir),
       meta=endpoint.meta if isinstance(endpoint.meta, dict) else {},
-      deprecated=bool(endpoint.deprecated),
+      deprecated=bool(endpoint.deprecated), refused=self.refused(path),
       request=request, response=response, pagination=pagination,
       types=types, wire_types=wire_types,
       docs=DocsPlan(description=spec.description, url=endpoint.docs, notes=list(endpoint.notes or [])),
@@ -420,6 +637,11 @@ class PlanBuilder:
       if isinstance(spec.payload, dict) and set(spec.payload) == {'$ref'}
       else None
     )
+    reply_ref = (
+      spec.reply['$ref']
+      if isinstance(spec.reply, dict) and set(spec.reply) == {'$ref'}
+      else None
+    )
     connect_param = connect_channel_param(endpoint.push, parameters_schema, spec.channel)
     direct = connect_param is None and channel_direct_params(parameters_schema, spec.channel)
     schemas: dict[str, Schema] = {}
@@ -427,7 +649,9 @@ class PlanBuilder:
       schemas['$parameters'] = parameters_schema.model_copy(update={'title': None})
     if spec.payload is not None and payload_ref is None:
       schemas['$payload'] = Schema.model_validate(spec.payload)
-    class_ = self._class_name(path[-1], schemas, fixed)
+    if spec.reply is not None and reply_ref is None:
+      schemas['$reply'] = Schema.model_validate(spec.reply)
+    class_ = self._class_name(path[-1], schemas, fixed, refs=(payload_ref, reply_ref))
     types, translations = self.type_set(schemas, forbidden={class_}, fixed=fixed)
     request = self._request_plan(parameters_schema, translations.get('$parameters'), types)
     if payload_ref is not None:
@@ -446,11 +670,11 @@ class PlanBuilder:
     placeholders = PLACEHOLDER.findall(spec.channel)
     properties = set((parameters_schema.properties or {}) if parameters_schema is not None else {})
     plan = EndpointPlan(
-      path=path, kind='stream', transports=['ws'],
+      path=path, kind='stream', transports=['ws'], surface=_surface(endpoint),
       wire=WirePlan(channel=spec.channel, placeholders=placeholders),
       core=self.core_name(endpoint_dir),
       meta=endpoint.meta if isinstance(endpoint.meta, dict) else {},
-      deprecated=bool(endpoint.deprecated),
+      deprecated=bool(endpoint.deprecated), refused=self.refused(path),
       request=request, response=response,
       stream=StreamPlan(
         channel_params=[name for name in placeholders if name in properties],
@@ -458,6 +682,7 @@ class PlanBuilder:
         push=_dump(endpoint.push),
         verb=_dump(envelope.verb) if envelope is not None else None,
         reply_payload=envelope.reply_payload if envelope is not None else None,
+        reply=fixed.get(reply_ref, reply_ref) if reply_ref is not None else translations.get('$reply'),
       ),
       types=types,
       docs=DocsPlan(description=spec.description, url=endpoint.docs, notes=list(endpoint.notes or [])),
@@ -514,10 +739,11 @@ class PlanBuilder:
     driver_field = by_wire.get(driver)
     strategy = pagination.strategy
     driver_required = (
-      strategy in ('token', 'seek') and driver_field is not None and driver_field.required
+      strategy == 'token' and driver_field is not None and driver_field.required
     )
     size = None
     size_default = None
+    size_maximum = None
     if pagination.size is not None:
       if pagination.size.parameter in by_wire:
         size = pagination.size.parameter
@@ -525,17 +751,27 @@ class PlanBuilder:
       prop = (properties or {}).get(pagination.size.parameter)
       if isinstance(prop, Schema) and isinstance(prop.default, int) and not isinstance(prop.default, bool):
         size_default = prop.default
-    done = pagination.done
-    rows = done.rows
+      # `Schema.maximum` parses as a float; a page size's maximum is a whole number of rows.
+      # A bound past int64 (an `int64` max rounds up to 2**63 as a float) caps nothing, and
+      # Rust and Go reject it as an out-of-range literal.
+      maximum = prop.maximum if isinstance(prop, Schema) else None
+      if (
+        isinstance(maximum, (int, float)) and not isinstance(maximum, bool)
+        and maximum == int(maximum) and int(maximum) <= INT64_MAX
+      ):
+        size_maximum = int(maximum)
+    done = pagination.done if pagination.strategy != 'seek' else None
+    rows = pagination.rows if pagination.strategy == 'seek' else pagination.done.rows
     state_type: Type = (
       strip_null(driver_field.type) if driver_field is not None
       else {'type': 'scalar', 'base': 'string'}
     )
-    overlap = getattr(pagination, 'overlap', None)
     eligible = (
-      (strategy == 'token' and done.kind == 'absent_cursor' and rows is not None)
-      or (strategy == 'seek' and overlap is None and done.kind != 'unchanged')
-      or (
+      strategy == 'seek'
+      # A token walk ends on an absent cursor or an empty page; either way the cursor is the
+      # whole resumable state.
+      or (strategy == 'token' and done is not None and done.kind in ('absent_cursor', 'empty') and rows is not None)
+      or (done is not None and
         strategy == 'page' and (
           (done.kind == 'total' and rows is not None)
           or done.kind == 'empty'
@@ -543,17 +779,16 @@ class PlanBuilder:
         )
       )
     )
-    overlap_rows = strategy in ('window', 'seek') and overlap is not None and rows is not None
     row_type: Type | None = None
-    if eligible or overlap_rows:
+    # An `offset` walk's rows are resolved too: a backend that steps by the rows a page held
+    # walks it with a resumable offset. `walker` is unchanged by it.
+    if eligible or strategy == 'offset':
       payload = payload_type
       if payload is None and payload_id is not None:
         payload = {'type': 'ref', 'id': payload_id}
       if payload is not None:
         row_type = self.rows_type(payload, rows or '', types)
-    seedable = (
-      strategy not in ('token', 'seek') or has_zero_value(state_type) or driver_required
-    )
+    seedable = strategy != 'token' or has_zero_value(state_type) or driver_required
     if eligible and row_type is not None and seedable:
       walker = 'paginated'
     elif payload_id is None:
@@ -562,19 +797,26 @@ class PlanBuilder:
       walker = 'none'
     else:
       walker = 'generator'
-    window = None
-    if strategy == 'window':
-      window = {
-        'bound': _dump(pagination.bound), 'order': pagination.order, 'step': _dump(pagination.step),
+    seek = None
+    if pagination.strategy == 'seek':
+      seek = {
+        'cursor': _dump(pagination.cursor), 'bound': _dump(pagination.bound),
+        'anchor': pagination.anchor, 'cap': pagination.cap, 'span': _dump(pagination.span),
+        'exclusive': _dump(pagination.exclusive),
+        'moving': pagination.moving, 'far': pagination.far, 'descending': pagination.descending,
       }
     return PaginationPlan(
       strategy=strategy, driver=driver, driver_required=driver_required,
-      size=size, size_default=size_default,
+      size=size, size_default=size_default, size_maximum=size_maximum,
       start=pagination.index.start if strategy == 'page' else None,
       done=_dump(done) or {}, rows=rows,
-      cursor_from=pagination.cursor.from_ if strategy in ('token', 'seek') else None,
-      overlap=_dump(overlap), window=window,
+      cursor_from=pagination.cursor.from_ if pagination.strategy == 'token' else None,
+      seek=seek,
       row_type=row_type, state_type=state_type, seedable=seedable, walker=walker,
+      cursor_type=(
+        self.row_field_type(row_type, last_row_field(pagination.cursor.field), types)
+        if pagination.strategy == 'seek' and row_type is not None else None
+      ),
     )
 
   def _offset_steps(
@@ -584,7 +826,7 @@ class PlanBuilder:
     """Whether an `offset` walk has something to advance by: rows to count, a page size
     the method always sends, or a documented default for an optional one."""
     done = pagination.done
-    counts_rows = done.kind in ('short_page', 'empty', 'unchanged') or (
+    counts_rows = done.kind in ('short_page', 'empty') or (
       done.kind == 'total' and done.rows is not None
     )
     if counts_rows:
@@ -595,6 +837,10 @@ class PlanBuilder:
     return (field.required and field.fixed is None) or size_default is not None
 
   # -- the whole package ------------------------------------------------------------
+
+  def refused(self, path: list[str]) -> bool:
+    """Whether `[policy].refuse` names the endpoint at `path` (W15)."""
+    return '.'.join(path) in self.project.policy.refuse
 
   def build(self) -> PackagePlan:
     """Every core, shared scope, router and endpoint of the project."""
@@ -643,7 +889,10 @@ class PlanBuilder:
       for name in child_names:
         child = (*node, name)
         if child in node_set:
-          children.append(RouterChildPlan(name=name, kind='router', class_=neutral_class_name(name)))
+          children.append(RouterChildPlan(
+            name=name, kind='router',
+            class_=group_class_name(load_router(self.project.endpoints_dir.joinpath(*child)), name),
+          ))
         else:
           children.append(RouterChildPlan(
             name=name, kind='endpoint',

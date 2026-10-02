@@ -25,6 +25,7 @@
 mod dialect;
 mod socket;
 mod stream;
+mod tunnel;
 
 pub use dialect::{Dialect, Incoming, Outgoing};
 pub use socket::{Data, Link, Socket, SocketOptions, SubscribeOptions};

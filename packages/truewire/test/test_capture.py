@@ -176,13 +176,12 @@ def patch_core(project: Path, *, before: str = '', after: str = '', path_suffix:
   """
   core = project / 'src' / 'petstore' / 'core' / '__init__.py'
   source = core.read_text()
-  request_line = "      params=params or None, content=body, headers=self.headers(public=public),\n"
+  request_line = '      params=params or None,\n'
   assert request_line in source
   if path_suffix:
-    source = source.replace(
-      "      method, self.base_url.rstrip('/') + '/' + filled.lstrip('/'),\n",
-      f"      method, self.base_url.rstrip('/') + '/' + filled.lstrip('/') + {path_suffix!r},\n",
-    )
+    url = "self.base_url.rstrip('/') + '/' + filled.lstrip('/')"
+    assert url in source
+    source = source.replace(url, f'{url} + {path_suffix!r}')
   if before:
     source = source.replace(
       '    response = await self.http.request(\n', before + '    response = await self.http.request(\n',
@@ -356,3 +355,66 @@ def test_an_undeclared_method_does_not_disqualify_an_exchange():
   )
   assert matches_route(exchange('GET', 'https://petstore.example/v1/pets/42'), route)
   assert matches_route(exchange('POST', 'https://petstore.example/v1/pets/42'), route)
+
+
+def echoing_project(tmp_path: Path, monkeypatch, name: str) -> Path:
+  """The quickstart project with `PETSTORE_KEY` in `[secrets]` and set to a live-looking
+  value, whose mock answers `get_pet` with `name` in the pet's name: an API that echoes
+  the caller's key back."""
+  project = quickstart_project(tmp_path, monkeypatch)
+  toml = project / 'truewire.toml'
+  toml.write_text(toml.read_text().replace('[secrets]\nrequired = []\n', '[secrets]\noptional = ["PETSTORE_KEY"]\n'))
+  served = project / 'spec' / 'endpoints' / 'pets' / 'get_pet' / 'examples' / 'default.response.json'
+  body = json.loads(served.read_text())
+  body['payload']['name'] = name
+  served.write_text(json.dumps(body, indent=2) + '\n')
+  monkeypatch.setenv('PETSTORE_KEY', 'abcd1234efgh')
+  return project
+
+
+def test_capture_refuses_a_pair_holding_a_secret_value(tmp_path: Path, monkeypatch):
+  """W14: the response echoes `PETSTORE_KEY`'s value. Nothing is written, and the refusal
+  names the variable and where, never the value."""
+  project = echoing_project(tmp_path, monkeypatch, 'Rex, key abcd1234efgh')
+  examples = project / 'spec' / 'endpoints' / 'pets' / 'get_pet' / 'examples'
+
+  with running_mock_servers(project) as servers:
+    result = CliRunner().invoke(app, [
+      'capture', 'pets.get_pet', '--request', '{"petId": 42}', '--id', 'echoed',
+      '--new', f'base_url={servers.http_base_url}', '--project', str(project),
+    ])
+
+  assert result.exit_code == 1, result.output
+  assert 'not recorded: the pair holds the value of a [secrets] variable (W14)' in result.output
+  assert 'PETSTORE_KEY in spec/endpoints/pets/get_pet/examples/echoed.response.json at payload.name' in result.output
+  assert 'abcd1234efgh' not in result.output
+  assert not (examples / 'echoed.request.json').exists()
+  assert not (examples / 'echoed.response.json').exists()
+
+
+def test_capture_records_the_pair_once_the_echoed_field_is_scrubbed(tmp_path: Path, monkeypatch):
+  project = echoing_project(tmp_path, monkeypatch, 'Rex, key abcd1234efgh')
+  examples = project / 'spec' / 'endpoints' / 'pets' / 'get_pet' / 'examples'
+
+  with running_mock_servers(project) as servers:
+    result = CliRunner().invoke(app, [
+      'capture', 'pets.get_pet', '--request', '{"petId": 42}', '--id', 'echoed', '--scrub', 'name',
+      '--new', f'base_url={servers.http_base_url}', '--project', str(project), '--no-check',
+    ])
+
+  assert result.exit_code == 0, result.output
+  assert 'abcd1234efgh' not in (examples / 'echoed.response.json').read_text()
+
+
+def test_capture_notes_a_secret_too_short_to_search_for(tmp_path: Path, monkeypatch):
+  project = echoing_project(tmp_path, monkeypatch, 'Rex')
+  monkeypatch.setenv('PETSTORE_KEY', 'short')
+
+  with running_mock_servers(project) as servers:
+    result = CliRunner().invoke(app, [
+      'capture', 'pets.get_pet', '--request', '{"petId": 42}', '--id', 'plain',
+      '--new', f'base_url={servers.http_base_url}', '--project', str(project), '--no-check',
+    ])
+
+  assert result.exit_code == 0, result.output
+  assert 'note: `PETSTORE_KEY` holds a value shorter than 8 characters; not searched for' in result.output

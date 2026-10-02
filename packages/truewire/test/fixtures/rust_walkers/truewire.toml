@@ -1,0 +1,7 @@
+[project]
+name = "walkers"
+
+[rust]
+package = "walkers"
+src = "src"
+name = "Walkers"

@@ -11,7 +11,7 @@ export interface ApiKeyInfo {
   /** Current nonce value tracked for the API key. */
   nonce?: string
   /** Custom nonce window value (0 if not configured). */
-  nonceWindow?: number
+  nonceWindow?: number | bigint
   /** Permissions assigned to the API key. Values correspond to the API key permission settings: `query-funds` (Funds - Query), `add-funds` (Funds - Deposit), `withdraw-funds` (Funds - Withdraw), `earn-funds` (Funds - Earn), `query-open-trades` (Orders and trades - Query open orders & trades), `query-closed-trades` (Orders and trades - Query closed orders & trades), `modify-trades` (Orders and trades - Create & modify orders), `close-trades` (Orders and trades - Cancel & close orders), `query-ledger` (Data - Query ledger entries), `export-data` (Data - Export data), `create-ws-token` (WebSocket interface - On), `add-withdraw-address` (Add withdrawal addresses), `update-withdraw-address` (Update withdrawal addresses). */
   permissions?: ('query-funds' | 'add-funds' | 'withdraw-funds' | 'earn-funds' | 'query-open-trades' | 'query-closed-trades' | 'modify-trades' | 'close-trades' | 'query-ledger' | 'export-data' | 'create-ws-token' | 'add-withdraw-address' | 'update-withdraw-address')[]
   /** IIBAN (Internal IBAN) of the account associated with the API key. */
@@ -36,7 +36,7 @@ export const ApiKeyInfo: Codec<ApiKeyInfo> = t.object({
   apiKeyName: t.optional(t.string),
   apiKey: t.optional(t.string),
   nonce: t.optional(t.string),
-  nonceWindow: t.optional(t.integer),
+  nonceWindow: t.optional(t.int64),
   permissions: t.optional(t.array(t.literal('query-funds', 'add-funds', 'withdraw-funds', 'earn-funds', 'query-open-trades', 'query-closed-trades', 'modify-trades', 'close-trades', 'query-ledger', 'export-data', 'create-ws-token', 'add-withdraw-address', 'update-withdraw-address'))),
   iban: t.optional(t.string),
   validUntil: t.optional(t.string),

@@ -1,0 +1,87 @@
+{
+  "name": "@truewire/testing",
+  "version": "0.1.0",
+  "description": "Test helpers for Truewire-generated TypeScript clients: spawn `truewire mock`, discover recorded examples, replay every HTTP, WebSocket and gRPC example through the generated client under any runner with `describe`/`it`.",
+  "keywords": [
+    "truewire",
+    "testing",
+    "mock",
+    "replay",
+    "vitest",
+    "grpc"
+  ],
+  "homepage": "https://truewire.dev",
+  "license": "MIT",
+  "author": "Truewire",
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "dist",
+    "src",
+    "LICENSE"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./examples": {
+      "types": "./dist/examples.d.ts",
+      "default": "./dist/examples.js"
+    },
+    "./grpc": {
+      "types": "./dist/grpc.d.ts",
+      "default": "./dist/grpc.js"
+    },
+    "./mock": {
+      "types": "./dist/mock.d.ts",
+      "default": "./dist/mock.js"
+    },
+    "./replay": {
+      "types": "./dist/replay.d.ts",
+      "default": "./dist/replay.js"
+    },
+    "./vitest": {
+      "types": "./dist/vitest.d.ts",
+      "default": "./dist/vitest.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "prepack": "npm run build"
+  },
+  "peerDependencies": {
+    "@bufbuild/protobuf": "^2.2.0",
+    "@connectrpc/connect": "^2.0.0",
+    "@connectrpc/connect-node": "^2.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@bufbuild/protobuf": {
+      "optional": true
+    },
+    "@connectrpc/connect": {
+      "optional": true
+    },
+    "@connectrpc/connect-node": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@bufbuild/buf": "^1.73.0",
+    "@bufbuild/protobuf": "^2.2.0",
+    "@bufbuild/protoc-gen-es": "^2.2.0",
+    "@connectrpc/connect": "^2.0.0",
+    "@connectrpc/connect-node": "^2.0.0",
+    "@truewire/core": "file:../core-ts",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^4.0.0"
+  }
+}

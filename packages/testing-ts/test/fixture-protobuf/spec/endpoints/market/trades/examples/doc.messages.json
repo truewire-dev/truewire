@@ -1,0 +1,18 @@
+[
+  {
+    "channel": "spot@public.aggre.deals.v3.api.pb@100ms@BTCUSDT",
+    "publicdeals": {
+      "dealsList": [
+        {
+          "price": "93220.00",
+          "quantity": "0.04438243",
+          "tradetype": 2,
+          "time": 1736409765051
+        }
+      ],
+      "eventtype": "spot@public.aggre.deals.v3.api.pb@100ms"
+    },
+    "symbol": "BTCUSDT",
+    "sendtime": 1736409765052
+  }
+]

@@ -66,9 +66,10 @@ Order.dump(order)                              // { id, amount: '10.50', created
 Objects keep keys they were not told about, both ways, so an undocumented field never
 breaks a client. `union` tries variants in order (`anyOf`); `record` is a map with arbitrary
 keys (`additionalProperties`); `tuple` is `prefixItems`. The wire formats — `decimal`,
-`integerString`, `booleanString`, `epochSeconds`/`epochMillis`/`epochMicros`/`epochNanos`,
-`dateTime`, `date` — parse to `Decimal`, `number`, `boolean`, `Date` and `DateIso`, and
-`t.wire` builds one of your own. There is no schema interpretation and no `eval`: the
+`integerString`, `booleanString`, `epochSeconds`/`epochMillis`/`epochMicros`/`epochNanos`
+(and their `*Float` twins, which keep a fractional count's fraction), `dateTime`, `date` —
+parse to `Decimal`, `number`, `boolean`, `Date` and `DateIso`, and `t.wire` builds one of
+your own. There is no schema interpretation and no `eval`: the
 combinators are the whole validator, small enough to ship to a browser.
 
 ### Errors

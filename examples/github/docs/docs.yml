@@ -1,0 +1,73 @@
+$schema: https://truewire.dev/schemas/docs.yml.json
+title: GitHub
+description: A typed, validated client for the read side of one GitHub repository.
+nav:
+  - index.md
+  - api-keys.md
+  - title: How-to
+    pages:
+      - how-to/index.md
+      - how-to/walk-pages.md
+  - reference/index.md
+quickstart:
+  python:
+    code: |
+      import asyncio
+
+      from github import GitHub
+
+
+      async def main() -> None:
+        async with GitHub.new() as client:
+          repo = await client.repos.get(owner='truewire-dev', repo='truewire')
+          print(repo['full_name'], repo['created_at'].year)
+
+
+      asyncio.run(main())
+  typescript:
+    code: |
+      import { GitHub } from 'github'
+      import { Core } from 'github/core'
+
+      const client = new GitHub(new Core())
+      const repo = await client.repos.get({ owner: 'truewire-dev', repo: 'truewire' })
+      console.log(repo.full_name, repo.created_at.getFullYear())
+  rust:
+    code: |
+      use github::core::CoreOptions;
+      use github::{repos, CallOptions, GitHub};
+
+      #[tokio::main]
+      async fn main() -> Result<(), Box<dyn std::error::Error>> {
+          let client = GitHub::new(CoreOptions::default());
+          let request = repos::get::Request {
+              owner: "truewire-dev".into(),
+              repo: "truewire".into(),
+              ..Default::default()
+          };
+          let repo = client.repos.get(request, CallOptions::default()).await?;
+          println!("{} {}", repo.full_name, repo.created_at);
+          Ok(())
+      }
+  go:
+    code: |
+      package main
+
+      import (
+      	"context"
+      	"fmt"
+      	"log"
+
+      	"truewire.dev/examples/github/src/github"
+      	"truewire.dev/examples/github/src/github/core"
+      	"truewire.dev/examples/github/src/github/repos/get"
+      )
+
+      func main() {
+      	client := github.New(core.Options{})
+      	repo, err := client.Repos.Get(context.Background(), get.Request{Owner: "truewire-dev", Repo: "truewire"})
+      	if err != nil {
+      		log.Fatal(err)
+      	}
+      	fmt.Println(repo.FullName, repo.CreatedAt.Year())
+      }

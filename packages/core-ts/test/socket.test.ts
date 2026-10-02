@@ -3,7 +3,7 @@
  * first use opens exactly one connection, `close()` closes exactly what was opened (and
  * nothing when nothing was), and `wait` surfaces the connection's failure.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { NetworkError } from '../src/errors.js'
 import { Deferred } from '../src/ws/async.js'
 import { Socket, type Context, type Data, type WebSocketLike } from '../src/ws/socket.js'
@@ -237,15 +237,23 @@ describe('Socket transport', () => {
   })
 
   it('pings on the interval when ping is implemented', async () => {
+    // CPU-heavy sibling builds can coalesce real interval ticks. Advance the
+    // interval clock directly so this checks scheduling and cleanup, not CPU load.
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
     const server = new FakeServer()
     const socket = new Echo(server, { pingInterval: 5, withPing: true })
-    await socket.open()
-    await tick(30)
-    expect(socket.pings).toBeGreaterThanOrEqual(2)
-    await socket.close()
-    const pings = socket.pings
-    await tick(15)
-    expect(socket.pings).toBe(pings)
+    try {
+      await socket.open()
+      await vi.advanceTimersByTimeAsync(30)
+      expect(socket.pings).toBe(6)
+      await socket.close()
+      const pings = socket.pings
+      await vi.advanceTimersByTimeAsync(15)
+      expect(socket.pings).toBe(pings)
+    } finally {
+      await socket.close()
+      vi.useRealTimers()
+    }
   })
 
   it('a failing ping fails the context', async () => {

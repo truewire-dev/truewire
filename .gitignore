@@ -8,3 +8,4 @@ dist/
 build/
 target/
 uv.lock
+node_modules/

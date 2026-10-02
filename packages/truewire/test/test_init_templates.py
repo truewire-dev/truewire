@@ -14,6 +14,7 @@ import json
 import shutil
 import sys
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing_extensions import Iterator
 
@@ -30,6 +31,7 @@ from conftest import forbid_import
 OPENAPI = Path(__file__).parent / 'fixtures' / 'openapi' / 'petstore.yaml'
 FIXTURES = Path(__file__).parent / 'fixtures' / 'init_templates'
 BASE_URL = 'https://petstore.example/v1'
+PROXY = 'http://proxy.example:3128'
 
 
 def init_project(tmp_path: Path, name: str, template: str) -> Path:
@@ -97,6 +99,37 @@ def test_unknown_template_is_refused(tmp_path: Path):
   assert not (tmp_path / 'demo').exists()
 
 
+@pytest.mark.parametrize('template', TEMPLATES)
+def test_template_generates_and_lints(tmp_path: Path, template: str):
+  """Every untouched core passes all three lint steps with a generated endpoint."""
+  project = init_project(tmp_path, 'demo', template)
+  seed(project, 'ws' if template == 'ws' else 'jsonrpc')
+  runner = CliRunner()
+  generated = runner.invoke(app, ['generate', 'python', '--project', str(project)])
+  assert generated.exit_code == 0, generated.output
+  linted = runner.invoke(app, ['lint', 'python', '--project', str(project)])
+  assert linted.exit_code == 0, linted.output
+
+
+@pytest.mark.parametrize('template', TEMPLATES)
+def test_template_client_repr_hides_its_credentials(tmp_path: Path, template: str):
+  """`repr(client)` is what `print`, a debugger and a pytest failure show: the generated
+  root on every untouched core keeps its transport in the repr but not the key or secret."""
+  project = init_project(tmp_path, 'demo', template)
+  seed(project, 'ws' if template == 'ws' else 'jsonrpc')
+  generated = CliRunner().invoke(app, ['generate', 'python', '--project', str(project)])
+  assert generated.exit_code == 0, generated.output
+  credentials = {
+    'api_key': 'SENTINEL-KEY-626',
+    **({'api_secret': 'SENTINEL-SECRET-626'} if template == 'hmac' else {}),
+  }
+  with importable(project, 'demo'):
+    demo = importlib.import_module('demo')
+    shown = repr(demo.Demo.new(**credentials))
+  assert 'Transport(' in shown
+  assert 'SENTINEL' not in shown, shown
+
+
 @pytest.mark.parametrize('template', ['bearer', 'hmac', 'jsonrpc'])
 def test_http_templates_init_import_check_and_generate_petstore(tmp_path: Path, template: str):
   """The README quickstart on each HTTP template: init, seed from OpenAPI, check, generate,
@@ -107,13 +140,16 @@ def test_http_templates_init_import_check_and_generate_petstore(tmp_path: Path, 
   import_petstore(project)
   check_and_generate(project, 'petstore')
   assert (project / 'src' / 'petstore' / 'pets' / 'get_pet.py').is_file()
-  if template == 'jsonrpc':
-    return
 
   from truewire.mock import running_mock_servers
 
   with importable(project, 'petstore'):
     petstore = importlib.import_module('petstore')
+    # Packages clause P18: `new(proxy=...)` reaches the HTTP transport.
+    assert petstore.Petstore.new(proxy=PROXY).client.http.proxy == PROXY
+    assert petstore.Petstore.new().client.http.proxy is None
+    if template == 'jsonrpc':
+      return
 
     async def call(base_url: str):
       async with petstore.Petstore.new(base_url=base_url, api_key='k', **({'api_secret': 's'} if template == 'hmac' else {})) as client:
@@ -230,6 +266,9 @@ def test_ws_template_subscribes_to_a_fixture_stream_through_the_mock(tmp_path: P
 
   with importable(project, 'feed'):
     feed = importlib.import_module('feed')
+    # Packages clause P18: one `proxy=` reaches both transports.
+    proxied = feed.Feed.new(proxy=PROXY)
+    assert (proxied.client.http.proxy, proxied.socket.conn.proxy) == (PROXY, PROXY)
 
     async def subscribe(http_url: str, ws_url: str):
       received = []
@@ -249,3 +288,58 @@ def test_ws_template_subscribes_to_a_fixture_stream_through_the_mock(tmp_path: P
   assert reply == {'type': 'subscribed', 'channel': 'trades', 'id': 'ACME-1'}
   assert [str(m['data']['price']) for m in received] == ['100.5', '100.75']
   assert received[0]['channel'] == 'trades'
+
+
+@pytest.fixture(scope='module', params=['bearer', 'hmac', 'ws'])
+def petstore_on(request: pytest.FixtureRequest, tmp_path_factory: pytest.TempPathFactory):
+  """The petstore quickstart on each template whose core speaks REST, generated once per
+  template for the wire-format tests below. Yields `call(make)`, which runs
+  `make(client)` against the mock and returns its result with every exchange the call
+  made."""
+  from truewire.mock import running_mock_servers
+  from truewire_core.http import recording
+
+  template = request.param
+  project = init_project(tmp_path_factory.mktemp(template), 'petstore', template)
+  import_petstore(project)
+  check_and_generate(project, 'petstore')
+  credentials = {'api_key': 'k', **({'api_secret': 's'} if template == 'hmac' else {})}
+
+  with importable(project, 'petstore'):
+    petstore = importlib.import_module('petstore')
+
+    def call(make):
+      async def run(base_url: str):
+        async with petstore.Petstore.new(base_url=base_url, **credentials) as client:
+          with recording() as exchanges:
+            result = await make(client)
+          return result, exchanges
+
+      with running_mock_servers(resolve(project)) as servers:
+        return asyncio.run(run(servers.http_base_url))
+
+    yield call
+
+
+def test_a_datetime_query_parameter_goes_out_as_the_request_type_dumps_it(petstore_on):
+  """`since` is a `TimestampIso`: on the query it is the ISO string the recording has, not
+  `str(datetime)`, which the mock (and many APIs) refuse with a 422."""
+  page, exchanges = petstore_on(lambda client: client.pets.list_pets(
+    limit=2, status='available', since=datetime(2026, 1, 1, tzinfo=timezone.utc),
+  ))
+  assert [pet['name'] for pet in page['items']]
+  [sent] = [e.request for e in exchanges if e.request.url.path.endswith('/pets')]
+  assert sent.url.params['since'] == '2026-01-01T00:00:00Z'
+  assert sent.url.params['limit'] == '2'
+
+
+def test_a_json_body_is_sent_with_its_content_type(petstore_on):
+  """A `POST` body is JSON and says so; without the header the mock (and many APIs) do not
+  read it as JSON and answer 422."""
+  pet, exchanges = petstore_on(lambda client: client.pets.create_pet(
+    name='Rex', status='available', category={'id': 1, 'name': 'Dogs'},
+  ))
+  assert pet['name'] == 'Rex'
+  [sent] = [e.request for e in exchanges if e.request.method == 'POST']
+  assert sent.headers['Content-Type'] == 'application/json'
+  assert json.loads(sent.content) == {'name': 'Rex', 'status': 'available', 'category': {'id': 1, 'name': 'Dogs'}}

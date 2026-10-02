@@ -13,6 +13,8 @@
 //! the module-level instances [`TIMESTAMP_SECONDS`], [`TIMESTAMP_MILLIS`],
 //! [`TIMESTAMP_MICROS`], [`TIMESTAMP_NANOS`], [`TIMESTAMP_ISO`] and [`date_iso`].
 
+use std::fmt;
+
 use chrono::{DateTime, NaiveDate, SecondsFormat, Utc};
 
 use crate::errors::{Error, Result};
@@ -95,6 +97,22 @@ fn not_epoch(what: &str, value: impl std::fmt::Debug) -> Error {
     Error::logic(format!("Not an epoch {what}: {value:?}"))
 }
 
+/// An epoch timestamp as the wire writes it: a whole number of units, or a fractional one.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum EpochNumber {
+    Int(i64),
+    Float(f64),
+}
+
+impl fmt::Display for EpochNumber {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Int(i) => write!(f, "{i}"),
+            Self::Float(x) => write!(f, "{x}"),
+        }
+    }
+}
+
 /// Converter for epoch timestamps in a specific unit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EpochConverter {
@@ -123,35 +141,77 @@ impl EpochConverter {
         Self::new(1_000_000_000)
     }
 
+    /// Nanoseconds per unit, when the unit divides a second evenly (every declared one does).
+    fn nanos_per_unit(&self) -> Option<i128> {
+        (self.unit > 0 && NANOS_PER_SECOND % self.unit == 0).then(|| NANOS_PER_SECOND / self.unit)
+    }
+
     /// Parse an epoch timestamp in this unit, or pass an already-parsed `DateTime` through.
     /// Negative (pre-1970) values floor, as Python's `timedelta` arithmetic does.
+    ///
+    /// A fractional value (`1763410056.903966` seconds, or the same as a numeral string)
+    /// keeps its fraction, to the nearest nanosecond, as the Python and TypeScript runtimes
+    /// keep theirs.
     pub fn parse(&self, value: impl Into<EpochValue>) -> Result<DateTime<Utc>> {
-        let ticks: i128 = match value.into() {
+        let nanos: i128 = match value.into() {
             EpochValue::Parsed(dt) => return Ok(dt),
-            EpochValue::Int(i) => i,
+            EpochValue::Int(i) => self.nanos_of_ticks(i)?,
             EpochValue::Float(f) => {
                 if !f.is_finite() {
                     return Err(not_epoch("timestamp", f));
                 }
-                f.trunc() as i128
+                // Through the float's shortest decimal form (`Display` never uses an exponent),
+                // so `1763410056.903966` keeps exactly the digits the wire sent.
+                self.nanos_of_numeral(&f.to_string())?
             }
-            EpochValue::Str(s) => {
-                let trimmed = s.trim();
-                let digits = trimmed.strip_prefix(['+', '-']).unwrap_or(trimmed);
-                if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
-                    return Err(not_epoch("timestamp", s));
-                }
-                trimmed.parse::<i128>().map_err(|_| not_epoch("timestamp", s.clone()))?
-            }
+            EpochValue::Str(s) => self.nanos_of_numeral(&s)?,
         };
-        let nanos = ticks
-            .checked_mul(NANOS_PER_SECOND)
-            .map(|n| floor_div(n, self.unit))
-            .ok_or_else(|| not_epoch("timestamp", ticks))?;
         let secs = floor_div(nanos, NANOS_PER_SECOND);
         let subsec = (nanos - secs * NANOS_PER_SECOND) as u32;
-        let secs = i64::try_from(secs).map_err(|_| not_epoch("timestamp", ticks))?;
-        DateTime::<Utc>::from_timestamp(secs, subsec).ok_or_else(|| not_epoch("timestamp", ticks))
+        let secs = i64::try_from(secs).map_err(|_| not_epoch("timestamp", nanos))?;
+        DateTime::<Utc>::from_timestamp(secs, subsec).ok_or_else(|| not_epoch("timestamp", nanos))
+    }
+
+    fn nanos_of_ticks(&self, ticks: i128) -> Result<i128> {
+        ticks
+            .checked_mul(NANOS_PER_SECOND)
+            .map(|n| floor_div(n, self.unit))
+            .ok_or_else(|| not_epoch("timestamp", ticks))
+    }
+
+    /// A numeral string (`"1786302600000"`, `"-12"`, `"1763410056.903966"`), exactly.
+    fn nanos_of_numeral(&self, text: &str) -> Result<i128> {
+        let trimmed = text.trim();
+        let negative = trimmed.starts_with('-');
+        let unsigned = trimmed.strip_prefix(['+', '-']).unwrap_or(trimmed);
+        let (whole, fraction) = unsigned.split_once('.').unwrap_or((unsigned, ""));
+        let digits = |part: &str| part.bytes().all(|b| b.is_ascii_digit());
+        if whole.is_empty() || !digits(whole) || !digits(fraction) || (unsigned.contains('.') && fraction.is_empty()) {
+            return Err(not_epoch("timestamp", text));
+        }
+        let whole: i128 = whole.parse().map_err(|_| not_epoch("timestamp", text))?;
+        let mut nanos = self.nanos_of_ticks(whole)?;
+        if !fraction.is_empty() {
+            let Some(per) = self.nanos_per_unit() else {
+                return Err(not_epoch("timestamp", text));
+            };
+            // The fraction scaled to nanoseconds, rounded half up on the first dropped digit.
+            let places = per.to_string().len() - 1;
+            let mut kept: String = fraction.chars().take(places).collect();
+            while kept.len() < places {
+                kept.push('0');
+            }
+            let mut sub: i128 = if kept.is_empty() {
+                0
+            } else {
+                kept.parse().map_err(|_| not_epoch("timestamp", text))?
+            };
+            if fraction.chars().nth(places).is_some_and(|d| d >= '5') {
+                sub += 1;
+            }
+            nanos += sub * (per / 10_i128.pow(places as u32));
+        }
+        Ok(if negative { -nanos } else { nanos })
     }
 
     /// Convert a `DateTime` back into an epoch timestamp in this unit, exact at any unit.
@@ -165,6 +225,20 @@ impl EpochConverter {
     pub fn dump(&self, dt: &DateTime<Utc>) -> i64 {
         let value = self.dump_i128(dt);
         i64::try_from(value).unwrap_or(if value < 0 { i64::MIN } else { i64::MAX })
+    }
+
+    /// The wire number for `dt`: whole units as an integer, a fractional count as a float
+    /// (a fractional epoch round-trips through [`parse`](Self::parse) to the same number).
+    pub fn dump_number(&self, dt: &DateTime<Utc>) -> EpochNumber {
+        let nanos = dt.timestamp() as i128 * NANOS_PER_SECOND + dt.timestamp_subsec_nanos() as i128;
+        match self.nanos_per_unit() {
+            Some(per) if nanos % per != 0 => {
+                let whole = floor_div(nanos, per);
+                let rest = nanos - whole * per;
+                EpochNumber::Float(whole as f64 + rest as f64 / per as f64)
+            }
+            _ => EpochNumber::Int(self.dump(dt)),
+        }
     }
 
     /// The current time, in this unit.
@@ -209,13 +283,18 @@ impl IsoConverter {
 
     /// Parse a `Z`-suffixed or offset RFC 3339 date-time with a fraction of any length
     /// (some APIs send milliseconds, others nanoseconds; digits beyond nine are dropped),
-    /// or pass an already-parsed `DateTime` through.
+    /// or pass an already-parsed `DateTime` through. A date-time with no offset at all
+    /// (`1970-01-01T00:00:00`) is read as UTC, as core-python, core-ts and core-go do.
     pub fn parse(&self, value: impl Into<IsoValue>) -> Result<DateTime<Utc>> {
         let text = match value.into() {
             IsoValue::Parsed(dt) => return Ok(dt),
             IsoValue::Str(s) => s,
         };
-        let normalized = normalize_rfc3339(&text);
+        let mut normalized = normalize_rfc3339(&text);
+        if lacks_offset(&normalized) {
+            // No offset at all: read as UTC, as core-python's `fromisoformat` does.
+            normalized.push('Z');
+        }
         DateTime::parse_from_rfc3339(&normalized)
             .map(|dt| dt.with_timezone(&Utc))
             .map_err(|e| Error::logic(format!("Not an RFC 3339 date-time: {text:?}")).with_source(e))
@@ -233,6 +312,21 @@ impl IsoConverter {
 }
 
 /// `t`/space separators to `T`, `z` to `Z`, a fraction longer than nine digits cut to nine.
+/// Whether `text` is a full `YYYY-MM-DDTHH:MM:SS[.fraction]` date-time with no offset
+/// after it. A date alone or a time without seconds is not, and stays refused.
+fn lacks_offset(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    if bytes.len() < 19 || bytes[10] != b'T' || bytes[13] != b':' || bytes[16] != b':' {
+        return false;
+    }
+    let rest = &bytes[19..];
+    match rest.split_first() {
+        None => true,
+        Some((b'.', digits)) => !digits.is_empty() && digits.iter().all(u8::is_ascii_digit),
+        Some(_) => false,
+    }
+}
+
 fn normalize_rfc3339(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let bytes = text.as_bytes();

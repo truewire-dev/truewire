@@ -1,0 +1,199 @@
+{
+  "description": "Every recorded mexc spot frame, with its ProtoJSON decode by betterproto2 (Python): the cross-language conformance vector for spec/proto/PushDataV3ApiWrapper.proto (ADR 0016).",
+  "message": "PushDataV3ApiWrapper",
+  "frames": [
+    {
+      "endpoint": "spot.streams.market.book_ticker",
+      "proto_field": "public_aggre_book_ticker",
+      "data": "CjRzcG90QHB1YmxpYy5hZ2dyZS5ib29rVGlja2VyLnYzLmFwaS5wYkAxMDBtc0BCVENVU0RU2hMnCgg5MzM4Ny4yOBIHMy43MzQ4NRoIOTMzODcuMjkiCDcuNjY5ODc1GgdCVENVU0RUMJGw59HEMg==",
+      "json": {
+        "channel": "spot@public.aggre.bookTicker.v3.api.pb@100ms@BTCUSDT",
+        "publicAggreBookTicker": {
+          "bidPrice": "93387.28",
+          "bidQuantity": "3.73485",
+          "askPrice": "93387.29",
+          "askQuantity": "7.669875"
+        },
+        "symbol": "BTCUSDT",
+        "sendTime": "1736412092433"
+      }
+    },
+    {
+      "endpoint": "spot.streams.market.book_ticker_batch",
+      "proto_field": "public_book_ticker_batch",
+      "data": "Ci5zcG90QHB1YmxpYy5ib29rVGlja2VyLmJhdGNoLnYzLmFwaS5wYkBCVENVU0RUuhMqCigKCDk2NTY3LjM3EggzLjM2MjkyNRoIOTY1NjcuMzgiCDEuNTQ1MjU1GgdCVENVU0RUMNrN5JPQMg==",
+      "json": {
+        "channel": "spot@public.bookTicker.batch.v3.api.pb@BTCUSDT",
+        "publicBookTickerBatch": {
+          "items": [
+            {
+              "bidPrice": "96567.37",
+              "bidQuantity": "3.362925",
+              "askPrice": "96567.38",
+              "askQuantity": "1.545255"
+            }
+          ]
+        },
+        "symbol": "BTCUSDT",
+        "sendTime": "1739503249114"
+      }
+    },
+    {
+      "endpoint": "spot.streams.market.candles",
+      "proto_field": "public_spot_kline",
+      "data": "CilzcG90QHB1YmxpYy5rbGluZS52My5hcGkucGJAQlRDVVNEVEBNaW4xNaITTgoFTWluMTUQhIv+uwYaBTkyOTI1Igg5MzE1OC40NyoIOTMxNTguNDcyBTkyODAwOgszNi44MzgwMzIyNEIKMzQyNDgxMS4wNUiIkv67BhoHQlRDVVNEVCIgMmZiOTQyMTU0ZWY0NGE0YWIyZWY5OGM4YWZiNmE0YTco8+yS0cQy",
+      "json": {
+        "channel": "spot@public.kline.v3.api.pb@BTCUSDT@Min15",
+        "publicSpotKline": {
+          "interval": "Min15",
+          "windowStart": "1736410500",
+          "openingPrice": "92925",
+          "closingPrice": "93158.47",
+          "highestPrice": "93158.47",
+          "lowestPrice": "92800",
+          "volume": "36.83803224",
+          "amount": "3424811.05",
+          "windowEnd": "1736411400"
+        },
+        "symbol": "BTCUSDT",
+        "symbolId": "2fb942154ef44a4ab2ef98c8afb6a4a7",
+        "createTime": "1736410707571"
+      }
+    },
+    {
+      "endpoint": "spot.streams.market.depth",
+      "proto_field": "public_limit_depths",
+      "data": "CitzcG90QHB1YmxpYy5saW1pdC5kZXB0aC52My5hcGkucGJAQlRDVVNEVEA1+hJgChYKCDkzMTgwLjE4EgowLjIxOTc2NDI0EhYKCDkzMTc5Ljk4EgoyLjgyNjUxMDAwGiFzcG90QHB1YmxpYy5saW1pdC5kZXB0aC52My5hcGkucGIiCzM2OTEzNTY1NDYzGgdCVENVU0RUMIry19HEMg==",
+      "json": {
+        "channel": "spot@public.limit.depth.v3.api.pb@BTCUSDT@5",
+        "publicLimitDepths": {
+          "asks": [
+            {
+              "price": "93180.18",
+              "quantity": "0.21976424"
+            }
+          ],
+          "bids": [
+            {
+              "price": "93179.98",
+              "quantity": "2.82651000"
+            }
+          ],
+          "eventType": "spot@public.limit.depth.v3.api.pb",
+          "version": "36913565463"
+        },
+        "symbol": "BTCUSDT",
+        "sendTime": "1736411838730"
+      }
+    },
+    {
+      "endpoint": "spot.streams.market.depth_updates",
+      "proto_field": "public_aggre_depths",
+      "data": "Ci9zcG90QHB1YmxpYy5hZ2dyZS5kZXB0aC52My5hcGkucGJAMTAwbXNAQlRDVVNEVMoTWxIWCgg5Mjg3Ny41OBIKMC4wMDAwMDAwMBonc3BvdEBwdWJsaWMuYWdncmUuZGVwdGgudjMuYXBpLnBiQDEwMG1zIgsxMDU4OTYzMjM1OSoLMTA1ODk2MzIzNTkaB0JUQ1VTRFQwutLD0cQy",
+      "json": {
+        "channel": "spot@public.aggre.depth.v3.api.pb@100ms@BTCUSDT",
+        "publicAggreDepths": {
+          "bids": [
+            {
+              "price": "92877.58",
+              "quantity": "0.00000000"
+            }
+          ],
+          "eventType": "spot@public.aggre.depth.v3.api.pb@100ms",
+          "fromVersion": "10589632359",
+          "toVersion": "10589632359"
+        },
+        "symbol": "BTCUSDT",
+        "sendTime": "1736411507002"
+      }
+    },
+    {
+      "endpoint": "spot.streams.market.trades",
+      "proto_field": "public_aggre_deals",
+      "data": "Ci9zcG90QHB1YmxpYy5hZ2dyZS5kZWFscy52My5hcGkucGJAMTAwbXNAQlRDVVNEVNITSgofCgg5MzIyMC4wMBIKMC4wNDQzODI0MxgCILup2dDEMhInc3BvdEBwdWJsaWMuYWdncmUuZGVhbHMudjMuYXBpLnBiQDEwMG1zGgdCVENVU0RUMLyp2dDEMg==",
+      "json": {
+        "channel": "spot@public.aggre.deals.v3.api.pb@100ms@BTCUSDT",
+        "publicAggreDeals": {
+          "deals": [
+            {
+              "price": "93220.00",
+              "quantity": "0.04438243",
+              "tradeType": 2,
+              "time": "1736409765051"
+            }
+          ],
+          "eventType": "spot@public.aggre.deals.v3.api.pb@100ms"
+        },
+        "symbol": "BTCUSDT",
+        "sendTime": "1736409765052"
+      }
+    },
+    {
+      "endpoint": "spot.streams.user.account",
+      "proto_field": "private_account",
+      "data": "Ch5zcG90QHByaXZhdGUuYWNjb3VudC52My5hcGkucGKaE18KBFVTRFQSIDEyOGY1ODkyNzFjYjQ5NTFiMDNlNzFlNjMyM2ViN2JlGhEyMS45NDIxMDM1NjAwNDM4NCICMTAqATAyATA6EUNPTlRSQUNUX1RSQU5TRkVSQLC1jdTEMijBgJXUxDIww4CV1MQy",
+      "json": {
+        "channel": "spot@private.account.v3.api.pb",
+        "privateAccount": {
+          "vcoinName": "USDT",
+          "coinId": "128f589271cb4951b03e71e6323eb7be",
+          "balanceAmount": "21.94210356004384",
+          "balanceAmountChange": "10",
+          "frozenAmount": "0",
+          "frozenAmountChange": "0",
+          "type": "CONTRACT_TRANSFER",
+          "time": "1736416910000"
+        },
+        "createTime": "1736417034305",
+        "sendTime": "1736417034307"
+      }
+    },
+    {
+      "endpoint": "spot.streams.user.orders",
+      "proto_field": "private_orders",
+      "data": "Ch1zcG90QHByaXZhdGUub3JkZXJzLnYzLmFwaS5wYoITVAoaQzAyX181MDU5NzkwMTc0MzkwMDI2MjQxMTUaBjMuNTEyMSIBMSoBMDIGMy42OTYyOAVAAlIBMFoBMGIBMWoBMXIGMy42OTYyeAKAAZOAldTEMhoGTVhVU0RUMKmAldTEMg==",
+      "json": {
+        "channel": "spot@private.orders.v3.api.pb",
+        "privateOrders": {
+          "id": "C02__505979017439002624115",
+          "price": "3.5121",
+          "quantity": "1",
+          "amount": "0",
+          "avgPrice": "3.6962",
+          "orderType": 5,
+          "tradeType": 2,
+          "remainAmount": "0",
+          "remainQuantity": "0",
+          "lastDealQuantity": "1",
+          "cumulativeQuantity": "1",
+          "cumulativeAmount": "3.6962",
+          "status": 2,
+          "createTime": "1736417034259"
+        },
+        "symbol": "MXUSDT",
+        "sendTime": "1736417034281"
+      }
+    },
+    {
+      "endpoint": "spot.streams.user.trades",
+      "proto_field": "private_deals",
+      "data": "ChxzcG90QHByaXZhdGUuZGVhbHMudjMuYXBpLnBikhNpCgYzLjY5NjISATEaBjMuNjk2MiACOhQ1MDU5NzkwMTc0MzkwMDI2MjRYMUoaQzAyX181MDU5NzkwMTc0MzkwMDI2MjQxMTVSFTAuMDAwMzk5ODM3NzM2OTY5ODE3MVoCTVhgqICV1MQyGgZNWFVTRFQw3ICV1MQy",
+      "json": {
+        "channel": "spot@private.deals.v3.api.pb",
+        "privateDeals": {
+          "price": "3.6962",
+          "quantity": "1",
+          "amount": "3.6962",
+          "tradeType": 2,
+          "tradeId": "505979017439002624X1",
+          "orderId": "C02__505979017439002624115",
+          "feeAmount": "0.0003998377369698171",
+          "feeCurrency": "MX",
+          "time": "1736417034280"
+        },
+        "symbol": "MXUSDT",
+        "sendTime": "1736417034332"
+      }
+    }
+  ]
+}

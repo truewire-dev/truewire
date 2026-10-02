@@ -1,0 +1,32 @@
+# One `seek` walk declaring `exclusive` (ADR 0013): a time range the venue refuses alongside
+# the id cursor, sent on the first request only, its far end enforced on each row's `time`.
+# Recorded as the three pages a walk over [1000, 5000] with `limit: 2` requests; the third
+# page holds a trade past `endTime`, which the walk drops before stopping. Each language's
+# replay test (`test_seek_exclusive_replay.py`) generates the client, adds a core of a few
+# lines, and walks it against `truewire mock`.
+[project]
+name = "venue"
+
+[python]
+package = "venue"
+src = "src"
+name = "Venue"
+
+[typescript]
+package = "venue"
+src = "src"
+name = "Venue"
+
+[rust]
+package = "venue"
+src = "src"
+name = "Venue"
+
+[go]
+package = "venue"
+src = "src"
+name = "Venue"
+module = "truewire.dev/fixtures/venue"
+
+[python.cores.default]
+base = "venue.core:Endpoint"

@@ -1,0 +1,13 @@
+{
+  "hits": [
+    {
+      "coin": {
+        "denom": "udemo",
+        "amount": "5"
+      },
+      "score": 9
+    }
+  ],
+  "total": "1",
+  "note": "one hit"
+}

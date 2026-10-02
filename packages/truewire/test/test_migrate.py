@@ -187,3 +187,88 @@ def test_migrate_refuses_a_frame_that_lacks_the_declared_path(tmp_path: Path, mo
   result = CliRunner().invoke(app, ['migrate', '--project', str(project)])
   assert result.exit_code == 1
   assert 'no recorded frame carries `result`' in result.output
+
+
+def test_migrate_takes_an_unrecorded_endpoints_frame_from_its_core(tmp_path: Path, monkeypatch):
+  """With no `--template`, the recordings of endpoints sharing the core and the payload
+  path stand in; the report says where each frame came from."""
+  project = make_project(tmp_path, monkeypatch)
+  write_endpoint(project, 'list', endpoint_json(PET), frames=[{'error': [], 'result': {'id': 1}}])
+  write_endpoint(project, 'find', endpoint_json(PET), frames=[{'error': ['x'], 'result': {'id': 2}}])
+  other = write_endpoint(project, 'other', endpoint_json(PET, payload='data'))
+  bare = write_endpoint(project, 'create', endpoint_json({**PET, 'title': 'Created'}))
+  report = tmp_path / 'report.json'
+
+  result = CliRunner().invoke(app, ['migrate', '--project', str(project), '--report', str(report)])
+
+  assert result.exit_code == 1
+  assert 'pets.create  CreatedFrame (error, result)  [frame from recorded endpoints of the same core]' in result.output
+  assert 'Migrated 3 endpoint(s);' in result.output
+  assert 'Frames: 2 from their own recordings, 0 from --template, 1 from recorded endpoints of the same core.' in result.output
+  assert 'pets.other: no recording to derive the frame from, and no recorded endpoint of core `default` declares `envelope.payload` `data`' in result.output
+  response = response_of(bare)
+  assert response['properties']['error'] == {'type': 'array', 'items': {'type': 'string'}, 'description': WIRE}
+  assert response['required'] == ['error', 'result']
+  assert 'properties' not in response_of(other) or 'data' not in response_of(other)['properties']
+  outcome = json.loads(report.read_text())
+  assert [entry['source'] for entry in outcome['migrated']] == ['core', 'recordings', 'recordings']
+  assert outcome['refused'][0]['function'] == 'pets.other'
+
+
+def test_migrate_wraps_an_old_schema_whose_own_property_shares_the_payload_key(tmp_path: Path, monkeypatch):
+  """`result` resolves inside an old schema that happens to hold a `result` of its own;
+  the recordings show it is still the unwrapped value, so it is wrapped all the same."""
+  project = make_project(tmp_path, monkeypatch)
+  page = {
+    'title': 'Page', 'type': 'object', 'description': 'A page.', 'required': ['result', 'cursor'],
+    'properties': {
+      'result': {'type': 'array', 'items': {'type': 'integer'}, 'description': 'Rows.'},
+      'cursor': {'type': 'string', 'description': 'Next cursor.'},
+    },
+  }
+  endpoint_dir = write_endpoint(
+    project, 'list', endpoint_json(page),
+    frames=[{'retCode': 0, 'result': {'result': [1, 2], 'cursor': 'c'}}],
+  )
+  runner = CliRunner()
+
+  result = runner.invoke(app, ['migrate', '--project', str(project)])
+
+  assert result.exit_code == 0, result.output
+  response = response_of(endpoint_dir)
+  assert response['title'] == 'PageFrame'
+  assert response['properties']['result']['title'] == 'Page'
+  assert runner.invoke(app, ['check', '--project', str(project)]).exit_code == 0
+  again = runner.invoke(app, ['migrate', '--project', str(project)])
+  assert 'Migrated 0 endpoint(s)' in again.output
+
+
+def test_migrate_renames_a_shared_schema_a_router_group_collides_with(tmp_path: Path, monkeypatch):
+  """Rule 18 refuses a group class named like a shared schema; `--rename-schema` renames
+  the schema's id, title and every `$ref`, and a second run changes nothing."""
+  project = make_project(tmp_path, monkeypatch)
+  (project / 'spec' / 'schemas.json').write_text(json.dumps({
+    'Pets': {'title': 'Pets', 'type': 'object', 'description': 'Some pets.', 'properties': {'ids': {'type': 'array', 'items': {'type': 'integer'}, 'description': 'Ids.'}}},
+  }, indent=2) + '\n')
+  wire = {'title': 'PetsFrame', 'type': 'object', 'description': 'Frame.', 'required': ['result'], 'properties': {'result': {'$ref': 'Pets'}}}
+  endpoint_dir = write_endpoint(project, 'list', endpoint_json(wire), frames=[{'result': {'ids': [1]}}])
+  runner = CliRunner()
+
+  flagged = runner.invoke(app, ['migrate', '--project', str(project)])
+  assert flagged.exit_code == 0, flagged.output
+  assert "collision  spec/endpoints/pets/router.json: the router group 'pets' renders the class 'Pets'" in flagged.output
+  assert runner.invoke(app, ['check', '--project', str(project)]).exit_code == 1
+
+  result = runner.invoke(app, ['migrate', '--project', str(project), '--rename-schema', 'Pets=PetList'])
+  assert result.exit_code == 0, result.output
+  assert 'renamed    schema Pets -> PetList (1 $ref(s), 2 file(s))' in result.output
+  assert 'collision' not in result.output
+  shared = json.loads((project / 'spec' / 'schemas.json').read_text())
+  assert list(shared) == ['PetList'] and shared['PetList']['title'] == 'PetList'
+  assert response_of(endpoint_dir)['properties']['result'] == {'$ref': 'PetList'}
+  assert runner.invoke(app, ['check', '--project', str(project)]).exit_code == 0
+
+  again = runner.invoke(app, ['migrate', '--project', str(project), '--rename-schema', 'Pets=PetList'])
+  assert again.exit_code == 0 and '(already done)' in again.output
+  missing = runner.invoke(app, ['migrate', '--project', str(project), '--rename-schema', 'Nope=Other'])
+  assert missing.exit_code == 1 and 'no shared schema is called `Nope`' in missing.output

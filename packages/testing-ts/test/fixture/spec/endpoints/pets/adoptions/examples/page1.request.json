@@ -1,0 +1,8 @@
+{
+  "description": "Page 1 of a walk over [0, 9]: from 0.",
+  "request": {
+    "from": 0,
+    "to": 9,
+    "limit": 3
+  }
+}

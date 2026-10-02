@@ -92,6 +92,7 @@ pub struct CommitDetail {
     /// Web page of the commit.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub html_url: Option<String>,
+    /// The underlying git commit.
     pub commit: GitCommit,
     /// GitHub account matched to the author, when known.
     #[serde(default, skip_serializing_if = "Option::is_none")]

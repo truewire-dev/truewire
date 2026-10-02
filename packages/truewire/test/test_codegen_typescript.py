@@ -9,6 +9,7 @@ backend renders today. And the CLI keeps the same manifest discipline as the Pyt
 (`--check` reports drift, `--delete` removes only what it owns).
 """
 import json
+import re
 import shutil
 from pathlib import Path
 
@@ -101,10 +102,14 @@ def test_scalar_formats_render_to_core_types_and_codecs():
     ('null', None): ('null', 't.null'),
     ('any', None): ('unknown', 't.unknown'),
     ('string', 'decimal-string'): ('Decimal', 't.decimal'),
-    ('string', 'integer-string'): ('number', 't.integerString'),
+    ('string', 'integer-string'): ('bigint', 't.integerString'),
     ('string', 'boolean-string'): ('boolean', 't.booleanString'),
+    ('integer', 'int64'): ('number | bigint', 't.int64'),
     ('integer', 'epoch-millis'): ('TimestampMillis', 't.epochMillis'),
     ('integer', 'epoch-seconds'): ('TimestampSeconds', 't.epochSeconds'),
+    ('number', 'epoch-seconds'): ('TimestampSeconds', 't.epochSecondsFloat'),
+    ('number', 'epoch-nanos'): ('TimestampNanos', 't.epochNanosFloat'),
+    ('string', 'epoch-millis'): ('TimestampMillis', 't.epochMillis'),
     ('string', 'date-time'): ('TimestampIso', 't.dateTime'),
     ('string', 'date'): ('DateIso', 't.date'),
     ('string', 'uuid'): ('string', 't.string'),
@@ -221,6 +226,23 @@ def test_fixture_walkers_render_every_resumable_shape(fixture_rendered):
   assert 'return new PaginatedResponse(1, next)' in total
 
 
+def test_a_token_walk_ending_on_an_empty_page_is_a_resumable_walker(tmp_path: Path):
+  """bitget's `token` walks end on an empty page: a `PaginatedResponse` over the cursor, not
+  a generator, stopping on the first page with no rows whatever cursor it carries."""
+  root = tmp_path / 'client'
+  shutil.copytree(FIXTURE_ROOT, root, ignore=shutil.ignore_patterns('.truewire', 'core_impl'))
+  spec = root / 'spec' / 'endpoints' / 'market' / 'order_list' / 'endpoint.json'
+  raw = json.loads(spec.read_text())
+  raw['pagination']['done'] = {'kind': 'empty', 'rows': 'orders'}
+  spec.write_text(json.dumps(raw))
+  rendered = render_package(build_plan(root))
+  token = rendered.files['market/order_list.ts']
+  assert 'PaginatedResponse<OrderListItem, string>' in token
+  assert 'async *orderListPaged' not in token
+  empty = token.index('if (rows.length === 0) return [rows, null]')
+  assert empty < token.index('const following = ')
+
+
 def test_methods_overload_validate_false_to_unknown(fixture_rendered):
   """Every method that returns a value carries two overload signatures ahead of its
   implementation: `validate: false` first (declaration order decides, and `CallOptions`
@@ -328,11 +350,10 @@ def test_github_example_output_is_what_the_backend_renders():
   project = load_project(root)
   rendered = render_package(build_plan(project), project)
   package = project.typescript_package_dir
-  manifest = json.loads((root / '.truewire' / 'typescript-files.json').read_text()) if (root / '.truewire' / 'typescript-files.json').is_file() else None
+  manifest = json.loads((root / '.truewire' / 'codegen' / 'typescript.json').read_text())
   for path, content in rendered.files.items():
     assert (package / path).read_text() == content, path
-  if manifest is not None:
-    assert sorted(manifest['files']) == sorted(rendered.files)
+  assert sorted(manifest['files']) == sorted(rendered.files)
   assert rendered.skipped == []
   assert 'listCommitsPaged(request: ListCommitsPagedRequest, options?: CallOptions): PaginatedResponse<Commit, number>' in rendered.files['repos/list_commits.ts']
 
@@ -380,6 +401,16 @@ def test_kraken_example_output_is_what_the_backend_renders():
   assert 'status(options?: CallOptions): Subscription<StatusMessage> {' in status
   assert 'parameters: undefined,\n      parametersCodec: undefined,' in status
 
+  # `spot.account.retrieve_export` declares `surface: handwritten`: no module is rendered for
+  # it, and `[typescript.extras."spot.account"]` folds the hand-written class into its router.
+  assert 'spot/account/retrieve_export.ts' not in rendered.files
+  account = rendered.files['spot/account/index.ts']
+  assert "import { RetrieveExport } from './retrieve_export.js'" in account
+  assert 'private readonly retrieveExport_: RetrieveExport' in account
+  assert "readonly retrieveExport: RetrieveExport['retrieveExport']" in account
+  assert 'this.retrieveExport_ = new RetrieveExport(core)' in account
+  assert 'this.retrieveExport = this.retrieveExport_.retrieveExport.bind(this.retrieveExport_)' in account
+
 
 def test_a_plain_router_over_a_composite_child_takes_the_fields_object():
   """A router whose own core declares nothing but whose child is a composite has to carry
@@ -416,6 +447,39 @@ def test_a_plain_router_over_a_composite_child_takes_the_fields_object():
   assert 'messageCodec: undefined,' in ticks
 
 
+def _renamed_composite_plan() -> PackagePlan:
+  """Coinbase's shape: the root maps its composite child `app` to `app_client`, and `app`
+  (`forward`) holds its own default `client` beside the forwarded `socket`."""
+  return PackagePlan.model_validate({
+    'name': 'p', 'rootClass': 'P',
+    'cores': {'root': {'children': {'app': 'app_client'}}, 'app': {'forward': ['socket'], 'children': {'feed': 'socket'}}, 'plain': {}},
+    'schemas': {},
+    'routers': [
+      {'path': [], 'core': 'root', 'children': [{'name': 'ping', 'kind': 'endpoint', 'class': 'Ping'}, {'name': 'app', 'kind': 'router', 'class': 'App'}]},
+      {'path': ['app'], 'core': 'app', 'children': [{'name': 'feed', 'kind': 'router', 'class': 'Feed'}, {'name': 'status', 'kind': 'endpoint', 'class': 'Status'}]},
+      {'path': ['app', 'feed'], 'core': 'plain', 'children': [{'name': 'ticks', 'kind': 'endpoint', 'class': 'Ticks'}]},
+    ],
+    'endpoints': [
+      {'path': ['ping'], 'kind': 'rpc', 'transports': ['http'], 'wire': {'path': '/ping', 'method': 'GET'}, 'core': 'root', 'request': {'shape': 'none'}, 'response': {}},
+      {'path': ['app', 'status'], 'kind': 'rpc', 'transports': ['http'], 'wire': {'path': '/status', 'method': 'GET'}, 'core': 'app', 'request': {'shape': 'none'}, 'response': {}},
+      {'path': ['app', 'feed', 'ticks'], 'kind': 'stream', 'transports': ['ws'], 'wire': {'channel': 'ticks'}, 'core': 'plain', 'request': {'shape': 'none'}, 'response': {}, 'stream': {}},
+    ],
+  })
+
+
+def test_a_composite_child_mapped_to_a_field_is_built_from_it_as_its_own_client():
+  """`children = { app = "app_client" }` on a composite child renames the child's default
+  field on the parent: the root takes `app_client`, and hands it to `App` as `client`."""
+  rendered = render_package(_renamed_composite_plan())
+  main = rendered.files['main.ts']
+  assert 'export interface PCore {\n  app_client: HttpEndpoint\n  client: HttpEndpoint\n  socket: StreamEndpoint\n}' in main
+  assert 'this.app = new App({ client: core.app_client, socket: core.socket })' in main
+  assert 'this.ping_ = new ping.Ping(core.client)' in main
+  app = rendered.files['app/index.ts']
+  assert 'export interface AppCore {\n  client: HttpEndpoint\n  socket: StreamEndpoint\n}' in app
+  assert 'this.status_ = new status.Status(core.client)' in app
+
+
 # -- the command ----------------------------------------------------------------------
 
 
@@ -424,7 +488,7 @@ def test_generate_typescript_writes_checks_and_deletes(tmp_path: Path):
   runner = CliRunner()
   result = runner.invoke(app, ['generate', 'typescript', '--project', str(root)])
   assert result.exit_code == 0, result.output
-  manifest = root / '.truewire' / 'typescript-files.json'
+  manifest = root / '.truewire' / 'codegen' / 'typescript.json'
   assert manifest.is_file()
   files = json.loads(manifest.read_text())['files']
   assert 'main.ts' in files and 'market/order_list.ts' in files
@@ -440,7 +504,7 @@ def test_generate_typescript_writes_checks_and_deletes(tmp_path: Path):
   manifest.unlink()
   unmanifested = runner.invoke(app, ['generate', 'typescript', '--project', str(root), '--check'])
   assert unmanifested.exit_code == 0, unmanifested.output
-  assert 'No manifest at .truewire/typescript-files.json; the plan stood in for it' in unmanifested.output
+  assert 'No manifest at .truewire/codegen/typescript.json; the plan stood in for it' in unmanifested.output
   assert not manifest.exists()
   assert runner.invoke(app, ['generate', 'typescript', '--project', str(root)]).exit_code == 0
   assert manifest.is_file()
@@ -458,8 +522,662 @@ def test_generate_typescript_writes_checks_and_deletes(tmp_path: Path):
   assert not manifest.exists()
 
 
+def test_generate_typescript_moves_a_legacy_manifest(tmp_path: Path):
+  """W16 through `generate_planned`: a manifest at `.truewire/typescript-files.json` moves to
+  `.truewire/codegen/typescript.json`, and a file it owned that the plan no longer renders
+  is removed."""
+  root = _with_typescript(FIXTURE_ROOT, tmp_path / 'client')
+  runner = CliRunner()
+  assert runner.invoke(app, ['generate', 'typescript', '--project', str(root)]).exit_code == 0
+  manifest = root / '.truewire' / 'codegen' / 'typescript.json'
+  legacy = root / '.truewire' / 'typescript-files.json'
+  owned = json.loads(manifest.read_text())
+  legacy.write_text(json.dumps({**owned, 'files': sorted([*owned['files'], 'gone.ts'])}))
+  manifest.unlink()
+  gone = root / 'ts' / 'client' / 'gone.ts'
+  gone.write_text('export {}\n')
+
+  stale = runner.invoke(app, ['generate', 'typescript', '--project', str(root), '--check'])
+  assert stale.exit_code == 1
+  assert '- stale manifest: .truewire/typescript-files.json' in stale.output
+  assert '- no longer planned: gone.ts' in stale.output
+
+  moved = runner.invoke(app, ['generate', 'typescript', '--project', str(root)])
+  assert moved.exit_code == 0, moved.output
+  assert 'Moved manifest .truewire/typescript-files.json to .truewire/codegen/typescript.json.' in moved.output
+  assert not legacy.exists() and not gone.exists()
+  assert json.loads(manifest.read_text()) == owned
+  check = runner.invoke(app, ['generate', 'typescript', '--project', str(root), '--check'])
+  assert check.exit_code == 0, check.output
+
+
 def test_generate_typescript_needs_a_typescript_section(tmp_path: Path):
   shutil.copytree(FIXTURE_ROOT, tmp_path / 'client', ignore=shutil.ignore_patterns('node_modules', '.truewire'))
   result = CliRunner().invoke(app, ['generate', 'typescript', '--project', str(tmp_path / 'client')])
   assert result.exit_code == 1
   assert 'no [typescript] section' in result.output
+
+
+DUAL_FIXTURE = Path(__file__).parents[2] / 'testing-ts' / 'test' / 'fixture'
+
+
+def test_a_dual_transport_endpoint_is_rendered_in_full():
+  """An `rpc` endpoint declaring both `http` and `ws` is no longer skipped: its class takes
+  a `DualEndpoint`, its method a `TransportOptions` whose `transport` defaults to the
+  first-declared transport, and both overloads keep the option. The committed output of
+  `packages/testing-ts/test/fixture` (proved against the mock over both transports by that
+  package's own tests) is what the backend renders."""
+  if not (DUAL_FIXTURE / 'truewire.toml').is_file():
+    pytest.skip('packages/testing-ts is not checked out beside the package')
+  project = load_project(DUAL_FIXTURE)
+  rendered = render_package(build_plan(project), project)
+  assert rendered.skipped == []
+  package = project.typescript_package_dir
+  for path, content in rendered.files.items():
+    assert (package / path).read_text() == content, path
+
+  get_pet = rendered.files['pets/get_pet.ts']
+  assert "import { type Codec, type DualEndpoint, type TransportOptions, t } from '@truewire/core'" in get_pet
+  assert 'constructor(readonly core: DualEndpoint) {}' in get_pet
+  assert 'getPet(request: Request, options: TransportOptions & { validate: false }): Promise<unknown>' in get_pet
+  assert 'async getPet(request: Request, options?: TransportOptions): Promise<Pet> {' in get_pet
+  assert "      method: 'POST',\n      path: 'pets_get'," in get_pet
+  assert "      ...options,\n      transport: options?.transport ?? 'http',\n" in get_pet
+  assert "transport: options?.transport ?? 'ws'," in rendered.files['pets/list_pets.ts']
+  # The root also holds `pets.adoptions`, reached over HTTP only.
+  assert 'constructor(readonly core: DualEndpoint & HttpEndpoint) {' in rendered.files['main.ts']
+
+
+def test_a_seek_walk_renders_one_call_to_the_runtime_walker():
+  """ADR 0013's `seek` walk is rendered, not refused: the whole request (both bounds) is the
+  walker's argument, the moving bound seeds `seek`, the cursor field becomes a `rowField`
+  path, the caller's `limit` is clamped once and is the cap before the size's schema default,
+  and a page is fetched through the plain method with the clamped `limit` and the moving
+  bound replaced. The implementation
+  signature widens to the raw overload's type; the overloads stay exact."""
+  if not (DUAL_FIXTURE / 'truewire.toml').is_file():
+    pytest.skip('packages/testing-ts is not checked out beside the package')
+  project = load_project(DUAL_FIXTURE)
+  rendered = render_package(build_plan(project), project)
+  assert rendered.skipped == []
+  adoptions = rendered.files['pets/adoptions.ts']
+  assert 'has no TypeScript walker' not in adoptions
+  assert "import { type CallOptions, type Codec, type HttpEndpoint, PaginatedResponse, type SeekState, rowField, seek, t } from '@truewire/core'" in adoptions or (
+    'type SeekState' in adoptions and 'rowField' in adoptions and ' seek,' in adoptions
+  )
+  assert 'export type AdoptionsPagedRequest = Request' in adoptions
+  assert (
+    'adoptionsPaged(request?: AdoptionsPagedRequest, options?: CallOptions): '
+    'PaginatedResponse<Adoption, SeekState<Adoption, number>>\n'
+  ) in adoptions
+  assert (
+    "adoptionsPaged(request: AdoptionsPagedRequest, options: CallOptions & { validate: false }): "
+    "PaginatedResponse<unknown, SeekState<unknown, number>>\n"
+  ) in adoptions
+  assert (
+    'adoptionsPaged(request: AdoptionsPagedRequest = {}, options?: CallOptions): '
+    'PaginatedResponse<Adoption, SeekState<Adoption, number>> | PaginatedResponse<unknown, SeekState<unknown, number>> {'
+  ) in adoptions
+  assert (
+    "    return seek<Adoption, number>(request.from, {\n"
+    "      method: 'adoptionsPaged',\n"
+    "      field: 'at',\n"
+    "      read: row => rowField(row, ['at']),\n"
+    "      keys: 'number',\n"
+    "      unique: true,\n"
+    "      descending: false,\n"
+    "      cap: size ?? 3,\n"
+    "      far: request.to,\n"
+  ) in adoptions
+  assert '    const size = request.limit == null ? undefined : Math.min(Math.max(request.limit, 2), 500)\n    return seek<' in adoptions
+  assert 'const response = await this.adoptions({ ...request, limit: size, from: pos }, options)' in adoptions
+  assert 'The walk requests pages of at least 2 rows and at most 500: a page must hold one new row beside the one it re-reads.' in adoptions
+  # The hover doc speaks of the row's own field, as Python's docstring does: no spec path,
+  # no ADR number.
+  assert (
+    'Paged variant of `adoptions`: walks forwards by moving `from` to the latest `at` of each '
+    "page that came back full, never past the caller's own `to`; awaitable"
+  ) in adoptions
+  walks = [line for line in adoptions.splitlines() if 'Paged variant' in line]
+  assert walks and not [line for line in walks if re.search(r'\[-1\]|\[0\]|ADR \d|extreme', line)]
+  router = rendered.files['pets/index.ts']
+  assert 'PaginatedResponse<adoptions.Adoption, SeekState<adoptions.Adoption, number>> | PaginatedResponse<unknown, SeekState<unknown, number>> {' in router
+
+
+def _stream_project(root: Path, *, reply: dict | None) -> Path:
+  """A one-stream project: `streams.book`, with or without a declared `reply` (ADR 0014)."""
+  (root / 'spec' / 'endpoints' / 'streams' / 'book').mkdir(parents=True)
+  (root / 'truewire.toml').write_text(
+    '[project]\nname = "venue"\n\n[typescript]\npackage = "venue"\nsrc = "src"\nname = "Venue"\n'
+  )
+  (root / 'spec' / 'endpoints' / 'streams' / 'router.json').write_text(json.dumps({
+    'description': 'Streams.', 'upstream': 'https://venue.example/ws', 'core': 'socket',
+  }))
+  spec: dict = {
+    'kind': 'stream', 'channel': 'book', 'description': 'Order book.',
+    'parameters': {
+      'title': 'BookParams', 'type': 'object', 'description': 'Subscribe parameters.',
+      'required': ['symbol'], 'properties': {'symbol': {'type': 'string', 'description': 'Market.'}},
+    },
+    'payload': {
+      'title': 'BookUpdate', 'type': 'object', 'description': 'One update.',
+      'required': ['levels'],
+      'properties': {'levels': {'type': 'array', 'description': 'Levels.', 'items': {'type': 'array', 'description': 'Price and size.', 'prefixItems': [{'type': 'string', 'description': 'Price.'}, {'type': 'string', 'description': 'Size.'}]}}},
+    },
+  }
+  if reply is not None:
+    spec['reply'] = reply
+  (root / 'spec' / 'endpoints' / 'streams' / 'book' / 'endpoint.json').write_text(json.dumps({
+    'meta': {}, 'spec': spec,
+  }))
+  return root
+
+
+def test_a_stream_reply_types_the_subscription_acknowledgement(tmp_path: Path):
+  """ADR 0014: a stream declaring `reply` takes a `ReplyStreamEndpoint`, returns
+  `Subscription<Message, Reply>` and hands the core `replyCodec`; its `validate: false`
+  overload leaves the reply raw as well. A stream without one renders as before."""
+  reply = {
+    'title': 'BookSnapshot', 'type': 'object', 'description': 'The whole book, as the ack carries it.',
+    'required': ['bids'],
+    'properties': {'bids': {'type': 'array', 'description': 'Bids.', 'items': {'type': 'object', 'description': 'One level.', 'required': ['price'], 'properties': {'price': {'type': 'string', 'format': 'decimal-string', 'description': 'Price.'}}}}},
+  }
+  project = load_project(_stream_project(tmp_path / 'with', reply=reply))
+  plan = build_plan(project)
+  book = render_package(plan, project).files['streams/book.ts']
+  assert plan.endpoints[0].stream is not None and plan.endpoints[0].stream.reply == 'BookSnapshot'
+  assert 'export interface BookSnapshot {' in book
+  assert 'constructor(readonly core: ReplyStreamEndpoint) {}' in book
+  assert 'book(parameters: Parameters, options: CallOptions & { validate: false }): Subscription<unknown, unknown>' in book
+  assert 'book(parameters: Parameters, options?: CallOptions): Subscription<BookUpdate, BookSnapshot> {' in book
+  assert '      messageCodec: BookUpdate,\n      replyCodec: BookSnapshot,\n      meta: {},' in book
+
+  plain_project = load_project(_stream_project(tmp_path / 'without', reply=None))
+  plain = render_package(build_plan(plain_project), plain_project).files['streams/book.ts']
+  assert 'constructor(readonly core: StreamEndpoint) {}' in plain
+  assert 'Subscription<BookUpdate> {' in plain and 'replyCodec' not in plain
+
+
+def _pets_with_extras(tmp_path: Path, extras: str) -> Path:
+  """A copy of the `pets` fixture with `[typescript.extras]` entries appended."""
+  root = tmp_path / 'pets'
+  shutil.copytree(DUAL_FIXTURE, root, ignore=shutil.ignore_patterns('node_modules', '.truewire'))
+  toml = root / 'truewire.toml'
+  toml.write_text(toml.read_text() + '\n' + extras)
+  return root
+
+
+def test_extras_replace_a_generated_child_or_add_methods(tmp_path: Path):
+  """An extra that `replaces` a generated child is built in its place (the generated methods
+  keep delegating to it); an added one is built from the router's core; every listed method
+  becomes a property typed by the class's own method."""
+  if not (DUAL_FIXTURE / 'truewire.toml').is_file():
+    pytest.skip('packages/testing-ts is not checked out beside the package')
+  root = _pets_with_extras(tmp_path, (
+    '[[typescript.extras."pets"]]\nfile = "get_pet_cached"\nclass = "GetPetCached"\nreplaces = "get_pet"\nmethods = ["getPetCached"]\n\n'
+    '[[typescript.extras."pets"]]\nfile = "adopt"\nclass = "Adopt"\nmethods = ["adopt", "release"]\n'
+  ))
+  project = load_project(root)
+  router = render_package(build_plan(project), project).files['pets/index.ts']
+  assert "import { GetPetCached } from './get_pet_cached.js'" in router
+  assert "import { Adopt } from './adopt.js'" in router
+  assert 'private readonly getPet_: GetPetCached' in router
+  assert 'this.getPet_ = new GetPetCached(core)' in router
+  assert 'return this.getPet_.getPet(request, options)' in router
+  assert 'private readonly adopt_: Adopt' in router
+  assert 'this.adopt_ = new Adopt(core)' in router
+  assert "readonly release: Adopt['release']" in router
+  assert 'this.release = this.adopt_.release.bind(this.adopt_)' in router
+  assert "readonly getPetCached: GetPetCached['getPetCached']" in router
+
+
+@pytest.mark.parametrize(('extras', 'message'), [
+  ('[[typescript.extras."pets"]]\nfile = "x"\nclass = "X"\nmethods = ["getPet"]\n', 'collides'),
+  ('[[typescript.extras."pets"]]\nfile = "x"\nclass = "X"\nreplaces = "nope"\n', 'names no generated child'),
+  ('[[typescript.extras."nowhere"]]\nfile = "x"\nclass = "X"\n', 'names no router node'),
+])
+def test_extras_refuse_what_would_not_build(tmp_path: Path, extras: str, message: str):
+  """A method name a generated member already has, a `replaces` naming no generated child,
+  and a node that is no router are refused before anything is written."""
+  if not (DUAL_FIXTURE / 'truewire.toml').is_file():
+    pytest.skip('packages/testing-ts is not checked out beside the package')
+  project = load_project(_pets_with_extras(tmp_path, extras))
+  with pytest.raises(ValueError, match=message):
+    render_package(build_plan(project), project)
+  result = CliRunner().invoke(app, ['generate', 'typescript', '--project', str(project.root)])
+  assert result.exit_code != 0
+  assert message in result.output
+
+
+def test_a_walker_over_tuple_rows_parenthesises_the_row_array(tmp_path: Path):
+  """A readonly tuple row binds wrongly unparenthesised in `X[]`: `readonly [a, b][]` is a
+  readonly array of mutable tuples, which `tsc` rejects against the walker's own rows.
+  deribit's `get_volatility_index_data` (a `token` walk over candle tuples) is the case."""
+  root = tmp_path / 'venue'
+  endpoint_dir = root / 'spec' / 'endpoints' / 'market' / 'candles'
+  endpoint_dir.mkdir(parents=True)
+  (root / 'truewire.toml').write_text('[project]\nname = "venue"\n\n[typescript]\npackage = "venue"\nsrc = "src"\nname = "Venue"\n')
+  (root / 'spec' / 'endpoints' / 'market' / 'router.json').write_text(json.dumps({
+    'description': 'Market data.', 'upstream': 'https://venue.example/market', 'core': 'default',
+  }))
+  (endpoint_dir / 'endpoint.json').write_text(json.dumps({
+    'meta': {},
+    'spec': {
+      'kind': 'rpc', 'transports': ['http'], 'path': '/candles', 'method': 'GET', 'description': 'Candles.',
+      'request': {
+        'title': 'CandlesRequest', 'type': 'object', 'description': 'Query.',
+        'properties': {'cursor': {'type': 'string', 'description': 'Continuation cursor.'}},
+      },
+      'response': {
+        'title': 'CandlesPage', 'type': 'object', 'description': 'A page.', 'required': ['data'],
+        'properties': {
+          'data': {'type': 'array', 'description': 'Candles.', 'items': {
+            'type': 'array', 'description': 'Time and close.', 'minItems': 2, 'maxItems': 2,
+            'prefixItems': [{'type': 'number', 'description': 'Time.'}, {'type': 'number', 'description': 'Close.'}],
+          }},
+          'continuation': {'anyOf': [{'type': 'string', 'description': 'Next cursor.'}, {'type': 'null'}], 'description': 'Next cursor.'},
+        },
+      },
+    },
+    'pagination': {
+      'strategy': 'token', 'cursor': {'parameter': 'cursor', 'from': 'continuation'},
+      'done': {'kind': 'absent_cursor', 'rows': 'data'},
+    },
+  }))
+  project = load_project(root)
+  candles = render_package(build_plan(project), project).files['market/candles.ts']
+  assert 'Promise<[(readonly [number, number])[], string | null]>' in candles
+  assert 'readonly [number, number][]' not in candles
+
+
+def test_proto_sources_render_as_proto_ts(tmp_path: Path):
+  """A project with `spec/proto/*.proto` gets `proto.ts` exporting them verbatim (ADR 0016);
+  one without gets no such file."""
+  root = _with_typescript(FIXTURE_ROOT, tmp_path / 'client')
+  assert 'proto.ts' not in render_package(build_plan(root), load_project(root)).files
+  (root / 'spec' / 'proto' / 'nested').mkdir(parents=True)
+  (root / 'spec' / 'proto' / 'push.proto').write_text('syntax = "proto3";\nmessage Push { string channel = 1; }\n')
+  (root / 'spec' / 'proto' / 'nested' / 'body.proto').write_text('syntax = "proto3";\nmessage Body { string "quoted" = 1; }\n')
+  source = render_package(build_plan(root), load_project(root)).files['proto.ts']
+  assert source.startswith(BANNER)
+  assert 'export const PROTO_SOURCES: Readonly<Record<string, string>> = {' in source
+  assert source.index('"nested/body.proto"') < source.index('"push.proto"')
+  assert '"push.proto": "syntax = \\"proto3\\";\\nmessage Push { string channel = 1; }\\n",' in source
+
+
+def _rpc(root: Path, path: str, spec: dict, pagination: dict | None = None):
+  """Write one `rpc` endpoint (and its grouping's `router.json`) under `root/spec/endpoints`."""
+  *groups, _ = path.split('/')
+  group_dir = root / 'spec' / 'endpoints' / Path(*groups)
+  (group_dir / path.split('/')[-1]).mkdir(parents=True, exist_ok=True)
+  if not (group_dir / 'router.json').is_file():
+    (group_dir / 'router.json').write_text(json.dumps({
+      'description': 'A grouping.', 'upstream': 'https://venue.example/docs', 'core': 'default',
+    }))
+  document: dict = {'meta': {}, 'spec': {'kind': 'rpc', 'transports': ['http'], 'method': 'GET', **spec}}
+  if pagination is not None:
+    document['pagination'] = pagination
+  (group_dir / path.split('/')[-1] / 'endpoint.json').write_text(json.dumps(document))
+
+
+def _page(title: str, rows: dict, **extra: dict) -> dict:
+  return {
+    'title': title, 'type': 'object', 'description': 'A page.', 'required': ['list'],
+    'properties': {'list': {'type': 'array', 'description': 'Rows.', 'items': rows}, **extra},
+  }
+
+
+_ROW = {'title': 'Row', 'type': 'object', 'description': 'One row.', 'required': ['id'], 'properties': {'id': {'type': 'string', 'description': 'Id.'}}}
+
+
+@pytest.fixture(name='venue')
+def fixture_venue(tmp_path: Path) -> dict[str, str]:
+  """One project holding a shape each that the migrated client specs failed `tsc` on."""
+  root = tmp_path / 'venue'
+  (root / 'spec').mkdir(parents=True)
+  (root / 'truewire.toml').write_text('[project]\nname = "venue"\n\n[typescript]\npackage = "venue"\nsrc = "src"\nname = "Venue"\n')
+  (root / 'spec' / 'schemas.json').write_text(json.dumps({
+    'Currency': {'title': 'Currency', 'type': 'object', 'description': 'A currency.', 'required': ['code'], 'properties': {'code': {'type': 'string', 'description': 'Code.'}}},
+  }))
+  _rpc(root, 'market/index', {'path': '/index', 'description': 'Index price.', 'response': {
+    'title': 'IndexPrice', 'type': 'object', 'description': 'Index.', 'required': ['price'], 'properties': {'price': {'type': 'string', 'description': 'Price.'}},
+  }})
+  _rpc(root, 'market/currency', {'path': '/currency', 'description': 'One currency.', 'response': {'$ref': 'Currency'}})
+  _rpc(root, 'stats/price', {
+    'path': '/api', 'description': 'Price.',
+    'request': {'title': 'PriceRequest', 'type': 'object', 'description': 'Query.', 'required': ['module'], 'properties': {
+      'module': {'type': 'string', 'enum': ['stats'], 'default': 'stats', 'description': 'Fixed selector.'},
+      'chain': {'type': 'string', 'description': 'Chain.'},
+    }},
+    'response': {'title': 'Price', 'type': 'object', 'description': 'Price.', 'properties': {'usd': {'type': 'string', 'description': 'USD.'}}},
+  })
+  cursor_request = {'title': 'ListRequest', 'type': 'object', 'description': 'Query.', 'properties': {
+    'cursor': {'type': 'string', 'description': 'Cursor.'},
+  }}
+  _rpc(root, 'accounts/list', {
+    'path': '/accounts', 'description': 'Accounts.', 'request': cursor_request,
+    'response': _page('AccountsPage', _ROW, cursor={'type': 'string', 'description': 'Next cursor.'}),
+  }, {'strategy': 'token', 'cursor': {'parameter': 'cursor', 'from': 'cursor'}, 'done': {'kind': 'absent_cursor'}})
+  _rpc(root, 'market/instruments', {
+    'path': '/instruments', 'description': 'Instruments.', 'request': cursor_request,
+    'response': {'description': 'By category.', 'anyOf': [
+      _page('SpotInfo', _ROW),
+      _page('FuturesInfo', {**_ROW, 'title': 'FuturesRow'}, nextPageCursor={'type': 'string', 'description': 'Next cursor.'}),
+    ]},
+  }, {'strategy': 'token', 'cursor': {'parameter': 'cursor', 'from': 'nextPageCursor'}, 'done': {'kind': 'absent_cursor', 'rows': 'list'}})
+  _rpc(root, 'market/trades', {
+    'path': '/trades', 'description': 'Trades.',
+    'request': {'title': 'TradesRequest', 'type': 'object', 'description': 'Query.', 'properties': {
+      'page': {'type': 'integer', 'description': 'Page.'},
+      'limit': {'type': 'integer', 'maximum': 100, 'description': 'Rows per page, at most 100.'},
+    }},
+    'response': _page('TradesPage', _ROW),
+  }, {'strategy': 'page', 'index': {'parameter': 'page'}, 'size': {'parameter': 'limit'}, 'done': {'kind': 'short_page', 'rows': 'list'}})
+  summary_request = {'title': 'SummaryRequest', 'type': 'object', 'description': 'Query.', 'required': ['kind'], 'properties': {
+    'kind': {'type': 'integer', 'enum': [1, 2], 'description': 'Which shape.'},
+    'page': {'type': 'integer', 'description': 'Page.'},
+    'size': {'type': 'integer', 'default': 10, 'description': 'Rows per page.'},
+  }}
+  _rpc(root, 'broker/summary', {
+    'path': '/summary', 'description': 'Summaries.', 'request': summary_request,
+    'response': {'description': 'By kind.', 'anyOf': [
+      _page('SummaryUsdm', {**_ROW, 'title': 'UsdmRow'}), _page('SummaryCoinm', {**_ROW, 'title': 'CoinmRow'}),
+    ]},
+  }, {'strategy': 'page', 'index': {'parameter': 'page', 'start': 1}, 'size': {'parameter': 'size'}, 'done': {'kind': 'short_page', 'rows': 'list'}})
+  project = load_project(root)
+  plan = build_plan(project)
+  rendered = render_package(plan, project)
+  assert rendered.skipped == []
+  return rendered.files
+
+
+def test_a_leaf_named_index_is_not_its_groupings_router_module(venue):
+  """`market.index` would otherwise be written over `market/index.ts`, the router (binance
+  options' `market.index`)."""
+  assert 'export class Index {' in venue['market/index_.ts']
+  assert "import * as index from './index_.js'" in venue['market/index.ts']
+
+
+def test_a_class_grows_past_a_shared_type_the_response_is_a_bare_reference_to(venue):
+  """A response that is only `$ref: Currency` imports `Currency` under its own name, so the
+  endpoint class is `CurrencyEndpoint` (kucoin's `spot.currency`, moralis, bitget)."""
+  currency = venue['market/currency.ts']
+  assert 'export class CurrencyEndpoint {' in currency
+  assert 'Promise<Currency>' in currency
+
+
+def test_a_fixed_value_on_an_optional_request_reads_it_optionally(venue):
+  """Every other field optional makes `request` optional, so its fixed value is read with
+  `?.` (etherscan's `module`/`action`: a `tsc` error, and a `TypeError` on a bare call)."""
+  assert "const wire: Request = { ...request, module: request?.module ?? 'stats' }" in venue['stats/price.ts']
+
+
+def test_a_token_generator_walker_annotates_the_response(venue):
+  """The cursor read back into the next call is a circular inference unless `response` is
+  typed (TS7022, first seen on bitget's `empty`-terminated token walks, which are now
+  resumable walkers; a token walk with no declared `rows` still renders the generator)."""
+  assert 'const response: AccountsPage = await this.list({ ...request, cursor }, options)' in venue['accounts/list.ts']
+
+
+def test_a_token_walk_over_a_union_payload_joins_every_variants_rows(venue):
+  """A variant may lack the cursor, and a row type walked through the first variant is wrong
+  for the rest (bybit's `market.instruments`): the rows are the union of every variant's,
+  and both paths are read through a structural view of the page, as Python walks it."""
+  instruments = venue['market/instruments.ts']
+  assert 'union payload' not in instruments
+  assert 'instrumentsPaged(request?: InstrumentsPagedRequest, options?: CallOptions): PaginatedResponse<Row | FuturesRow, string>' in instruments
+  assert 'const page = response as { list?: (Row | FuturesRow)[] | null; nextPageCursor?: string | null }' in instruments
+  assert 'const rows = page.list ?? []' in instruments
+  assert 'const following = page.nextPageCursor ?? null' in instruments
+
+
+def test_a_page_walk_over_a_union_payload_joins_every_variants_rows(venue):
+  """binance's broker `sub_account_futures_summary_v2` answers one of two shapes by
+  `futuresType`: a page walk reads the rows through a structural view of the page, named
+  apart from its own `page` state."""
+  summary = venue['broker/summary.ts']
+  assert 'union payload' not in summary
+  assert 'PaginatedResponse<UsdmRow | CoinmRow, number>' in summary
+  assert 'const view = response as { list?: (UsdmRow | CoinmRow)[] | null }' in summary
+  assert 'const rows = view.list ?? []' in summary
+  assert 'return [rows, page + 1]' in summary
+
+def test_a_page_size_is_clamped_to_its_schema_maximum(venue):
+  """A caller asking for 500 rows of a 100-row endpoint gets full pages of 100, which must
+  not read as the short last page; the raw size is what narrows against `undefined`."""
+  assert 'rows.length === 0 || (request.limit !== undefined && rows.length < Math.min(request.limit, 100))' in venue['market/trades.ts']
+
+
+def test_a_seek_walk_sends_the_size_it_clamps_at_least_2():
+  """The walk clamps a given size once, before `seek`: at most the schema `maximum`, at least
+  2 (a page of 1 cannot advance past an inclusive moving bound), and that value is both the
+  cap and what every request sends. An omitted size stays unset, the cap falling back to the
+  declared `cap` or the schema default."""
+  from types import SimpleNamespace
+
+  from truewire.codegen.typescript.endpoint import _seek_size
+
+  def size(*, required: bool, default: int | None, maximum: int | None, fixed_cap: int | None = None, int64: bool = False) -> tuple[str | None, str]:
+    field_type = {'type': 'scalar', 'base': 'integer', **({'format': 'int64'} if int64 else {})}
+    endpoint = SimpleNamespace(request=SimpleNamespace(fields=[SimpleNamespace(wire='limit', required=required, type=field_type)]))
+    pagination = SimpleNamespace(size='limit', size_default=default, size_maximum=maximum)
+    return _seek_size(endpoint, pagination, {'cap': fixed_cap})  # type: ignore[arg-type]
+
+  assert size(required=True, default=None, maximum=1000) == ('const size = Math.min(Math.max(request.limit, 2), 1000)', 'size')
+  assert size(required=False, default=100, maximum=1000) == ('const size = request.limit == null ? undefined : Math.min(Math.max(request.limit, 2), 1000)', 'size ?? 100')
+  assert size(required=False, default=None, maximum=1000) == ('const size = request.limit == null ? undefined : Math.min(Math.max(request.limit, 2), 1000)', 'size')
+  assert size(required=False, default=None, maximum=None, fixed_cap=500) == ('const size = request.limit == null ? undefined : Math.max(request.limit, 2)', 'size ?? 500')
+  assert size(required=True, default=None, maximum=500, int64=True) == ('const size = Math.min(Math.max(Number(request.limit), 2), 500)', 'size')
+  nothing = SimpleNamespace(request=SimpleNamespace(fields=[]))
+  assert _seek_size(nothing, SimpleNamespace(size=None, size_default=None, size_maximum=None), {'cap': 300}) == (None, '300')  # type: ignore[arg-type]
+  # A size sent as a string (a `string`, or an `integer-string` rendered `bigint`) is left
+  # alone: no clamp, nothing resent, and the cap is the fallback.
+  for fmt in ({}, {'format': 'integer-string'}):
+    endpoint = SimpleNamespace(request=SimpleNamespace(fields=[SimpleNamespace(wire='limit', required=True, type={'type': 'scalar', 'base': 'string', **fmt})]))
+    assert _seek_size(endpoint, SimpleNamespace(size='limit', size_default=100, size_maximum=1000), {}) == (None, '100')  # type: ignore[arg-type]
+
+
+def test_a_seek_walks_hover_doc_says_where_the_runtime_moves_the_bound(tmp_path: Path):
+  """The shared sentence over the Rust walker fixture's seek walks: a tuple row's key is an
+  element of each row (TRU-119), `field` is relative to one row, a cap-less or span walk is
+  not described as moving on full pages only (TRU-117), and a string id is the last row's
+  (TRU-125)."""
+  root = tmp_path / 'walkers'
+  shutil.copytree(Path(__file__).parent / 'fixtures' / 'rust_walkers', root)
+  with (root / 'truewire.toml').open('a') as toml:
+    toml.write('\n[typescript]\npackage = "walkers"\nsrc = "ts"\nname = "Walkers"\n')
+  project = load_project(root)
+  files = render_package(build_plan(project), project).files
+  candles = files['market/candles.ts']
+  assert "      field: '[0]',\n" in candles
+  assert (
+    'walks forwards by moving `start` to the latest first element among the rows of each page '
+    "that came back full, never past the caller's own `end`;"
+  ) in candles
+  assert (
+    'walks backwards by moving `idLessThan` to the `id` of the last row of each page that came '
+    'back full, or of every page while `limit` is unset;'
+  ) in files['market/ledger.ts']
+  assert (
+    'walks backwards by moving `end` to the earliest `time` of each page that came back full, and '
+    "to the edge of the range it requested after a short one, never past the caller's own `start`;"
+  ) in files['market/candles_chunked.ts']
+  walks = [line for source in files.values() for line in source.splitlines() if 'Paged variant' in line]
+  assert walks and not [line for line in walks if re.search(r'\[-?\d+\]|position|ADR \d|extreme|``', line)]
+
+
+def test_a_seek_walk_with_a_span_sends_the_clamped_size_and_leaves_a_string_size_alone(tmp_path: Path):
+  """A `span` destructures the request into `base`; the clamped size still goes out on every
+  page. An optional `int64` size is counted through `Number`, and a size under a maximum
+  below 2 is that maximum. A string size renders no clamp and no rule sentence."""
+  root = tmp_path / 'venue'
+  (root / 'spec').mkdir(parents=True)
+  (root / 'truewire.toml').write_text('[project]\nname = "venue"\n\n[typescript]\npackage = "venue"\nsrc = "src"\nname = "Venue"\n')
+  candle = {'title': 'Candle', 'type': 'object', 'description': 'One candle.', 'required': ['time'], 'properties': {'time': {'type': 'integer', 'format': 'epoch-seconds', 'description': 'Open time.'}}}
+  pagination = {
+    'strategy': 'seek', 'cursor': {'field': '[-1].time', 'unique': True}, 'bound': {'start': 'start', 'end': 'end'},
+    'anchor': 'end', 'rows': 'candles', 'span': {'parameter': 'span', 'default': 3600, 'unit': 's'}, 'size': {'parameter': 'limit'},
+  }
+  for name, limit in {
+    'int64': {'type': 'integer', 'format': 'int64', 'maximum': 1000},
+    'tiny': {'type': 'integer', 'maximum': 1},
+    'text': {'type': 'string', 'maximum': 1000},
+  }.items():
+    title = name.capitalize()
+    _rpc(root, f'market/{name}', {
+      'path': f'/candles/{name}', 'description': 'Candles.',
+      'request': {'title': f'{title}Request', 'type': 'object', 'description': 'Query.', 'required': ['start', 'end'], 'properties': {
+        'start': {'type': 'integer', 'format': 'epoch-seconds', 'description': 'From.'},
+        'end': {'type': 'integer', 'format': 'epoch-seconds', 'description': 'To.'},
+        'limit': {**limit, 'description': 'Rows.'},
+      }},
+      'response': {'title': f'{title}Page', 'type': 'object', 'description': 'A page.', 'required': ['candles'], 'properties': {
+        'candles': {'type': 'array', 'description': 'Rows.', 'items': {**candle, 'title': f'{title}Candle'}},
+      }},
+    }, pagination)
+  project = load_project(root)
+  rendered = render_package(build_plan(project), project)
+  assert rendered.skipped == []
+  int64 = rendered.files['market/int64.ts']
+  assert '    const size = request.limit == null ? undefined : Math.min(Math.max(Number(request.limit), 2), 1000)\n' in int64
+  assert 'const { span: span = 3600, ...base } = request' in int64
+  assert 'const response = await this.int64({ ...base, limit: size, end: pos!, start: edge! }, options)' in int64
+  assert 'The walk requests pages of at least 2 rows and at most 1000' in int64
+  tiny = rendered.files['market/tiny.ts']
+  assert 'Math.min(Math.max(request.limit, 2), 1)' in tiny
+  assert 'The walk requests pages of 1 row.' in tiny and 'at least 2' not in tiny
+  text = rendered.files['market/text.ts']
+  assert 'Math.max' not in text and 'const size' not in text and 'limit: size' not in text
+  assert 'The walk requests pages' not in text
+  assert '      cap: undefined,\n' in text
+  assert 'const response = await this.text({ ...base, end: pos!, start: edge! }, options)' in text
+
+
+def _hand_written_streams_project(root: Path) -> Path:
+  """A composite root over `streams`, whose `market` router holds only a hand-written stream
+  (mexc's protobuf-framed spot leaves) beside a generated `rest` endpoint."""
+  root.mkdir(parents=True)
+  (root / 'truewire.toml').write_text(
+    '[project]\nname = "venue"\n\n'
+    '[cores.socket]\nmeta = { type = "object", properties = { proto_field = { type = "string" } }, required = ["proto_field"], additionalProperties = false }\n\n'
+    '[typescript]\npackage = "venue"\nsrc = "src"\nname = "Venue"\n\n'
+    '[go]\npackage = "venue"\nsrc = "go"\nname = "Venue"\nmodule = "example.com/fixture_client"\nroot = "go/venue"\n\n'
+    '[python.cores.root]\nbase = "venue.core:Root"\nchildren = { streams = "stream_client", rest = "rest_client" }\n\n'
+    '[[typescript.extras."streams.market"]]\nfile = "trades"\nclass = "Trades"\nmethods = ["trades"]\n'
+  )
+  endpoints = root / 'spec' / 'endpoints'
+  (endpoints / 'streams' / 'market' / 'trades').mkdir(parents=True)
+  (endpoints / 'rest' / 'time').mkdir(parents=True)
+  (endpoints / 'router.json').write_text(json.dumps({'description': 'Venue.', 'upstream': 'https://venue.example', 'core': 'root'}))
+  (endpoints / 'streams' / 'router.json').write_text(json.dumps({'description': 'Streams.', 'upstream': 'https://venue.example/ws', 'core': 'socket'}))
+  (endpoints / 'rest' / 'router.json').write_text(json.dumps({'description': 'REST.', 'upstream': 'https://venue.example/rest', 'core': 'default'}))
+  (endpoints / 'streams' / 'market' / 'trades' / 'endpoint.json').write_text(json.dumps({
+    'meta': {'proto_field': 'public_deals'},
+    'surface': {'kind': 'handwritten', 'symbol': 'streams.market.trades:trades', 'reason': 'Protobuf frames.'},
+    'spec': {
+      'kind': 'stream', 'channel': 'deals@{symbol}', 'description': 'Trades.',
+      'parameters': {'title': 'TradesParams', 'type': 'object', 'description': 'Parameters.', 'required': ['symbol'], 'properties': {'symbol': {'type': 'string', 'description': 'Market.'}}},
+      'payload': {'title': 'TradesPush', 'type': 'object', 'description': 'One push.', 'properties': {'price': {'type': 'string', 'description': 'Price.'}}},
+    },
+  }))
+  (endpoints / 'rest' / 'time' / 'endpoint.json').write_text(json.dumps({
+    'meta': {},
+    'spec': {
+      'kind': 'rpc', 'transports': ['http'], 'path': '/time', 'method': 'GET', 'description': 'Server time.',
+      'response': {'title': 'ServerTime', 'type': 'object', 'description': 'Time.', 'properties': {'serverTime': {'type': 'integer', 'description': 'Millis.'}}},
+    },
+  }))
+  return root
+
+
+def test_a_router_of_only_hand_written_endpoints_holds_their_contract(tmp_path: Path):
+  """A router whose endpoints are all hand-written still holds the transport a generated one
+  would: its composite parent hands it the mapped field, typed by the endpoint's contract and
+  meta, and the `[typescript.extras]` class is built from it (not `undefined`)."""
+  project = load_project(_hand_written_streams_project(tmp_path / 'venue'))
+  rendered = render_package(build_plan(project), project)
+  root = rendered.files['main.ts']
+  assert '  stream_client: StreamEndpoint<SocketMeta>\n' in root
+  assert 'this.streams = new Streams(core.stream_client)' in root
+  market = rendered.files['streams/market/index.ts']
+  assert 'constructor(readonly core: StreamEndpoint<SocketMeta>) {' in market
+  assert 'this.trades_ = new Trades(core)' in market
+  assert 'streams/market/trades.ts' not in rendered.files
+
+
+def test_a_page_walk_over_int64_index_and_size_counts_in_numbers(tmp_path: Path):
+  """binance's page walks declare `format: int64` on the page index and size, which render
+  `number | bigint`. The walker's state is a page count and its size a row count, so the
+  index walks as a `number` (which the request field accepts) and the size is read through
+  `Number(...)`; `page + 1` and `Math.min(size, max)` would not type-check on a bigint."""
+  root = tmp_path / 'client'
+  shutil.copytree(FIXTURE_ROOT, root, ignore=shutil.ignore_patterns('.truewire', 'core_impl'))
+  spec = root / 'spec' / 'endpoints' / 'market' / 'order_page_total' / 'endpoint.json'
+  raw = json.loads(spec.read_text())
+  properties = raw['spec']['request']['properties']
+  properties['current']['format'] = 'int64'
+  properties['size']['format'] = 'int64'
+  properties['size']['maximum'] = 100
+  spec.write_text(json.dumps(raw))
+  walker = render_package(build_plan(root)).files['market/order_page_total.ts']
+  assert re.search(r'current\??: number \| bigint', walker)
+  assert re.search(r'orderPageTotalPaged\([^)]*\): PaginatedResponse<\w+, number>', walker)
+  assert 'const next = async (current: number): Promise<' in walker
+  assert 'Number(request.size)' in walker
+  assert 'Math.min(request.size, 100)' not in walker
+
+
+def test_an_int64_seek_bound_compares_its_keys_as_bigints():
+  """A row id beyond 2^53 (kucoin's hf_ledgers `lastId`) must not be read through `Number`,
+  which rounds it and leaves a value `t.int64` refuses to dump."""
+  from truewire.codegen.typescript.endpoint import _seek_keys
+  assert _seek_keys(None, {'type': 'scalar', 'base': 'integer', 'format': 'int64'}) == ("'bigint'", False)  # type: ignore[arg-type]
+  assert _seek_keys(None, {'type': 'scalar', 'base': 'integer'}) == ("'number'", False)  # type: ignore[arg-type]
+
+
+@pytest.mark.skipif(shutil.which('node') is None, reason='node is not installed')
+def test_offset_page_total_counts_a_partial_last_page():
+  """Execute the generated walker: TS already counts the current partial page."""
+  import subprocess
+
+  supported = subprocess.run(
+    ['node', '--input-type=module', '-e', "import { stripTypeScriptTypes } from 'node:module'"],
+    capture_output=True, text=True,
+  )
+  if supported.returncode != 0:
+    pytest.skip('node does not support stripTypeScriptTypes')
+
+  root = Path(__file__).parent / 'fixtures' / 'rust_walkers'
+  rendered = render_package(build_plan(root))
+  source = rendered.files['market/withdrawal_pages.ts']
+  start = source.index('  async *withdrawalPagesPaged(')
+  end = source.index('\n  }\n', start) + len('\n  }\n')
+  # Like the Python walker tests, give the generated method a canned single-call method.
+  method = source[start:end]
+  script = """
+import assert from 'node:assert/strict'
+import { stripTypeScriptTypes } from 'node:module'
+const LogicError = Error
+const Walk = eval(stripTypeScriptTypes(`(class {
+  calls = []
+  constructor(count) { this.count = count }
+  async withdrawalPages(request) {
+    this.calls.push(request.from)
+    return {
+      pages: Math.ceil(this.count / request.limit),
+      items: Array.from({ length: Math.max(0, Math.min(request.limit, this.count - request.from)) },
+                       (_, i) => ({ id: String(request.from + i) })),
+    }
+  }
+${METHOD}
+})`))
+for (const count of [0, 2, 8, 10]) {
+  const walk = new Walk(count)
+  const rows = []
+  for await (const page of walk.withdrawalPagesPaged({ limit: 4 })) rows.push(...page.items)
+  assert.deepEqual(rows.map(row => row.id), Array.from({ length: count }, (_, i) => String(i)))
+  assert.deepEqual(walk.calls, Array.from({ length: Math.max(1, Math.ceil(count / 4)) }, (_, i) => i * 4))
+}
+""".replace('${METHOD}', '${' + json.dumps(method) + '}')
+  result = subprocess.run(['node', '--input-type=module', '-e', script], capture_output=True, text=True)
+  assert result.returncode == 0, result.stdout + result.stderr

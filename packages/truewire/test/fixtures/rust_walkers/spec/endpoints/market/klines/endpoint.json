@@ -1,0 +1,110 @@
+{
+  "meta": {},
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/klines",
+    "method": "GET",
+    "description": "Klines as wide string tuples, newest first.",
+    "request": {
+      "title": "KlinesRequest",
+      "type": "object",
+      "properties": {
+        "symbol": {
+          "type": "string"
+        },
+        "start": {
+          "type": "integer",
+          "format": "epoch-millis"
+        },
+        "end": {
+          "type": "integer",
+          "format": "epoch-millis"
+        },
+        "limit": {
+          "type": "integer",
+          "default": 3
+        }
+      },
+      "required": [
+        "symbol"
+      ]
+    },
+    "response": {
+      "title": "Klines",
+      "type": "object",
+      "properties": {
+        "list": {
+          "type": "array",
+          "description": "Candles, sorted by start time in descending order.",
+          "items": {
+            "title": "Candle",
+            "type": "array",
+            "description": "One candle as a positional array.",
+            "prefixItems": [
+              {
+                "title": "startTime",
+                "type": "string",
+                "description": "Candle open time, as a millisecond timestamp.",
+                "format": "epoch-millis"
+              },
+              {
+                "title": "openPrice",
+                "type": "string",
+                "description": "Open price."
+              },
+              {
+                "title": "highPrice",
+                "type": "string",
+                "description": "Highest price."
+              },
+              {
+                "title": "lowPrice",
+                "type": "string",
+                "description": "Lowest price."
+              },
+              {
+                "title": "closePrice",
+                "type": "string",
+                "description": "Close price; the last traded price while the candle is still open."
+              },
+              {
+                "title": "volume",
+                "type": "string",
+                "description": "Trade volume. Base coin for spot and linear, quote coin for inverse."
+              },
+              {
+                "title": "turnover",
+                "type": "string",
+                "description": "Turnover. Quote coin for spot and linear, base coin for inverse."
+              }
+            ],
+            "minItems": 7,
+            "maxItems": 7
+          }
+        }
+      },
+      "required": [
+        "list"
+      ]
+    }
+  },
+  "pagination": {
+    "strategy": "seek",
+    "cursor": {
+      "field": "[-1][0]",
+      "unique": true
+    },
+    "bound": {
+      "start": "start",
+      "end": "end"
+    },
+    "anchor": "end",
+    "size": {
+      "parameter": "limit"
+    },
+    "rows": "list"
+  }
+}

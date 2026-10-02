@@ -52,6 +52,7 @@ distinct from the root's `"default"`) and one WS `stream` endpoint
 """
 import ast
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -113,7 +114,7 @@ def test_fixture_client_loads():
   `endpoint_records()` against the built fixture, not by hand-counting alone.
   """
   records = endpoint_records(FIXTURE_ROOT)
-  assert len(records) == 26  # market/ now holds 16 -- see order_nullable_list below
+  assert len(records) == 27  # market/ now holds 17 (user_stream, tw-binance-rs) -- see order_nullable_list below
 
 
 def test_resolve_core_walks_to_nearest_ancestor():
@@ -346,7 +347,6 @@ def _generator() -> Generator:
   generator.project = resolve(FIXTURE_ROOT)
   generator.codegen_config = load_codegen_toml(FIXTURE_ROOT)
   return generator
-
 
 def test_rpc_endpoint_renders_request_call():
   """A flat, query-role GET (`market/orderbook`) collapses to design §2's single
@@ -1085,44 +1085,24 @@ def test_rpc_endpoint_paginated_anyof_wrapped_response_stays_paginated_response_
   assert "response.get('pageKey') if response is not None else None" in code
 
 
-def test_rpc_endpoint_offset_total_with_no_size_generates_no_paged_variant():
-  """A real, structural pagination-shape limitation `paged_step` refuses to render: an
-  `offset` walk terminated by an item-counted `total`, with no declared `size` parameter
-  at all (so no page-size expression, and no venue-documented default, exists to advance
-  the offset by). kraken's real `spot.account.trades_history` is exactly this shape.
-
-  `rpc_endpoint` must degrade gracefully -- generate the plain single-request method with
-  no `_paged` companion at all -- rather than propagating `paged_step`'s `ValueError` and
-  refusing to generate the endpoint's module entirely. Regression test for the review
-  finding that the original fix wrapped the *entire* `paged_method` call in `try/except
-  ValueError` (over-broad: would also swallow a real, unrelated bug from anywhere else
-  in that method's body) -- narrowed to wrap only the specific `paged_step` call that can
-  actually raise, with `paged_method` itself returning `None` gracefully instead.
-
-  Confirmed the raise is real and reachable: without the fix (`paged_step`'s bare
-  `ValueError`, uncaught), generating this exact fixture raises `ValueError` instead of
-  returning a clean module -- reproduced by temporarily reverting the narrowed
-  `try/except` before writing this test."""
+def test_rpc_endpoint_pagination_without_a_resolvable_row_type_raises():
+  """ADR 0021: every declared walk renders `PaginatedResponse`-shaped, so a declaration
+  whose row collection can't be resolved -- an object payload with no `rows` declared
+  (kraken's `spot.account.trades_history` before its `rows` was named) -- is a spec gap
+  that fails generation loudly, never a silent downgrade to a lesser method."""
   root = FIXTURE_ROOT / 'spec' / 'endpoints' / 'market' / 'order'
   raw = json.loads((root / 'endpoint.json').read_text())
   raw['pagination'] = {
     'strategy': 'offset',
     'offset': {'parameter': 'symbol'},  # any declared request property works as the driver
     'done': {'kind': 'total', 'path': 'count', 'counts': 'items'},
-    # No `size` declared at all -- the exact shape `paged_step` has nothing to compute a
-    # step from (no page-size parameter, and therefore no default to fall back to either).
   }
   endpoint = Endpoint.model_validate(raw)
   generator = _generator()
-  code = generator.rpc_endpoint(
-    endpoint, {}, class_name='PlaceOrder', method_name='place_order', endpoint_dir=root,
-  )
-  ast.parse(code)  # must generate valid Python, not raise ValueError
-
-  assert 'async def place_order(' in code
-  assert 'place_order_paged' not in code
-  assert 'PaginatedResponse' not in code
-  assert 'AsyncIterator' not in code
+  with pytest.raises(ValueError, match='cannot resolve the row type'):
+    generator.rpc_endpoint(
+      endpoint, {}, class_name='PlaceOrder', method_name='place_order', endpoint_dir=root,
+    )
 
 
 def test_rpc_endpoint_rejects_non_dict_meta():
@@ -1255,6 +1235,56 @@ def test_stream_endpoint_renders_subscribe_call():
   assert ') -> StreamManager[Ticker, Any, Any]:' in code
   assert ') -> Ticker:' not in code
   assert 'from truewire_core.util import StreamManager' in code
+
+
+def test_stream_endpoint_renders_reply_type_when_reply_is_declared():
+  """A stream declaring `reply` (ADR 0022) renders that schema as its own titled
+  TypedDict, passes it as `reply_type=` right after `response_type=`, and types the
+  manager's second argument with it -- `StreamManager[Ticker, TickerAck, Any]` -- so
+  `stream.reply` is the validated ack, not `Any`. Without `reply`
+  (`test_stream_endpoint_renders_subscribe_call`, the same fixture) neither appears."""
+  root = FIXTURE_ROOT / 'spec' / 'endpoints' / 'market' / 'ticker_stream'
+  raw = json.loads((root / 'endpoint.json').read_text())
+  raw['spec']['reply'] = {
+    'title': 'TickerAck', 'type': 'object',
+    'properties': {'id': {'type': 'integer', 'description': 'Request id echoed back.'}},
+    'required': ['id'],
+  }
+  endpoint = Endpoint.model_validate(raw)
+  generator = _generator()
+  code = generator.stream_endpoint(
+    endpoint, {}, class_name='TickerStream', method_name='ticker_stream', endpoint_dir=root,
+  )
+  ast.parse(code)
+
+  assert 'class TickerAck(TypedDict):' in code
+  assert 'reply_type=TickerAck,' in code
+  assert code.index('response_type=Ticker,') < code.index('reply_type=TickerAck,')
+  assert ') -> StreamManager[Ticker, TickerAck, Any]:' in code
+  assert ') -> StreamManager[Ticker, Any, Any]:' not in code
+  assert generator.type_names(endpoint, {}) >= {'Ticker', 'TickerAck'}
+
+
+def test_stream_endpoint_reply_ref_imports_the_shared_type():
+  """A bare-`$ref` `reply` -- dydx's real shape, every stream pointing into its shared
+  `indexer/schemas.json` -- imports the referenced type instead of re-rendering it,
+  exactly as a bare-`$ref` `payload` already does."""
+  root = FIXTURE_ROOT / 'spec' / 'endpoints' / 'market' / 'ticker_stream'
+  raw = json.loads((root / 'endpoint.json').read_text())
+  raw['spec']['reply'] = {'$ref': 'shared/ticker_ack'}
+  endpoint = Endpoint.model_validate(raw)
+  references = {'shared/ticker_ack': {'name': 'TickerAck', 'package': 'fixture_client.schemas'}}
+  generator = _generator()
+  code = generator.stream_endpoint(
+    endpoint, references, class_name='TickerStream', method_name='ticker_stream', endpoint_dir=root,
+  )
+  ast.parse(code)
+
+  assert 'from fixture_client.schemas import TickerAck' in code
+  assert 'class TickerAck(TypedDict):' not in code
+  assert 'reply_type=TickerAck,' in code
+  assert ') -> StreamManager[Ticker, TickerAck, Any]:' in code
+  assert 'TickerAck' in generator.type_names(endpoint, references)
 
 
 def test_stream_endpoint_optional_parameters_property():
@@ -2239,3 +2269,105 @@ def test_paged_size_default_reads_the_new_request_shape():
   })
   generator = _generator()
   assert generator.paged_size_default(endpoint) == 50
+
+
+@pytest.mark.parametrize('kind', ['rpc', 'stream'])
+@pytest.mark.parametrize('parameter_name', ['type', 'category'])
+def test_literal_validation_cast_preserves_native_parameter_names(kind, parameter_name):
+  """A parameter named `type` shadows the builtin inside the method, so the validation
+  cast names it through `builtins`."""
+  root = FIXTURE_ROOT / 'spec' / 'endpoints' / 'market' / ('order' if kind == 'rpc' else 'ticker_stream')
+  raw = json.loads((root / 'endpoint.json').read_text())
+  params = {
+    'type': 'object', 'required': [parameter_name],
+    'properties': {parameter_name: {'type': 'string', 'enum': ['transfer', 'withdrawal']}},
+  }
+  response = {'type': 'string', 'enum': ['ok']}
+  if kind == 'rpc':
+    raw['spec']['request'] = params
+    raw['spec']['response'] = response
+  else:
+    raw['spec']['channel'] = '/events'
+    raw['spec']['parameters'] = params
+    raw['spec']['payload'] = response
+    raw['spec']['reply'] = response
+  endpoint = Endpoint.model_validate(raw)
+  generator = _generator()
+  render_endpoint = generator.rpc_endpoint if kind == 'rpc' else generator.stream_endpoint
+  code = render_endpoint(endpoint, {}, class_name='Example', method_name='example', endpoint_dir=root)
+  ast.parse(code)
+  assert f"{parameter_name}: Literal['transfer', 'withdrawal']" in code
+  if parameter_name == 'type':
+    assert 'import builtins' in code
+    assert 'cast(builtins.type,' in code
+    assert 'cast(type,' not in code
+  else:
+    assert 'import builtins' not in code
+    assert 'cast(type,' in code
+
+
+def test_method_named_like_a_builtin_qualifies_that_builtin_in_its_parameters():
+  """A method named `list` taking a `list[str]` parameter: once the first `@overload`
+  stub binds `list` in the class body, the next stub's bare `list[str]` subscripts the
+  function (`TypeError: 'function' object is not subscriptable` at import; coinbase's
+  `exchange.http.orders.list`). Every header names the builtin through `builtins`."""
+  root = FIXTURE_ROOT / 'spec' / 'endpoints' / 'market' / 'order'
+  raw = json.loads((root / 'endpoint.json').read_text())
+  raw['spec']['request'] = {
+    'type': 'object', 'required': ['ids'],
+    'properties': {
+      'ids': {'type': 'array', 'items': {'type': 'string'}},
+      'kind': {'type': 'string', 'enum': ['list', 'other']},
+    },
+  }
+  raw['spec']['response'] = {'type': 'string', 'enum': ['ok']}
+  code = _generator().rpc_endpoint(
+    Endpoint.model_validate(raw), {}, class_name='Example', method_name='list', endpoint_dir=root,
+  )
+  ast.parse(code)
+  assert 'import builtins' in code
+  assert code.count('ids: builtins.list[str]') == 3
+  methods = code.split('class Example', 1)[1]
+  assert re.search(r'(?<![\w.])list\[str\]', methods) is None
+  assert "Literal['list', 'other']" in code
+
+
+def test_method_not_named_like_a_builtin_keeps_bare_builtins():
+  root = FIXTURE_ROOT / 'spec' / 'endpoints' / 'market' / 'order'
+  raw = json.loads((root / 'endpoint.json').read_text())
+  raw['spec']['request'] = {
+    'type': 'object', 'required': ['ids'],
+    'properties': {'ids': {'type': 'array', 'items': {'type': 'string'}}},
+  }
+  raw['spec']['response'] = {'type': 'string', 'enum': ['ok']}
+  code = _generator().rpc_endpoint(
+    Endpoint.model_validate(raw), {}, class_name='Example', method_name='orders', endpoint_dir=root,
+  )
+  assert 'ids: list[str]' in code
+  assert 'import builtins' not in code
+
+
+def test_pagination_resolves_builtin_qualified_row_collection():
+  """A preceding field named `list` cannot hide the paginated array's row type."""
+  root = FIXTURE_ROOT / 'spec' / 'endpoints' / 'market' / 'order_id_list'
+  raw = json.loads((root / 'endpoint.json').read_text())
+  response = raw['spec']['response']
+  response['properties'] = {'list': {'type': 'string'}, **response['properties']}
+  code = _generator().rpc_endpoint(
+    Endpoint.model_validate(raw), {}, class_name='Example', method_name='example', endpoint_dir=root,
+  )
+  assert 'builtins.list[str]' in code
+  assert 'PaginatedResponse[str,' in code
+
+
+def test_raw_paged_return_type_keeps_commas_inside_the_row_type():
+  """A row type holding its own comma (`dict[str, Any]`) is replaced whole, not split at
+  its first `, ` -- which rendered the unparsable `PaginatedResponse[Any, Any], str]`."""
+  from truewire.codegen.python import raw_paged_return_type
+
+  assert raw_paged_return_type('PaginatedResponse[dict[str, Any], str]') == 'PaginatedResponse[Any, str]'
+  assert raw_paged_return_type('PaginatedResponse[OrderListItem, int]') == 'PaginatedResponse[Any, int]'
+  assert raw_paged_return_type('PaginatedResponse[Row, tuple[int, str]]') == 'PaginatedResponse[Any, tuple[int, str]]'
+  assert raw_paged_return_type('PaginatedResponse[tuple[int, str] | None, dict[str, int]]') == (
+    'PaginatedResponse[Any, dict[str, int]]'
+  )

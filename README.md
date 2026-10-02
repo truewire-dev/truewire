@@ -22,6 +22,7 @@ truewire generate python              # write the typed client into src/petstore
 pip install -e .                      # the project ships its own pyproject.toml
 truewire capture pets.get_pet --request '{"petId": 42}'   # record one live call as an example pair
 truewire mock                         # serve every recorded example over HTTP and WS on localhost
+truewire test                         # run each declared package's own suite against the mock
 ```
 
 Use the generated client:
@@ -57,7 +58,15 @@ async with Petstore.new(base_url='http://127.0.0.1:8321') as client:
   pet = await client.pets.get_pet(pet_id=42)   # served from spec/endpoints/pets/get_pet/examples/
 ```
 
-The full CLI is `truewire init | import | capture | check | examples | surface | generate | mock | mcp | standards | docs`. Run `truewire --help` for each command. `truewire import registry github` starts a project from a spec in the [registry](https://github.com/truewire-dev/registry) instead of a document.
+The full CLI is `truewire init | import | capture | call | check | examples | surface | generate | mock | mcp | standards | docs`. Run `truewire --help` for each command. `truewire import registry github` starts a project from a spec in the [registry](https://github.com/truewire-dev/registry) instead of a document.
+
+Make one call from the shell, through the same client, with the credentials `[secrets]` names read from the environment or `.env`. A stream endpoint prints its reply and then each message, one JSON document per line, until Ctrl+C unsubscribes:
+
+```bash
+truewire call python pets.get_pet petId=42 --base-url http://127.0.0.1:8321
+```
+
+`truewire call typescript` and `truewire call rust` make the same call through the TypeScript and Rust clients.
 
 Hand the same endpoints to an agent as MCP tools, one per endpoint, answered through the generated client:
 
@@ -76,9 +85,10 @@ truewire mcp --project petstore --new base_url=https://petstore.example.com/v1
 | Python generator and `truewire-core` | `truewire generate python` emits async endpoint methods with typed `TypedDict` responses, `validate` and `transport` keywords (`validate=False` returns the raw body, typed `Any`), `_paged` walkers, and router classes with docstrings. Your hand-written core (transport, signing, envelope, errors) is declared, not introspected: `truewire.toml` says how routers compose it, `truewire_core.contract` says what it provides, and the generator never imports your package (ADR 0011). `truewire-core` is the small MIT runtime: HTTP, WebSocket streams and RPC, validation, paging, timestamp types, errors, the core contract. |
 | Plan | `truewire plan --json` prints the language-neutral plan the generators render from: types as a tree, request fields, the returned type, stream facts and every pagination decision, per endpoint ([docs/plan.md](docs/plan.md)). A second backend reads it instead of the spec. |
 | Standards | `truewire standards` runs the checks that guard a client's public surface: docstring shape, duplicate schemas, secret placeholders in examples, router coverage, no `__call__` classes. |
+| Lint | `truewire lint [language]` runs each declared package's own tools, configured by the package: `ruff format --check`, `ruff check` and `pyright`; `tsc --noEmit`, plus `eslint` when the package configures it; `cargo fmt --check` and `cargo clippy -D warnings`; `gofmt -l`, `go vet` and `staticcheck`. A tool that is not installed fails its language. |
 | Docs | `truewire docs check` type-checks every code block in your README and docs against the generated package, so an example that no longer compiles fails CI. |
 | Examples | `examples/kraken`: 75 endpoints over REST and WebSocket, hand-written core, 63 replay tests. `examples/github`: the GitHub REST API captured live, page-walked, 14 tests. Both kept green in CI. |
-| Agent-native | Every gate is a CLI command with a plain result (`check`, `examples --require-verified`, `surface`, `standards`, `docs check`), and `capture`, `mock` and `mcp` need no human in the loop, so a coding agent can take a docs URL and drive a project to a verified spec, a mock, a client and checked docs. Six skill files for that workflow (discover, spec, core, implement, docs, review) live in [`.agents/skills/`](.agents/skills/README.md). |
+| Agent-native | Every gate is a CLI command with a plain result (`check`, `examples --require-verified`, `surface`, `standards`, `docs check`), and `capture`, `mock` and `mcp` need no human in the loop, so a coding agent can take a docs URL and drive a project to a verified spec, a mock, a client and checked docs. Six skill files for that workflow (discover, spec, core, implement, docs, review) ship in the package and are vendored into each project's `.agents/skills/` by `truewire init` ([source](packages/truewire/src/truewire/resources/agents/skills/README.md)). |
 
 ## How it compares
 

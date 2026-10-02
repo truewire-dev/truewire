@@ -1,0 +1,92 @@
+{
+  "meta": {},
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/ohlcv",
+    "method": "GET",
+    "description": "OHLCV rows over a time range, as positional arrays of numbers.",
+    "request": {
+      "title": "OhlcvRequest",
+      "type": "object",
+      "properties": {
+        "symbol": {
+          "type": "string"
+        },
+        "start": {
+          "type": "integer",
+          "format": "epoch-millis"
+        },
+        "end": {
+          "type": "integer",
+          "format": "epoch-millis"
+        },
+        "limit": {
+          "type": "integer",
+          "default": 3
+        }
+      },
+      "required": [
+        "symbol"
+      ]
+    },
+    "response": {
+      "type": "array",
+      "description": "Rows, oldest first.",
+      "items": {
+        "type": "array",
+        "description": "One row as a positional array: open time, then OHLCV.",
+        "prefixItems": [
+          {
+            "title": "startTime",
+            "type": "integer",
+            "format": "epoch-millis",
+            "description": "Row open time."
+          },
+          {
+            "title": "open",
+            "type": "number",
+            "description": "Open price."
+          },
+          {
+            "title": "high",
+            "type": "number",
+            "description": "Highest price."
+          },
+          {
+            "title": "low",
+            "type": "number",
+            "description": "Lowest price."
+          },
+          {
+            "title": "close",
+            "type": "number",
+            "description": "Close price."
+          },
+          {
+            "title": "volume",
+            "type": "number",
+            "description": "Trade volume."
+          }
+        ]
+      }
+    }
+  },
+  "pagination": {
+    "strategy": "seek",
+    "cursor": {
+      "field": "[-1][0]",
+      "unique": true
+    },
+    "bound": {
+      "start": "start",
+      "end": "end"
+    },
+    "anchor": "start",
+    "size": {
+      "parameter": "limit"
+    }
+  }
+}

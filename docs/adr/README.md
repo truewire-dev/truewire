@@ -9,7 +9,7 @@ Most of these were carried over from the system Truewire was extracted from. The
 | # | Title | Status |
 | --- | --- | --- |
 | [0001](0001-endpoint-outcome-taxonomy.md) | Every documented endpoint resolves to verified, unverified with a reason, or excluded | accepted |
-| [0002](0002-declared-pagination.md) | Pagination is declared as an audited discriminated union, not inferred | accepted |
+| [0002](0002-declared-pagination.md) | Pagination is declared as an audited discriminated union, not inferred | accepted, amended by 0013 |
 | [0003](0003-tolerant-validation-wrapper.md) | Response validation is a tolerant `TypedDict` base plus a `validator[T]` wrapper | accepted |
 | [0004](0004-declared-envelope-extraction.md) | Envelope extraction is declared per endpoint, and examples store the raw wire body | accepted, amended by 0010 |
 | [0005](0005-rpc-stream-kind-and-transports.md) | `spec.kind` is `rpc` or `stream`; transport is a separate `transports` list | accepted, amended by 0006 |
@@ -20,5 +20,12 @@ Most of these were carried over from the system Truewire was extracted from. The
 | [0010](0010-response-schema-describes-the-wire-body.md) | The response schema describes the wire body; `envelope.payload` selects the returned value | accepted |
 | [0011](0011-declared-core-contract.md) | The generator reads a declared core contract and never imports the target package | accepted |
 | [0012](0012-conformance-runs.md) | Conformance is a nightly replay of the recorded requests, and drift is a change of shape, never of value | accepted |
+| [0013](0013-seek-subsumes-window-and-paged-is-paginated-response.md) | `seek` subsumes `window`, walk direction is derived from a declared truncation anchor, and every `_paged` method is a `PaginatedResponse` | accepted |
+| [0014](0014-stream-reply-schema.md) | A stream declares its subscription reply schema separately from its push payload | accepted |
+| [0015](0015-go-backend.md) | The Go backend renders one package per endpoint, verbs with distinct names, and `meta` as a value the core type-asserts | accepted |
+| [0016](0016-protobuf-websocket-frames.md) | Protobuf WebSocket frames are decoded at run time from `spec/proto` sources, as ProtoJSON | accepted |
+| [0017](0017-grpc-endpoints-across-backends.md) | gRPC endpoints are planned from `spec/proto`, rendered over each language's standard protobuf stubs, and tested against an in-process fake server | accepted |
+| [0018](0018-declared-match-ignore-paths.md) | A request field minted per call is ignored by a located path under `match.ignore` | accepted |
+| [0019](0019-declared-query-array-form.md) | A list in the query string is written as the endpoint declares under `match.query_arrays` | accepted |
 
 New entry: copy `0000-template.md`, number it next, add a row above.

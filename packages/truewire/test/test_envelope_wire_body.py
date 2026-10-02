@@ -204,11 +204,9 @@ def test_check_fails_a_frame_the_schema_does_not_describe(tmp_path: Path, monkey
 
 UNWRAP_OLD = '''    if check:
       return validator(cast(type, response_type)).json(raw)
-    import json
     return json.loads(raw)
 '''
-UNWRAP_NEW = '''    import json
-    value = json.loads(raw)['result']
+UNWRAP_NEW = '''    value = json.loads(raw)['result']
     if check:
       return validator(cast(type, response_type)).python(value)
     return value

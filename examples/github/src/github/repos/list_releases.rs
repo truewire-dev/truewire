@@ -63,6 +63,7 @@ pub struct Release {
     pub published_at: Option<Option<TimestampIso>>,
     /// Web page of the release.
     pub html_url: String,
+    /// Account that created the release.
     pub author: SimpleUser,
     /// Keys the spec does not document, kept as they came.
     #[serde(flatten)]
@@ -119,8 +120,8 @@ impl ListReleases {
         options: CallOptions,
     ) -> PaginatedResponse<Release, i64> {
         let endpoint = self.clone();
-        let size = request.per_page.unwrap_or(30);
-        let size = Some(size as usize);
+        let size = request.per_page.unwrap_or(30).min(100);
+        let size = usize::try_from(size).ok().filter(|&size| size > 0);
         let next = move |page: i64| {
             let endpoint = endpoint.clone();
             let request = request.clone();

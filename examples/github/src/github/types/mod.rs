@@ -106,13 +106,16 @@ pub struct SimpleUser {
 /// The git commit object behind a repository commit.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GitCommit {
+    /// Who wrote the commit.
     pub author: GitActor,
+    /// Who committed it.
     pub committer: GitActor,
     /// Full commit message.
     pub message: String,
     /// Number of comments on the commit.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub comment_count: Option<i64>,
+    /// Root tree of the commit.
     pub tree: CommitRef,
     /// API URL of the git commit object.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -133,6 +136,7 @@ pub struct Commit {
     /// Web page of the commit.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub html_url: Option<String>,
+    /// The underlying git commit.
     pub commit: GitCommit,
     /// GitHub account matched to the author, when known.
     #[serde(default, skip_serializing_if = "Option::is_none")]

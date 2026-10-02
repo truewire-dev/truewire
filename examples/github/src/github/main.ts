@@ -10,6 +10,10 @@ import { Repos } from './repos/index.js'
  * @see https://docs.github.com/en/rest
  */
 export class GitHub {
+  /** `[policy].rate`: requests per second the core's `HttpClient` paces to; `undefined` for none. */
+  static readonly RATE: number | undefined = undefined
+  /** `[policy].retry`: whether the core's `HttpClient` retries on its own. */
+  static readonly RETRY: boolean = false
   /** Issues and, through the same list, pull requests. */
   readonly issues: Issues
   /** Repositories: metadata, commits, tags and releases. */

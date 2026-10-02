@@ -1,0 +1,21 @@
+{
+  "meta": {},
+  "function": "acme.simulate_bundle",
+  "spec": {
+    "kind": "rpc",
+    "transports": ["http"],
+    "path": "acme_simulateBundle",
+    "method": "POST",
+    "request": {
+      "title": "SimulateBundleRequest",
+      "type": "object",
+      "properties": {
+        "transactions": {"type": "array", "items": {"type": "object"}}
+      },
+      "required": ["transactions"]
+    },
+    "response": {"type": "object"},
+    "description": "An array property spread into one positional slot per element."
+  },
+  "envelope": {"payload": "result", "correlate": "id", "positional": [{"spread": "transactions"}]}
+}

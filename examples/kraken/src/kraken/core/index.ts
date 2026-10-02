@@ -8,7 +8,8 @@
  * through the REST transport. `streams.private` and `trading_ws` share the private one.
  * Adapt this directory to the API; the generated code never changes when you do.
  */
-import type { HttpClient } from '@truewire/core'
+import { HttpClient, LogicError } from '@truewire/core'
+import { Kraken } from '../main.js'
 import type { KrakenCore } from '../main.js'
 import { TokenCache, type Credentials } from './auth.js'
 import { SPOT_WS_AUTH_URL, SPOT_WS_URL, SocketCore, type SocketOptions } from './socket.js'
@@ -33,10 +34,15 @@ export interface CoreOptions {
   credentials?: Credentials
   /** Validate responses and pushed messages by default; a call's own `validate` option overrides it. */
   validate?: boolean
-  /** The `fetch` wrapper to send through; one is made when omitted. */
+  /** The `fetch` wrapper to send through; one paced and retrying as `Kraken.RATE` and `Kraken.RETRY` say when omitted. */
   http?: HttpClient
   /** Factory for the raw WebSocket connections; the global `WebSocket` when omitted. */
   createWebSocket?: SocketOptions['createWebSocket']
+  /**
+   * HTTP(S) proxy URL for the REST calls and both WebSocket connections alike (Node, with
+   * the optional peer `undici`). Not together with `http` or `createWebSocket`.
+   */
+  proxy?: string
 }
 
 /** The three transports, built together: `new Kraken(new Core({ credentials }))`. */
@@ -46,12 +52,14 @@ export class Core implements KrakenCore, AsyncDisposable {
   readonly private_client: SocketCore
 
   constructor(options: CoreOptions = {}) {
-    const { validate, createWebSocket } = options
-    this.spot_client = new SpotCore({ baseUrl: options.baseUrl, credentials: options.credentials, validate, http: options.http })
-    this.market_client = new SocketCore({ url: options.wsUrl ?? SPOT_WS_URL, validate, createWebSocket })
+    const { validate, createWebSocket, proxy } = options
+    if (proxy && options.http) throw new LogicError('Core: pass `http` or `proxy`, not both')
+    const http = options.http ?? new HttpClient({ proxy, rate: Kraken.RATE, retry: Kraken.RETRY })
+    this.spot_client = new SpotCore({ baseUrl: options.baseUrl, credentials: options.credentials, validate, http })
+    this.market_client = new SocketCore({ url: options.wsUrl ?? SPOT_WS_URL, validate, createWebSocket, proxy })
     const token = options.credentials === undefined ? undefined : new TokenCache(() => this.spot_client.getWsToken())
     this.private_client = new SocketCore({
-      url: options.wsAuthUrl ?? SPOT_WS_AUTH_URL, tokenSource: token && (() => token.get()), validate, createWebSocket,
+      url: options.wsAuthUrl ?? SPOT_WS_AUTH_URL, tokenSource: token && (() => token.get()), validate, createWebSocket, proxy,
     })
   }
 

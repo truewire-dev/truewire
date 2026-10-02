@@ -295,6 +295,31 @@ def test_a_nanos_timestamp_param_asks_for_the_timestamp_nanos_helper():
   )
 
 
+def test_a_number_epoch_param_dumps_through_the_float_helper():
+  """A `type: number` epoch parameter keeps its fraction on the wire (TRU-480)."""
+  request = HttpRequest(method='GET', path='/x')
+  request.query_params.append(HttpRequest.Param(name='start', required=True, type='TimestampSecondsFloat'))
+  assert request.helpers == frozenset({'timestamp_seconds_float'})
+  assert request.params_declaration() == (
+    "params: dict = {\n"
+    "  'start': timestamp_seconds_float.dump(start),\n"
+    "}"
+  )
+
+
+def test_a_number_epoch_body_property_dumps_through_the_float_helper():
+  """The body conversion picks the helper from the property's `type` as well as its
+  `format`: a `number` epoch keeps its fraction, an `integer` one stays whole."""
+  from truewire.generation.python.code.http import _merge_formatted_props
+  body = Schema(type='object', properties={
+    'start': Schema(type='number', format='epoch-seconds'),
+    'end': Schema(type=['number', 'null'], format='epoch-millis'),
+    'at': Schema(type='integer', format='epoch-seconds'),
+  })
+  timestamps, _ = _merge_formatted_props([body])
+  assert timestamps == {'start': 'TimestampSecondsFloat', 'end': 'TimestampMillisFloat', 'at': 'TimestampSeconds'}
+
+
 def test_a_date_param_asks_for_the_date_iso_helper():
   """Added after a deribit review found `market_data.get_delivery_prices.date`, a genuine
   plain calendar date with no time component."""
@@ -600,6 +625,28 @@ def test_parse_drops_a_property_declared_with_conflicting_formats_across_variant
   )
   assert request.body_decimal_props == []
   assert dict(request.body_timestamp_props) == {}
+
+
+def test_parse_keeps_the_integer_alias_for_a_number_integer_epoch_pair_across_variants():
+  """One epoch format on a `number` in one variant and an `integer` in another is still
+  converted, with the whole-count alias both wires accept: dropping it would send the
+  caller's `datetime` to `json=` unconverted (TRU-490)."""
+  body_schema = Schema(anyOf=[
+    Schema(
+      title='Limit', type='object',
+      properties={'at': Schema(type='integer', format='epoch-seconds')},
+    ),
+    Schema(
+      title='Market', type='object',
+      properties={'at': Schema(type='number', format='epoch-seconds')},
+    ),
+  ])
+  for variants in (body_schema.anyOf, body_schema.anyOf[::-1]):
+    request = HttpRequest.parse(
+      _op_with_body(), RenderedTypes(generation_order=[]),
+      method='POST', path='/x', body_schema=Schema(anyOf=variants),
+    )
+    assert dict(request.body_timestamp_props) == {'at': 'TimestampSeconds'}
 
 
 def test_parse_skips_a_reference_anyof_variant():

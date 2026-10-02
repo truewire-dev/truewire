@@ -18,7 +18,7 @@ import * as queryLedgers from './query_ledgers.js'
 import * as queryOrders from './query_orders.js'
 import * as queryTrades from './query_trades.js'
 import * as removeExport from './remove_export.js'
-import * as retrieveExport from './retrieve_export.js'
+import { RetrieveExport } from './retrieve_export.js'
 import * as tradeBalance from './trade_balance.js'
 import * as tradeVolume from './trade_volume.js'
 import * as tradesHistory from './trades_history.js'
@@ -47,10 +47,12 @@ export class Account {
   private readonly queryOrders_: queryOrders.QueryOrders
   private readonly queryTrades_: queryTrades.QueryTrades
   private readonly removeExport_: removeExport.RemoveExport
-  private readonly retrieveExport_: retrieveExport.RetrieveExport
   private readonly tradeBalance_: tradeBalance.TradeBalanceEndpoint
   private readonly tradeVolume_: tradeVolume.TradeVolumeEndpoint
   private readonly tradesHistory_: tradesHistory.TradesHistory
+  private readonly retrieveExport_: RetrieveExport
+  /** Hand-written: `RetrieveExport.retrieveExport` (`retrieve_export.ts`). */
+  readonly retrieveExport: RetrieveExport['retrieveExport']
 
   constructor(readonly core: HttpEndpoint<SpotMeta>) {
     this.accountTransfer_ = new accountTransfer.AccountTransfer(core)
@@ -70,10 +72,11 @@ export class Account {
     this.queryOrders_ = new queryOrders.QueryOrders(core)
     this.queryTrades_ = new queryTrades.QueryTrades(core)
     this.removeExport_ = new removeExport.RemoveExport(core)
-    this.retrieveExport_ = new retrieveExport.RetrieveExport(core)
     this.tradeBalance_ = new tradeBalance.TradeBalanceEndpoint(core)
     this.tradeVolume_ = new tradeVolume.TradeVolumeEndpoint(core)
     this.tradesHistory_ = new tradesHistory.TradesHistory(core)
+    this.retrieveExport_ = new RetrieveExport(core)
+    this.retrieveExport = this.retrieveExport_.retrieveExport.bind(this.retrieveExport_)
   }
 
   /** With `validate: false`: the parsed body as it came, typed `unknown`. */
@@ -323,20 +326,6 @@ export class Account {
   }
 
   /** With `validate: false`: the parsed body as it came, typed `unknown`. */
-  retrieveExport(request: retrieveExport.Request, options: CallOptions & { validate: false }): Promise<unknown>
-  /**
-   * Retrieve a processed data export. Unlike every other Account Data endpoint, the response is not the standard `{error, result}` JSON envelope -- it is the raw export file itself.
-   *
-   * **API Key Permissions Required:** `Data - Export data`
-   *
-   * @see https://docs.kraken.com/api-reference/account-data/retrieve-data-export
-   */
-  retrieveExport(request: retrieveExport.Request, options?: CallOptions): Promise<retrieveExport.RetrieveExportResult>
-  retrieveExport(request: retrieveExport.Request, options?: CallOptions): Promise<retrieveExport.RetrieveExportResult> {
-    return this.retrieveExport_.retrieveExport(request, options)
-  }
-
-  /** With `validate: false`: the parsed body as it came, typed `unknown`. */
   tradeBalance(request: tradeBalance.Request, options: CallOptions & { validate: false }): Promise<unknown>
   /**
    * Retrieve a summary of collateral balances, margin position valuations, equity and margin level.
@@ -362,22 +351,6 @@ export class Account {
   tradeVolume(request?: tradeVolume.Request, options?: CallOptions): Promise<tradeVolume.TradeVolume>
   tradeVolume(request?: tradeVolume.Request, options?: CallOptions): Promise<tradeVolume.TradeVolume> {
     return this.tradeVolume_.tradeVolume(request, options)
-  }
-
-  /** With `validate: false`: the parsed body as it came, typed `unknown`. */
-  tradesHistoryPaged(request: tradesHistory.TradesHistoryPagedRequest, options: CallOptions & { validate: false }): AsyncGenerator<unknown, void, undefined>
-  /**
-   * Retrieve information about trades/fills. By default, the most recent trades are returned. Unless otherwise stated, costs, fees, prices, and volumes are specified with the precision for the asset pair (`pair_decimals` and `lot_decimals`), not the individual assets' precision (`decimals`).
-   *
-   * **API Key Permissions Required:** `Orders and trades - Query closed orders & trades`
-   *
-   * Paged variant of `tradesHistory`: an async iterator over every page's response.
-   *
-   * @see https://docs.kraken.com/api-reference/account-data/get-trades-history
-   */
-  tradesHistoryPaged(request?: tradesHistory.TradesHistoryPagedRequest, options?: CallOptions): AsyncGenerator<tradesHistory.TradeHistory, void, undefined>
-  tradesHistoryPaged(request?: tradesHistory.TradesHistoryPagedRequest, options?: CallOptions): AsyncGenerator<tradesHistory.TradeHistory, void, undefined> {
-    return this.tradesHistory_.tradesHistoryPaged(request, options)
   }
 
   /** With `validate: false`: the parsed body as it came, typed `unknown`. */

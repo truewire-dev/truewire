@@ -1,0 +1,21 @@
+[project]
+name = "grpc_demo"
+
+[cores.grpc]
+meta = { type = "object", properties = { public = { type = "boolean" } }, additionalProperties = false }
+
+[typescript]
+package = "grpc_demo"
+src = "src"
+name = "GrpcDemo"
+
+[go]
+package = "grpcdemo"
+src = "src"
+name = "GrpcDemo"
+module = "truewire.dev/fixtures/grpcdemo"
+
+[rust]
+package = "grpc_demo"
+src = "src"
+name = "GrpcDemo"

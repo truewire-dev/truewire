@@ -1,0 +1,33 @@
+{
+  "meta": {},
+  "notes": [
+    "Dual-transport JSON-RPC method, HTTP first: recorded over HTTP only, so its WebSocket example is synthesized from that recording."
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": ["http", "ws"],
+    "path": "pets_get",
+    "method": "POST",
+    "description": "Fetch one pet by id.",
+    "request": {
+      "title": "GetPetRequest",
+      "type": "object",
+      "required": ["petId"],
+      "properties": {
+        "petId": {"type": "integer", "description": "Pet id."}
+      }
+    },
+    "response": {
+      "title": "GetPetFrame",
+      "type": "object",
+      "description": "Wire frame.",
+      "required": ["jsonrpc", "id", "result"],
+      "properties": {
+        "jsonrpc": {"type": "string", "description": "Wire envelope field; see the core."},
+        "id": {"type": "integer", "description": "Wire envelope field; see the core."},
+        "result": {"$ref": "Pet", "description": "The pet."}
+      }
+    }
+  },
+  "envelope": {"payload": "result", "correlate": "id"}
+}

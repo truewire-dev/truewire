@@ -19,14 +19,16 @@ from pathlib import Path
 from typing_extensions import Any, Iterator, Literal, TypedDict
 
 from jsonschema import Draft202012Validator
+from pydantic import ValidationError
 
 from truewire.generation.schema import Schema
 from truewire.generation.types import unrenderable_cycles
 from truewire.generation.util import pascal_case
 from truewire.project import Project, resolve, spec_dir as project_spec_dir
+from truewire.plan.types import INSTANT_FORMATS
 from .endpoint import (
   Endpoint, GrpcEndpointSpec, Pagination, PaginationParameter, RpcEndpointSpec,
-  StreamEndpointSpec, directory_function, last_row_field, path_segments,
+  SeekPagination, StreamEndpointSpec, directory_function, last_row_field, path_segments,
 )
 from .repo import load_endpoint, load_shared_schemas
 from .request import PLACEHOLDER
@@ -34,9 +36,9 @@ from .router import load_router
 
 Rule = Literal[
   'error-responses', 'title', 'title-empty-object', 'enum', 'const', 'positional-rows',
-  'unions', 'description', 'pagination', 'identifier-templating', 'ws-verb',
-  'timestamp-format', 'reserved-param', 'meta-collision', 'meta-schema',
-  'router-core-missing', 'schemas-shadowing', 'mixed-leaf-router', 'envelope',
+  'unions', 'description', 'pagination', 'pagination-read', 'identifier-templating',
+  'ws-verb', 'timestamp-format', 'reserved-param', 'meta-collision', 'meta-schema',
+  'router-core-missing', 'schemas-shadowing', 'router-doc', 'mixed-leaf-router', 'envelope',
   'schema-cycle', 'router-name-collision',
 ]
 """Mechanizable checks of the spec-authoring contract, in contract order."""
@@ -47,6 +49,7 @@ Severity = Literal['error', 'warning']
 WARNING_RULES: frozenset[Rule] = frozenset(
   {
     'enum', 'ws-verb', 'timestamp-format', 'reserved-param', 'title-empty-object',
+    'pagination-read',
   }
 )
 """Rules that report as `warning` rather than `error`.
@@ -126,6 +129,10 @@ RULE_HEADINGS: dict[Rule, str] = {
   'envelope': '6. Schemas describe the wire body — `envelope.payload` names a property of the response schema',
   'description': '7. Describe everything that becomes a docstring',
   'pagination': '8. Pagination is declared, not inferred',
+  'pagination-read': (
+    'ADR 0013 — a paginated walk repeats its request on retry, so the request has to be '
+    'a read'
+  ),
   'identifier-templating': (
     'ADR 0006 — `in: "path"` parameters must match `{name}` in the operation identifier'
   ),
@@ -145,6 +152,13 @@ RULE_HEADINGS: dict[Rule, str] = {
   'meta-schema': (
     '`endpoint.meta` must validate against its resolved core\'s declared '
     '`meta` JSON Schema'
+  ),
+  'router-core-missing': (
+    'design §5 — every client\'s root `spec/endpoints/router.json` must declare `core`; '
+    'no implicit fallback'
+  ),
+  'router-doc': (
+    '14. A router grouping declares its description and upstream link in `router.json`'
   ),
   'mixed-leaf-router': (
     '16. A directory is a leaf endpoint or a router grouping, never both'
@@ -191,28 +205,24 @@ UNCHECKED: dict[str, str] = {
     'and a response path that is not a plain dotted key. A declared path is also left '
     'unjudged when the payload it walks is a `$ref` or an `anyOf`, since the operation '
     'alone resolves neither, and pagination on a gRPC endpoint is unchecked because '
-    'there is no operation to name parameters against. A `window` declaration is checked '
-    'for naming real bound parameters and for those bounds being typed for arithmetic — '
-    'numerically, or as a `date-time`-formatted string, since a `window` bound alone may '
-    'render to a `datetime` — and nothing more: whether those bounds are inclusive, which '
-    'is what `step` is set from, and which way the API sorts, which is what `order` is '
-    'set from, are facts about the API that were settled by calling it. No operation '
-    'states either, so a wrong `step` or `order` reads as a clean spec and shows up as a '
-    'duplicated or skipped row at runtime. The arithmetic check itself only reads a `type` '
-    '(or `format`) the operation states outright: a parameter schema that is a `$ref`, an '
-    '`anyOf`, or types nothing at all is left unjudged, for the reason `resolves` leaves a '
-    '`$ref` payload unjudged. A `size` '
-    'parameter is not checked either. It is the one pagination parameter the walk never '
-    'computes — the caller\'s own value is passed straight through — and it only reaches '
-    'arithmetic under some terminators, so requiring a number of it everywhere would flag '
-    'declarations that never touch it. Nor is a `window` flagged for declaring no `size`, '
-    'or a `size` carrying no schema `default`, though either costs it its truncation '
-    'guard. Both say the API published nothing to declare — no page size documented at '
-    'all, or a `limit` documented without a default — and a check firing on them would '
-    'push an author to invent the number, which rule 2 forbids for the same reason: a '
-    'guessed default stops a walk the API answered in full. The generated walk already '
-    'states the gap, by '
-    'carrying no guard and promising none, and the endpoint `notes` record why'
+    'there is no operation to name parameters against. A `seek` declaration is checked '
+    'for naming real bound parameters, for its cursor field resolving against a row, and '
+    'for a non-unique cursor having a resolvable cap and an orderable field — and nothing '
+    'more: which end the venue anchors its truncation to (`anchor`) and whether the cursor '
+    'field is unique per row (`cursor.unique`) are facts about the venue that were settled '
+    'by calling it (ADR 0013). No operation states either, so a wrong `anchor` reads as a '
+    'clean spec and shows up as a walk that silently under-covers at runtime. The '
+    'arithmetic check (a `span`-bearing bound) only reads a `type` (or `format`) the '
+    'operation states outright: a parameter schema that is a `$ref`, an `anyOf`, or types '
+    'nothing at all is left unjudged, for the reason `resolves` leaves a `$ref` payload '
+    'unjudged. A `size` parameter is not checked either. It is the one pagination '
+    'parameter the walk never computes — the caller\'s own value is passed straight '
+    'through — and it only reaches arithmetic under some terminators, so requiring a '
+    'number of it everywhere would flag declarations that never touch it. Nor is a unique '
+    '`seek` cursor flagged for resolving no cap (no `size`, or one carrying no schema '
+    '`default`, and no `cap`): the walk then confirms exhaustion with one extra request '
+    'instead of reading a short page, and a check firing on it would push an author to '
+    'invent the number, which rule 2 forbids for the same reason'
   ),
 }
 """Clauses this module does not check, and why."""
@@ -307,10 +317,11 @@ def operation_json(endpoint: Endpoint) -> dict[str, Any] | None:
 
   For a `StreamEndpointSpec`, the subscribe-side schema is `request` if set, else
   `parameters` (the two name the same thing -- docs/spec/authoring.md rule 0), and the
-  response-side schema is `payload` (the pushed-message schema), not `response`. A
-  push-only stream endpoint (rule 11: no subscribe frame at all, only `payload` set) still
-  synthesizes -- it is new-shape the moment any of `request`/`parameters`/`payload` is set,
-  not only when a request-side schema is present.
+  response-side schema is `payload` (the pushed-message schema), not `response`, with a
+  declared `reply` (ADR 0014) surfacing as the `reply` response beside it. A push-only
+  stream endpoint (rule 11: no subscribe frame at all, only `payload` set) still
+  synthesizes -- it is new-shape the moment any of `request`/`parameters`/`payload`/
+  `reply` is set, not only when a request-side schema is present.
 
   Args:
     endpoint: Endpoint record loaded from an `endpoint.json`.
@@ -326,19 +337,28 @@ def operation_json(endpoint: Endpoint) -> dict[str, Any] | None:
   elif isinstance(spec, StreamEndpointSpec):
     request_schema = spec.request if spec.request is not None else spec.parameters
     response_schema = spec.payload
-    new_shape = spec.request is not None or spec.parameters is not None or spec.payload is not None
+    new_shape = spec.new_shape
     description = spec.description
   else:
     new_shape = False
     description = None
   if new_shape:
+    responses: dict[str, Any] = {'200': {
+      'description': 'Success',
+      'content': {'application/json': {'schema': response_schema}},
+    }} if response_schema is not None else {}
+    if isinstance(spec, StreamEndpointSpec) and spec.reply is not None:
+      # The subscribe acknowledgement's own schema (ADR 0014) surfaces under the legacy
+      # `reply` response key (`WS_RESPONSE_KEYS`), so every response-side rule -- titles,
+      # descriptions, enums -- audits it exactly as it audits `payload`.
+      responses['reply'] = {
+        'description': 'Subscribe acknowledgement',
+        'content': {'application/json': {'schema': spec.reply}},
+      }
     return {
       'description': description,
       'request': request_schema,
-      'responses': {'200': {
-        'description': 'Success',
-        'content': {'application/json': {'schema': response_schema}},
-      }} if response_schema is not None else {},
+      'responses': responses,
     }
   operation = endpoint.openapi
   if operation is None:
@@ -581,6 +601,11 @@ def check_timestamp_format(operation: dict[str, Any]) -> list[Violation]:
   and response alike — rule 3 applies identically to both, and a request-side timestamp
   with no declared format is sent to the wire wrong, not merely rendered untyped.
 
+  A multi-type node counts, not just a plain scalar one. mexc declared six futures
+  timestamps `type: ["integer", "string"]` (a venue that serializes an epoch either way)
+  and one `["string", "null"]`, and a check reading only a `str` `type` skipped all seven:
+  they rendered `int | str` and `str | None` while `spec test` read clean.
+
   Args:
     operation: Plain-JSON `spec.openapi` operation.
   """
@@ -592,12 +617,19 @@ def check_timestamp_format(operation: dict[str, Any]) -> list[Violation]:
     if not words or words[-1] not in TIMESTAMP_NAME_TOKENS:
       continue
     declared = node.get('type')
-    if not isinstance(declared, str) or declared not in SCALAR_TYPES:
+    if isinstance(declared, str):
+      scalars = {declared} & SCALAR_TYPES
+    elif isinstance(declared, list):
+      scalars = {t for t in declared if isinstance(t, str)} & SCALAR_TYPES
+    else:
+      scalars = set()
+    if not scalars:
       continue
     if node.get('enum') or 'const' in node:
       continue
     if node.get('format') in TIMESTAMP_FORMATS:
       continue
+    rendered = declared if isinstance(declared, str) else ' | '.join(map(str, declared))
     out.append(Violation(
       rule='timestamp-format',
       location=path,
@@ -605,7 +637,7 @@ def check_timestamp_format(operation: dict[str, Any]) -> list[Violation]:
         f'`{name}` looks like a wire timestamp with no declared format; declare '
         f'`format: "epoch-millis"` (or `epoch-seconds`/`epoch-micros`/`epoch-nanos`, or '
         f'`date-time` on a string, or `date` for a plain calendar date) so it renders as a '
-        f'real `datetime` instead of a bare `{declared}` -- docs/spec/authoring.md rule 3'
+        f'real `datetime` instead of a bare `{rendered}` -- docs/spec/authoring.md rule 3'
       ),
     ))
   return out
@@ -890,7 +922,7 @@ def is_arithmetic(schema: dict[str, Any], *, datetime_ok: bool = False) -> bool 
   Parser maps that straight to a stdlib `datetime`
   (`truewire.generation.python.types.parser.Parser.string`), and `datetime` supports the same
   `-`/`+` arithmetic a number does, through `timedelta` rather than a bare count. Only a
-  `window` bound computes a `datetime` this way: a `page` index or an `offset` is always a
+  `seek` bound computes a `datetime` this way: a `page` index or an `offset` is always a
   fresh loop counter the walk itself seeds and increments, never a value read back out of
   the caller's own parameter, so it stays plain-numeric regardless of what the caller
   passed.
@@ -898,7 +930,7 @@ def is_arithmetic(schema: dict[str, Any], *, datetime_ok: bool = False) -> bool 
   Args:
     schema: Schema the operation declares for a request parameter.
     datetime_ok: Whether a `date-time`-formatted string also counts, i.e. whether this
-      parameter is a `window` bound.
+      parameter is a `seek` bound.
   """
   if is_ref(schema) or schema.get('anyOf'):
     return None
@@ -917,67 +949,120 @@ def is_arithmetic(schema: dict[str, Any], *, datetime_ok: bool = False) -> bool 
       return False
   return None
 
-OVERLAP_ARITHMETIC_TIMESTAMP_FORMATS: dict[str, frozenset[str]] = {
-  'window': TIMESTAMP_FORMATS,
-  'seek': frozenset({'epoch-seconds', 'epoch-millis', 'epoch-micros'}),
-}
-"""Per-strategy formats an `overlap.field`'s own enclosing window bound / seek cursor can
-carry that make a non-numeric row field arithmetic-safe anyway (rule 8's `overlap`,
-`Generator.row_field_expression`). `window`'s own gating (`Generator.paged_window_bound`'s
-default, keyed off `HttpRequest.TIMESTAMP_HELPERS`) recognizes all six timestamp formats;
-`seek`'s (`TIMESTAMP_TICKS`) only the three with a fixed-tick `timedelta` to advance a
-cursor by -- `epoch-nanos`/`date-time`/`date` have none, so a `seek` cursor in one of those
-never actually converts a row field before comparing, and a non-numeric field there stays
-genuinely unsafe."""
-
-def overlap_field_arithmetic(
-  field_schema: dict[str, Any], *, bound_schema: dict[str, Any] | None, strategy: str,
+def cursor_field_orderable(
+  field_schema: dict[str, Any], *, bound_schema: dict[str, Any] | None,
 ) -> bool | None:
   """
-  Whether an `overlap.field` value is safe to compare with `>` and pass to `max()`.
+  Whether a `seek` cursor field's values can be ordered -- compared with `>` and passed to
+  `max()`/`min()` -- so the walk can pick the extreme one off a page regardless of the
+  order the venue's rows arrive in (ADR 0013).
 
-  A bare number always is (`is_arithmetic`'s own existing verdict). A non-numeric field --
-  most commonly a wire *string* (candle rows commonly carry their own timestamp this
-  way) -- still is when the walk's own bound/cursor
-  parameter is itself timestamp-formatted *and* the row field declares that identical
-  format: `Generator.row_field_expression` converts every value it reads through the
-  *bound*'s own converter (`truewire_core.times.ms.EpochConverter.parse` for an epoch format,
-  accepting either a raw `int` or a numeral `str`) -- never the row field's own, so a row
-  field genuinely encoded a different way (an ISO-8601 string row value under an
-  epoch-millis bound, say) would be silently fed to the wrong converter. Requiring an exact
-  format match, not just "some timestamp format on both sides", is what keeps that
-  mismatch caught rather than approved (`docs/pagination.md`; the codegen half of this is
-  Fix 2).
+  A bare number always can (`is_arithmetic`'s own verdict). A wire string can when it is
+  an `integer-string` (rule 13, the generated walk reads it through `int`), or when the
+  walk's own moving bound is timestamp-formatted and the row field declares a timestamp
+  format the walk converts to the bound's (`cursor_field_converts`): every backend parses
+  a raw row value through the row field's own converter and compares times, so an ISO-8601
+  string under an epoch-millis bound orders like the bound does. A plain string id
+  (bitget's `idLessThan`, mexc's `fromId`) is not orderable: the walk then falls back to
+  the last row in wire order, which is only safe for a `unique` cursor -- the check that
+  calls this enforces that. Whether a bare number under a timestamp bound has a unit the
+  walk can know is `cursor_field_converts`'s question, not this one's.
 
   Args:
-    field_schema: `overlap.field`'s own resolved schema.
-    bound_schema: The window bound (`pagination.bound.start`) or seek cursor
-      (`pagination.cursor.parameter`) parameter's own declared schema -- `None` when it
-      can't be resolved.
-    strategy: `pagination.strategy` (`'window'` or `'seek'`).
+    field_schema: `cursor.field`'s own resolved row-field schema.
+    bound_schema: The moving bound parameter's own declared schema, `None` when it can't
+      be resolved.
   """
   verdict = is_arithmetic(field_schema)
   if verdict is not False:
     return verdict
-  if bound_schema is None:
-    return False
-  bound_format = bound_schema.get('format')
-  allowed = OVERLAP_ARITHMETIC_TIMESTAMP_FORMATS.get(strategy, frozenset())
-  if bound_format not in allowed:
-    return False
-  return field_schema.get('format') == bound_format and field_schema.get('type') in ('string', 'integer')
+  if field_schema.get('format') == 'integer-string':
+    return True
+  return cursor_field_converts(field_schema, bound_schema=bound_schema) is True and (
+    field_schema.get('type') in ('string', 'integer', 'number')
+  )
+
+def cursor_field_converts(
+  field_schema: dict[str, Any], *, bound_schema: dict[str, Any] | None,
+) -> bool | None:
+  """
+  Whether a `seek` walk under a timestamp-formatted moving bound can read a raw row value
+  of `cursor.field` as a time, or `None` when the bound is not a timestamp (or cannot be
+  resolved) and the question does not arise.
+
+  The walk parses a raw row value (a `validate: false` row, or Rust's wire form) through
+  the row field's own format, then compares and moves in the bound's (TRU-197). So the row
+  field must declare one: the same format as the bound, or any instant format under an
+  instant bound (`truewire.plan.types.INSTANT_FORMATS`: lighter's `epoch-seconds` fundings
+  under an `epoch-millis` `end_timestamp`). A bare integer would leave the unit to a guess,
+  and a `date` names a day, which converts to no instant.
+
+  Args:
+    field_schema: `cursor.field`'s own resolved row-field schema.
+    bound_schema: The moving bound parameter's own declared schema, `None` when it can't
+      be resolved.
+  """
+  bound_format = bound_schema.get('format') if bound_schema is not None else None
+  if bound_format not in TIMESTAMP_FORMATS:
+    return None
+  field_format = field_schema.get('format')
+  return field_format == bound_format or (
+    field_format in INSTANT_FORMATS and bound_format in INSTANT_FORMATS
+  )
+
+def seek_bound_orderable(schema: dict[str, Any]) -> bool | None:
+  """
+  Whether a `seek` parameter the walk compares rows against -- `exclusive.far.parameter`
+  -- has an order of its own: a number, an `integer-string`, or a timestamp `format`.
+  `None` when the operation cannot say (`is_arithmetic`).
+
+  Every backend reads the row value through this parameter's own type (Python's
+  `seek_key_kind`, the plan's field type elsewhere), so a parameter with no order leaves the
+  walk comparing strings, or nothing at all.
+
+  Args:
+    schema: The parameter's declared schema.
+  """
+  if schema.get('format') in TIMESTAMP_FORMATS or schema.get('format') == 'integer-string':
+    return True
+  return is_arithmetic(schema)
+
+def timestamp_formats_agree(bound_schema: dict[str, Any], field_schema: dict[str, Any]) -> bool | None:
+  """
+  Whether a row field and the parameter it is compared with agree on timestamps: when
+  either declares a timestamp `format`, both declare the same one. `None` when either is a
+  `$ref` or an `anyOf`, whose format this cannot see, or states neither `type` nor
+  `format`, which constrains nothing to judge.
+
+  The walk converts the row value with the parameter's converter, not the field's own: an
+  epoch-seconds field read as epoch-millis lands in 1970, and an epoch-millis field read as
+  a plain integer is compared with a `datetime` after validation.
+
+  Args:
+    bound_schema: The parameter's declared schema.
+    field_schema: The row field's resolved schema.
+  """
+  if any(
+    is_ref(schema) or schema.get('anyOf') or not (schema.get('type') or schema.get('format'))
+    for schema in (bound_schema, field_schema)
+  ):
+    return None
+  bound_format, field_format = bound_schema.get('format'), field_schema.get('format')
+  if bound_format not in TIMESTAMP_FORMATS and field_format not in TIMESTAMP_FORMATS:
+    return True
+  return bound_format == field_format
 
 def resolvable_size_cap(operation: dict[str, Any], size: PaginationParameter) -> bool:
   """
   Whether a declared `size` parameter's own schema already resolves a row cap to measure
-  a full `window`+`overlap` chunk against, without `overlap.cap`.
+  a full `seek` page against, without `cap`.
 
   Mirrors `Generator.paged_size_default`'s own resolution at codegen time, restricted to
   the one signal available from the operation alone: a documented `default` on the size
   parameter's schema. A caller-always-required size with no default (the other half of
   `Generator.paged_always_set`'s own check) needs the resolved header parameter's real
   `required` flag, which this authoring-time check has no way to derive from a raw
-  operation dict alone -- so it is not attempted here, and declaring `overlap.cap`
+  operation dict alone -- so it is not attempted here, and declaring `cap`
   explicitly on such an endpoint is always accepted rather than flagged as redundant.
 
   Args:
@@ -1076,7 +1161,7 @@ def resolves(schema: dict[str, Any], path: str) -> bool | None:
 
 def row_item_schema(schema: dict[str, Any], rows: str | None) -> dict[str, Any] | None:
   """
-  Resolve the item schema of the array a `seek`/`short_page`/`empty`/`unchanged` `rows`
+  Resolve the item schema of the array a `seek`/`short_page`/`empty` `rows`
   path names, or
   `None` when it cannot be resolved.
 
@@ -1131,11 +1216,18 @@ def pagination_parameters(pagination: Pagination) -> list[tuple[str, str]]:
   out: list[tuple[str, str]] = []
   if pagination.strategy == 'page':
     out.append(('pagination.index.parameter', pagination.index.parameter))
-  elif pagination.strategy == 'token' or pagination.strategy == 'seek':
+  elif pagination.strategy == 'token':
     out.append(('pagination.cursor.parameter', pagination.cursor.parameter))
-  elif pagination.strategy == 'window':
-    out.append(('pagination.bound.start', pagination.bound.start))
-    out.append(('pagination.bound.end', pagination.bound.end))
+  elif pagination.strategy == 'seek':
+    if pagination.bound.start is not None:
+      out.append(('pagination.bound.start', pagination.bound.start))
+    if pagination.bound.end is not None:
+      out.append(('pagination.bound.end', pagination.bound.end))
+    if pagination.exclusive is not None:
+      out.extend(
+        (f'pagination.exclusive.parameters[{index}]', name)
+        for index, name in enumerate(pagination.exclusive.parameters)
+      )
   else:
     out.append(('pagination.offset.parameter', pagination.offset.parameter))
   if pagination.size is not None:
@@ -1146,11 +1238,11 @@ def arithmetic_parameters(pagination: Pagination) -> list[tuple[str, str]]:
   """
   Every request parameter the walk computes a value for, as `(location, parameter name)`.
 
-  These are the parameters `Generator.paged_method` does arithmetic on: a `window` takes
-  the width of the caller's own two bounds as `end - start` and moves the window by it, a
-  `page` counts up from `index.start`, and an `offset` counts up from zero by the rows it
-  received. `token` is absent because a cursor is opaque — it is echoed back exactly as it
-  arrived, and nothing is computed from it.
+  A `page` counts up from `index.start`, an `offset` counts up from zero by the rows it
+  received, and a `seek` walk declaring a `span` adds it to its moving bound (`pos +
+  span`). `token` is absent because a cursor is opaque — it is echoed back exactly as it
+  arrived — and a `seek` walk without a `span` never computes a bound either: it re-sends a
+  value read off a row, compared but never added to (ADR 0013).
 
   Args:
     pagination: Declaration carried by the endpoint.
@@ -1159,11 +1251,8 @@ def arithmetic_parameters(pagination: Pagination) -> list[tuple[str, str]]:
     return [('pagination.index.parameter', pagination.index.parameter)]
   if pagination.strategy == 'offset':
     return [('pagination.offset.parameter', pagination.offset.parameter)]
-  if pagination.strategy == 'window':
-    return [
-      ('pagination.bound.start', pagination.bound.start),
-      ('pagination.bound.end', pagination.bound.end),
-    ]
+  if pagination.strategy == 'seek' and pagination.span is not None:
+    return [(f'pagination.bound.{pagination.anchor}', pagination.moving)]
   return []
 
 def pagination_paths(pagination: Pagination) -> list[tuple[str, str]]:
@@ -1174,6 +1263,10 @@ def pagination_paths(pagination: Pagination) -> list[tuple[str, str]]:
     pagination: Declaration carried by the endpoint.
   """
   out: list[tuple[str, str]] = []
+  if pagination.strategy == 'seek':
+    if pagination.rows is not None:
+      out.append(('pagination.rows', pagination.rows))
+    return out
   if pagination.strategy == 'token':
     out.append(('pagination.cursor.from', pagination.cursor.from_))
   done = pagination.done
@@ -1181,9 +1274,8 @@ def pagination_paths(pagination: Pagination) -> list[tuple[str, str]]:
     out.append(('pagination.done.path', done.path))
     if done.rows is not None:
       out.append(('pagination.done.rows', done.rows))
-  elif done.kind == 'short_page' or done.kind == 'empty' or done.kind == 'unchanged':
-    if done.rows is not None:
-      out.append(('pagination.done.rows', done.rows))
+  elif done.rows is not None:
+    out.append(('pagination.done.rows', done.rows))
   return out
 
 def returned_schemas(endpoint: Endpoint, operation: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1274,7 +1366,7 @@ def check_pagination(endpoint: Endpoint, operation: dict[str, Any]) -> list[Viol
     ))
   for location, parameter in arithmetic_parameters(pagination):
     schema = parameter_schema(operation, parameter)
-    datetime_ok = pagination.strategy == 'window'
+    datetime_ok = pagination.strategy == 'seek'
     if schema is None or is_arithmetic(schema, datetime_ok=datetime_ok) is not False:
       continue
     fix = 'Declare it `integer`, or `string` with `format: "date-time"`' if datetime_ok else 'Declare it `integer`'
@@ -1283,10 +1375,11 @@ def check_pagination(endpoint: Endpoint, operation: dict[str, Any]) -> list[Viol
       location=location,
       message=(
         f'`{parameter}` is typed `{schema["type"]}`, but a `{pagination.strategy}` walk '
-        f'computes the value it sends by arithmetic; a `window` subtracts the caller\'s '
-        f'own two bounds and raises TypeError on anything else, and a `page` or `offset` '
-        f'passes an integer the operation says this parameter does not take. {fix} — a '
-        f'API documenting every query parameter as a string still takes a number here'
+        f'computes the value it sends by arithmetic; a `seek` walk with a `span` adds the '
+        f'span to this bound and raises TypeError on anything else, and a `page` or '
+        f'`offset` passes an integer the operation says this parameter does not take. '
+        f'{fix} — a venue documenting every query parameter as a string still takes a '
+        f'number here'
       ),
     ))
   # Relative to what the method returns -- the schema at `envelope.payload`, when one is
@@ -1306,91 +1399,8 @@ def check_pagination(endpoint: Endpoint, operation: dict[str, Any]) -> list[Viol
       ),
     ))
   if pagination.strategy == 'seek':
-    field = last_row_field(pagination.cursor.from_)
-    rows = pagination.done.rows
-    items = [row_item_schema(schema, rows) for schema in payloads]
-    verdicts = [resolves(item, field) for item in items if item is not None]
-    if verdicts and True not in verdicts and False in verdicts:
-      collection = f'`{rows}`' if rows is not None else 'the response payload'
-      out.append(Violation(
-        rule='pagination',
-        location='pagination.cursor.from',
-        message=(
-          f'`{field}` names no property of a row of {collection}, so the generated loop '
-          f'would read a field the schema says a row never carries'
-        ),
-      ))
-    if pagination.overlap is not None:
-      bound_schema = parameter_schema(operation, pagination.cursor.parameter)
-      field_schemas = [row_field_schema(item, field) for item in items if item is not None]
-      arithmetic = [
-        overlap_field_arithmetic(schema, bound_schema=bound_schema, strategy='seek')
-        for schema in field_schemas if schema is not None
-      ]
-      if arithmetic and True not in arithmetic and False in arithmetic:
-        out.append(Violation(
-          rule='pagination',
-          location='pagination.overlap',
-          message=(
-            f'`{field}` is not typed as a number, but an `overlap` walk compares '
-            f'successive values of it with `>` and takes their `max`; declare it '
-            f'`integer` or `number`, or declare a timestamp `format` on '
-            f'`pagination.cursor.parameter` so it converts before comparing'
-          ),
-        ))
-  if pagination.strategy == 'window' and pagination.overlap is not None:
-    overlap = pagination.overlap
-    field = last_row_field(overlap.field)
-    rows = pagination.done.rows
-    items = [row_item_schema(schema, rows) for schema in payloads]
-    verdicts = [resolves(item, field) for item in items if item is not None]
-    if verdicts and True not in verdicts and False in verdicts:
-      collection = f'`{rows}`' if rows is not None else 'the response payload'
-      out.append(Violation(
-        rule='pagination',
-        location='pagination.overlap.field',
-        message=(
-          f'`{field}` names no property of a row of {collection}, so the generated walk '
-          f'would read a field the schema says a row never carries'
-        ),
-      ))
-    bound_schema = parameter_schema(operation, pagination.bound.start)
-    field_schemas = [row_field_schema(item, field) for item in items if item is not None]
-    arithmetic = [
-      overlap_field_arithmetic(schema, bound_schema=bound_schema, strategy='window')
-      for schema in field_schemas if schema is not None
-    ]
-    if arithmetic and True not in arithmetic and False in arithmetic:
-      out.append(Violation(
-        rule='pagination',
-        location='pagination.overlap.field',
-        message=(
-          f'`{field}` is not typed as a number, but an `overlap` walk compares '
-          f'successive values of it with `>` and takes their `max`; declare it '
-          f'`integer` or `number`, or declare a timestamp `format` on '
-          f'`pagination.bound.start` so it converts before comparing'
-        ),
-      ))
-    resolvable = pagination.size is not None and resolvable_size_cap(operation, pagination.size)
-    if resolvable and overlap.cap is not None:
-      out.append(Violation(
-        rule='pagination',
-        location='pagination.overlap.cap',
-        message=(
-          '`overlap.cap` is redundant: `pagination.size`\'s own declared default already '
-          'resolves a row cap to measure a full chunk against'
-        ),
-      ))
-    elif not resolvable and overlap.cap is None:
-      out.append(Violation(
-        rule='pagination',
-        location='pagination.overlap.cap',
-        message=(
-          'neither `pagination.size`\'s own declared default nor `overlap.cap` resolves '
-          'a row cap to measure a full chunk against; declare one or the other'
-        ),
-      ))
-  if pagination.size is None:
+    out.extend(check_seek(endpoint, pagination, operation, payloads))
+  elif pagination.size is None:
     done = pagination.done
     if done.kind == 'short_page':
       out.append(Violation(
@@ -1410,6 +1420,183 @@ def check_pagination(endpoint: Endpoint, operation: dict[str, Any]) -> list[Viol
           'item count is worth is only decidable against the page size that was asked for'
         ),
       ))
+  return out
+
+def check_seek(
+  endpoint: Endpoint, pagination: SeekPagination, operation: dict[str, Any],
+  payloads: list[dict[str, Any]],
+) -> list[Violation]:
+  """
+  The `seek`-specific half of rule 7 (ADR 0013): the cursor field names a real row field, a
+  non-unique cursor has the cap and the orderable field its dedup needs, `cap` isn't
+  declared where `size` already resolves one, a `span` keyword doesn't shadow a real wire
+  parameter, an `exclusive.far.field` names a row field comparable with its parameter, and
+  a paginated request is a read.
+
+  Args:
+    endpoint: Endpoint record loaded from an `endpoint.json`.
+    pagination: Its `seek` declaration.
+    operation: Plain-JSON operation, from `operation_json`.
+    payloads: Success payload schemas, from `payload_schemas`.
+  """
+  out: list[Violation] = []
+  field = last_row_field(pagination.cursor.field)
+  rows = pagination.rows
+  items = [row_item_schema(schema, rows) for schema in payloads]
+  verdicts = [resolves(item, field) for item in items if item is not None]
+  collection = f'`{rows}`' if rows is not None else 'the response payload'
+  if verdicts and True not in verdicts and False in verdicts:
+    out.append(Violation(
+      rule='pagination',
+      location='pagination.cursor.field',
+      message=(
+        f'`{field}` names no property of a row of {collection}, so the generated walk '
+        f'would read a field the schema says a row never carries'
+      ),
+    ))
+  far = pagination.exclusive.far if pagination.exclusive is not None else None
+  if far is not None:
+    far_field = last_row_field(far.field)
+    far_verdicts = [resolves(item, far_field) for item in items if item is not None]
+    far_schemas = [
+      schema for item in items if item is not None
+      and (schema := row_field_schema(item, far_field)) is not None
+    ]
+    far_bound = parameter_schema(operation, far.parameter)
+    far_orderable = [cursor_field_orderable(schema, bound_schema=far_bound) for schema in far_schemas]
+    far_agree = [
+      timestamp_formats_agree(far_bound, schema) for schema in far_schemas
+    ] if far_bound is not None else []
+    if far_bound is not None and seek_bound_orderable(far_bound) is False:
+      out.append(Violation(
+        rule='pagination',
+        location='pagination.exclusive.far.parameter',
+        message=(
+          f'`{far.parameter}` has no order to compare rows with: the walk drops every row '
+          f'past the caller\'s `{far.parameter}`, so it has to be a number, an '
+          f'`integer-string`, or carry a timestamp `format`'
+        ),
+      ))
+    elif far_verdicts and True not in far_verdicts and False in far_verdicts:
+      out.append(Violation(
+        rule='pagination',
+        location='pagination.exclusive.far.field',
+        message=(
+          f'`{far_field}` names no property of a row of {collection}, so the walk would '
+          f'compare `{far.parameter}` with a field the schema says a row never carries'
+        ),
+      ))
+    elif far_agree and True not in far_agree and False in far_agree:
+      assert far_bound is not None
+      declares = lambda schema: (  # noqa: E731
+        f'`{schema["format"]}`' if schema.get('format') in TIMESTAMP_FORMATS else 'no timestamp format'
+      )
+      disagreeing = next(schema for schema, agree in zip(far_schemas, far_agree) if agree is False)
+      out.append(Violation(
+        rule='pagination',
+        location='pagination.exclusive.far.field',
+        message=(
+          f'`{far_field}` declares {declares(disagreeing)} and `{far.parameter}` '
+          f'{declares(far_bound)}: every backend reads the row\'s `{far_field}` through '
+          f'`{far.parameter}`\'s own converter, so both have to declare the same timestamp '
+          f'`format`'
+        ),
+      ))
+    elif far_orderable and True not in far_orderable and False in far_orderable:
+      out.append(Violation(
+        rule='pagination',
+        location='pagination.exclusive.far.field',
+        message=(
+          f'`{far_field}` cannot be ordered against `{far.parameter}`: the walk drops every '
+          f'row past the caller\'s `{far.parameter}`, so the field has to be a number, an '
+          f'`integer-string`, or carry the same timestamp `format` as `{far.parameter}`'
+        ),
+      ))
+  bound_schema = parameter_schema(operation, pagination.moving)
+  field_schemas = [row_field_schema(item, field) for item in items if item is not None]
+  orderable = [
+    cursor_field_orderable(schema, bound_schema=bound_schema) for schema in field_schemas
+    if schema is not None
+  ]
+  if not pagination.cursor.unique and orderable and True not in orderable and False in orderable:
+    out.append(Violation(
+      rule='pagination',
+      location='pagination.cursor',
+      message=(
+        f'`{field}` is declared `unique: false` but is not orderable: a non-unique cursor '
+        f'walk has to take the extreme value off a page (`max`/`min`) to know which rows '
+        f'to carry over, and a plain string cannot be ordered. Declare it `integer` or '
+        f'`number`, `format: "integer-string"`, or a timestamp `format` that converts to '
+        f'`{pagination.moving}`\'s'
+      ),
+    ))
+  converts = [
+    cursor_field_converts(schema, bound_schema=bound_schema) for schema in field_schemas
+    if schema is not None
+  ]
+  if False in converts:
+    bound_format = bound_schema.get('format') if bound_schema is not None else None
+    field_formats = sorted({
+      str(schema.get('format')) for schema in field_schemas
+      if schema is not None and cursor_field_converts(schema, bound_schema=bound_schema) is False
+    })
+    stated = ' or '.join(f'`{name}`' for name in field_formats)
+    out.append(Violation(
+      rule='pagination',
+      location='pagination.cursor.field',
+      message=(
+        f'`{field}` declares no timestamp `format` the walk can convert to the moving bound '
+        f'`{pagination.moving}`\'s `{bound_format}`'
+        + (f' (it is {stated})' if field_formats != ['None'] else '')
+        + ': the walk reads a raw row value in the row\'s own format and sends it in the '
+        f'bound\'s, and without one it would have to guess the unit. Declare the format the '
+        f'venue sends `{field}` in (`epoch-seconds`, `epoch-millis`, `date-time`, ...); a '
+        f'`date` converts only to a `date` bound'
+      ),
+    ))
+  resolvable = pagination.size is not None and resolvable_size_cap(operation, pagination.size)
+  if resolvable and pagination.cap is not None:
+    out.append(Violation(
+      rule='pagination',
+      location='pagination.cap',
+      message=(
+        '`cap` is redundant: `pagination.size`\'s own declared default already resolves '
+        'the row cap a full page is measured against'
+      ),
+    ))
+  elif not resolvable and pagination.cap is None and not pagination.cursor.unique:
+    out.append(Violation(
+      rule='pagination',
+      location='pagination.cap',
+      message=(
+        f'`{field}` is declared `unique: false`, but neither `pagination.size`\'s own '
+        f'declared default nor `cap` resolves the row cap a full page is measured against; '
+        f'without one the walk cannot tell "every row shares one key and the page is '
+        f'full" from "exhausted". Declare the venue\'s documented cap, never a guess'
+      ),
+    ))
+  if pagination.span is not None and pagination.span.parameter in request_parameters(operation):
+    out.append(Violation(
+      rule='pagination',
+      location='pagination.span.parameter',
+      message=(
+        f'`{pagination.span.parameter}` is a real parameter of this operation, but a '
+        f'`span` is a keyword of the generated method only, never sent to the venue; name '
+        f'it something the operation does not already take'
+      ),
+    ))
+  spec = endpoint.spec
+  method = getattr(spec, 'method', None)
+  if isinstance(method, str) and method.upper() != 'GET':
+    out.append(Violation(
+      rule='pagination-read',
+      location='pagination',
+      message=(
+        f'this operation is `{method}`, and a paginated walk repeats its request whenever '
+        f'a page is retried or a walk resumed (ADR 0013); confirm it is a read and record '
+        f'that in `notes`, or drop the declaration if it is not'
+      ),
+    ))
   return out
 
 IDENTIFIER_PLACEHOLDER = PLACEHOLDER
@@ -1791,7 +1978,7 @@ def check_schemas_no_shadowing(client_root: Path | Project) -> list[Violation]:
   return violations
 
 
-BACKEND_SECTIONS = ('python', 'typescript', 'rust')
+BACKEND_SECTIONS = ('python', 'typescript', 'rust', 'go')
 """The `truewire.toml` sections that name a generated root class, in generation order."""
 
 
@@ -1817,6 +2004,8 @@ def client_class_names(project: Project) -> dict[str, str]:
     names['typescript'] = project.typescript.name or default
   if project.rust is not None:
     names['rust'] = project.rust.name or default
+  if project.go is not None:
+    names['go'] = project.go.name or default
   return names
 
 
@@ -1857,6 +2046,83 @@ def function_tree(client_root: Path | Project) -> tuple[set[tuple[str, ...]], se
     for depth in range(1, len(parts)):
       nodes.add(parts[:depth])
   return nodes, leaves - nodes
+
+
+def check_router_docs(client_root: Path | Project) -> list[Violation]:
+  """
+  Every `router.json` under `spec/endpoints/` loads, and the root's names no `class`
+  (`docs/spec/authoring.md` rule 14): `check_router_loads`, then `check_root_router_class`.
+
+  Args:
+    client_root: Project (or project root).
+  """
+  return [*check_router_loads(client_root), *check_root_router_class(client_root)]
+
+
+def check_router_loads(client_root: Path | Project) -> list[Violation]:
+  """
+  Every `router.json` under `spec/endpoints/` loads (`docs/spec/authoring.md` rule 14).
+
+  A shape error is reported here, one per field, rather than raised from whichever later
+  check happens to load the file first. The checks that read every `router.json`
+  (`check_meta`, `check_router_names`) can run once this returns nothing.
+
+  Args:
+    client_root: Project (or project root).
+  """
+  project = resolve(client_root)
+  endpoints_root = project.endpoints_dir
+  if not endpoints_root.is_dir():
+    return []
+  violations: list[Violation] = []
+  for path in sorted(endpoints_root.rglob('router.json')):
+    location = str(path.relative_to(project.root))
+    try:
+      load_router(path.parent)
+    except ValidationError as exc:
+      for error in exc.errors():
+        field = '.'.join(str(part) for part in error['loc']) or 'router.json'
+        # A validator's own `ValueError` reaches here as pydantic's `Value error, <text>`.
+        message = error['msg'].removeprefix('Value error, ')
+        violations.append(Violation(
+          rule='router-doc', location=location, message=f'{field}: {message}',
+        ))
+    except ValueError as exc:  # not JSON (or not UTF-8) at all
+      violations.append(Violation(
+        rule='router-doc', location=location, message=f'not valid JSON: {exc}',
+      ))
+  return violations
+
+
+def check_root_router_class(client_root: Path | Project) -> list[Violation]:
+  """
+  The root `router.json` names no `class` (`docs/spec/authoring.md` rule 14).
+
+  `class` renames a group; the client root is named by each backend's `name`, so a
+  `class` there would be ignored, and is refused instead. A root `router.json` that does
+  not load is `check_router_loads`'s finding, not this one's.
+
+  Args:
+    client_root: Project (or project root).
+  """
+  project = resolve(client_root)
+  endpoints_root = project.endpoints_dir
+  try:
+    doc = load_router(endpoints_root)
+  except ValueError:
+    return []
+  if doc is None or doc.class_ is None:
+    return []
+  return [Violation(
+    rule='router-doc',
+    location=str((endpoints_root / 'router.json').relative_to(project.root)),
+    message=(
+      f'the root router.json declares `class` {doc.class_!r}, but the client root is '
+      "named by each backend's `name` ([python].name, [typescript].name, [rust].name, "
+      '[go].name), never by router.json, so it would be ignored. Fix: remove `class` '
+      "here and set the backend's `name` instead."
+    ),
+  )]
 
 
 def check_router_names(
@@ -1910,7 +2176,7 @@ def check_router_names(
   # would close the cycle. Reused rather than reimplemented all the same -- a second copy
   # of the segment-to-class-name rule would drift, and this check would then report on a
   # tree other than the one the backends render (`truewire.codegen.layout`'s docstring).
-  from truewire.codegen.layout import class_name
+  from truewire.codegen.layout import class_name, group_class_name
 
   project = resolve(client_root)
   client_root = project.root
@@ -1934,6 +2200,16 @@ def check_router_names(
     router = directory / 'router.json'
     return str((router if router.is_file() else directory).relative_to(client_root))
 
+  def rendered_by(node: tuple[str, ...]) -> str:
+    """The class a node renders: a group's `router.json` `class`, else its segment's."""
+    if node in nodes:
+      return group_class_name(load_router(endpoints_root.joinpath(*node)), node[-1])
+    return class_name(node[-1])
+
+  def renamed(node: tuple[str, ...]) -> str:
+    """How to rename a group: its directory, or the `class` its `router.json` sets."""
+    return f'the {node[-1]!r} group directory (or its router.json `class`)'
+
   paths = nodes | leaves
   violations: list[Violation] = []
   for node in sorted(nodes):
@@ -1945,13 +2221,13 @@ def check_router_names(
     groups = [segment for segment in segments if (*node, segment) in nodes]
 
     for segment in groups:
-      rendered = class_name(segment)
+      rendered = rendered_by((*node, segment))
       group = '.'.join((*node, segment))
       if node:
-        if class_name(node[-1]) != rendered:
+        if rendered_by(node) != rendered:
           continue
         claimed = f'the router group {".".join(node)!r} already renders it'
-        fix = 'rename one of the two group directories'
+        fix = f'rename {renamed(node)} or {renamed((*node, segment))}'
       else:
         sections = [section for section, name in sorted(names.items()) if name == rendered]
         if not sections:
@@ -1959,10 +2235,7 @@ def check_router_names(
         declared = ', '.join(f'[{section}].name' for section in sections)
         tables = ', '.join(f'[{section}]' for section in sections)
         claimed = f'the client is already called {rendered!r} ({declared})'
-        fix = (
-          f'choose a different `name` in {tables}, or rename the '
-          f'{segment!r} group directory'
-        )
+        fix = f'choose a different `name` in {tables}, or rename {renamed((segment,))}'
       violations.append(Violation(
         rule='router-name-collision',
         location=location((*node, segment)),
@@ -1975,7 +2248,7 @@ def check_router_names(
       ))
 
     for segment in groups:
-      rendered = class_name(segment)
+      rendered = rendered_by((*node, segment))
       if rendered not in shared:
         continue
       group = '.'.join((*node, segment))
@@ -1986,13 +2259,13 @@ def check_router_names(
           f'the router group {group!r} renders the class {rendered!r}, and a shared schema '
           f'is already called {rendered!r} -- the module composing the group imports the '
           'shared types and declares its own class, so both want that one name. '
-          f'Fix: rename the {rendered!r} schema, or rename the {segment!r} group directory.'
+          f'Fix: rename the {rendered!r} schema, or rename {renamed((*node, segment))}.'
         ),
       ))
 
     by_rendered: dict[str, list[str]] = {}
     for segment in segments:
-      by_rendered.setdefault(class_name(segment), []).append(segment)
+      by_rendered.setdefault(rendered_by((*node, segment)), []).append(segment)
     for rendered, colliding in sorted(by_rendered.items()):
       if len(colliding) < 2:
         continue
@@ -2004,7 +2277,8 @@ def check_router_names(
           f'{" and ".join(repr(segment) for segment in colliding)} under {under} both '
           f'render the class {rendered!r} -- one module composes both, under one name, '
           'so whichever is written second is the only one a caller can reach. Fix: '
-          'rename one of the directories so the two render different names.'
+          'rename one of the directories, or set a different `class` in a group\'s '
+          'router.json, so the two render different names.'
         ),
       ))
   return violations

@@ -1,0 +1,16 @@
+{
+  "function": "streams.user_events",
+  "notes": ["Synthetic hyperliquid-shaped stream: the subscribe frame names `userEvents` at `subscription.type` while pushes arrive on channel `user`, declared by `envelope.subscribe_channel`."],
+  "spec": {
+    "kind": "stream",
+    "channel": "user",
+    "openapi": {
+      "description": "User events, subscribed as `userEvents`, pushed on `user`.",
+      "parameters": [
+        {"name": "user", "in": "query", "required": true, "description": "Address.", "schema": {"type": "string"}}
+      ],
+      "responses": {"message": {"description": "User event."}}
+    }
+  },
+  "envelope": {"payload": "data", "channel": "subscription.type", "subscribe_channel": "userEvents"}
+}

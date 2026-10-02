@@ -63,10 +63,6 @@ async def market_data() -> None:
 
     raw_time = await client.spot.market_data.time(validate=False)
     reveal_type(raw_time, expected_text='Any')
-    reveal_type(
-      client.spot.account.trades_history_paged(validate=False),
-      expected_text='AsyncIterator[Any]',
-    )
 
 
 async def account_data() -> None:

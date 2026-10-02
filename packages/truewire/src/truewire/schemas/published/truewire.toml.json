@@ -1,0 +1,486 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://truewire.dev/schemas/truewire.toml.json",
+  "$defs": {
+    "CoreConfig": {
+      "additionalProperties": false,
+      "description": "One `[cores.<name>]` entry: facts about a symbolic core name that hold in every language.",
+      "properties": {
+        "meta": {
+          "additionalProperties": true,
+          "description": "A JSON Schema for the `meta` of every endpoint on this core. Without one, each such endpoint declares its own `meta: {}`.",
+          "title": "Meta",
+          "type": "object"
+        }
+      },
+      "title": "CoreConfig",
+      "type": "object"
+    },
+    "ExtraEntry": {
+      "additionalProperties": false,
+      "description": "A hand-written Python class a generated router folds in beside its generated endpoints.",
+      "properties": {
+        "file": {
+          "description": "The module defining the class, without `.py`, beside the router's `__init__.py`.",
+          "minLength": 1,
+          "title": "File",
+          "type": "string"
+        },
+        "class": {
+          "description": "The class `file` defines.",
+          "minLength": 1,
+          "title": "Class",
+          "type": "string"
+        },
+        "replaces": {
+          "description": "The generated endpoint this class stands in for, by its attribute name. Without it, the class is added beside the generated ones.",
+          "title": "Replaces",
+          "type": "string"
+        }
+      },
+      "required": [
+        "file",
+        "class"
+      ],
+      "title": "ExtraEntry",
+      "type": "object"
+    },
+    "GoCodegenConfig": {
+      "additionalProperties": false,
+      "description": "`[go]`: the generated Go packages.",
+      "properties": {
+        "name": {
+          "description": "Generated root struct name, e.g. `KuCoin`; `[python].name` by default.",
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "package": {
+          "description": "Directory of the generated root package under `src`; `[project].name` by default.",
+          "minLength": 1,
+          "title": "Package",
+          "type": "string"
+        },
+        "src": {
+          "default": "src",
+          "description": "Directory the package lives under, relative to the project root.",
+          "title": "Src",
+          "type": "string"
+        },
+        "module": {
+          "description": "The module path `go.mod` declares, e.g. `example.com/kraken`.",
+          "minLength": 1,
+          "title": "Module",
+          "type": "string"
+        },
+        "root": {
+          "default": ".",
+          "description": "Directory holding `go.mod`, relative to the project root.",
+          "title": "Root",
+          "type": "string"
+        }
+      },
+      "required": [
+        "module"
+      ],
+      "title": "GoCodegenConfig",
+      "type": "object"
+    },
+    "NewParam": {
+      "additionalProperties": false,
+      "description": "A `new()` keyword as a table: its type, and whether a caller must pass it.",
+      "properties": {
+        "type": {
+          "description": "`module.path:Name`, or a builtin: `str`, `int`, `bool`, `float`.",
+          "minLength": 1,
+          "title": "Type",
+          "type": "string"
+        },
+        "required": {
+          "default": true,
+          "description": "Whether a caller must pass it; `false` makes it optional, `None` by default.",
+          "title": "Required",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "NewParam",
+      "type": "object"
+    },
+    "PolicyTable": {
+      "additionalProperties": false,
+      "description": "`[policy]`: what the client may do on its own behalf.",
+      "properties": {
+        "rate": {
+          "description": "Requests per second the client paces itself to; unpaced when absent.",
+          "exclusiveMinimum": 0,
+          "title": "Rate",
+          "type": "number"
+        },
+        "retry": {
+          "default": false,
+          "description": "Whether the client retries a failed request on its own.",
+          "title": "Retry",
+          "type": "boolean"
+        },
+        "refuse": {
+          "description": "Endpoint ids the client refuses to call, e.g. `account.withdraw`.",
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Refuse",
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "title": "PolicyTable",
+      "type": "object"
+    },
+    "ProjectTable": {
+      "additionalProperties": false,
+      "description": "`[project]`: what the project is called.",
+      "properties": {
+        "name": {
+          "description": "The project's name; the package names default to it.",
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ProjectTable",
+      "type": "object"
+    },
+    "PythonCodegenConfig": {
+      "additionalProperties": false,
+      "description": "`[python]`: the generated Python package.",
+      "properties": {
+        "name": {
+          "description": "Generated root class name, e.g. `KuCoin`; PascalCase of `[project].name` by default.",
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "package": {
+          "description": "Import name of the generated package (`petstore` for `src/petstore/`); `[project].name` by default.",
+          "minLength": 1,
+          "title": "Package",
+          "type": "string"
+        },
+        "src": {
+          "default": "src",
+          "description": "Directory the package lives under, relative to the project root.",
+          "title": "Src",
+          "type": "string"
+        },
+        "ruff": {
+          "description": "Ruff config `truewire generate` formats with, relative to the project root; the one shipped with truewire by default.",
+          "title": "Ruff",
+          "type": "string"
+        },
+        "pyright": {
+          "default": false,
+          "description": "Run pyright over the package after generating; also on when a `pyrightconfig.json` is at the root.",
+          "title": "Pyright",
+          "type": "boolean"
+        },
+        "backend": {
+          "description": "A Python module, relative to the project root, exporting a `generator` that customizes generation.",
+          "title": "Backend",
+          "type": "string"
+        },
+        "cores": {
+          "additionalProperties": {
+            "$ref": "#/$defs/PythonCoreConfig"
+          },
+          "description": "Core name -> the hand-written class it resolves to; `router.json`'s `core` picks one. At least the root's.",
+          "minProperties": 1,
+          "title": "Cores",
+          "type": "object"
+        },
+        "extras": {
+          "additionalProperties": {
+            "items": {
+              "$ref": "#/$defs/ExtraEntry"
+            },
+            "type": "array"
+          },
+          "description": "Router node (dotted, `\"indexer.data\"`) -> hand-written classes folded into it.",
+          "title": "Extras",
+          "type": "object"
+        }
+      },
+      "required": [
+        "cores"
+      ],
+      "title": "PythonCodegenConfig",
+      "type": "object"
+    },
+    "PythonCoreConfig": {
+      "additionalProperties": false,
+      "description": "One `[python.cores.<name>]` entry: the hand-written Python class a core name resolves to, and how it is built.",
+      "properties": {
+        "base": {
+          "description": "The class this core name resolves to, as `module.path:ClassName`.",
+          "minLength": 1,
+          "title": "Base",
+          "type": "string"
+        },
+        "children": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Child attribute -> the field of this class forwarded to it, e.g. `{rest = \"rest_client\"}`. Without it, every child gets the one client.",
+          "title": "Children",
+          "type": "object"
+        },
+        "forward": {
+          "description": "`new()` keywords passed on from the composing class's same-named fields. Declaring it, even empty, builds the class through `new(client, *, ...)`.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Forward",
+          "type": "array"
+        },
+        "params": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/$defs/NewParam"
+              }
+            ]
+          },
+          "description": "`new()` keywords a caller supplies: name -> type (`\"pkg.core:Network\"`, a builtin), or a `{type, required}` table for an optional one.",
+          "title": "Params",
+          "type": "object"
+        }
+      },
+      "required": [
+        "base"
+      ],
+      "title": "PythonCoreConfig",
+      "type": "object"
+    },
+    "RustCodegenConfig": {
+      "additionalProperties": false,
+      "description": "`[rust]`: the generated Rust crate.",
+      "properties": {
+        "name": {
+          "description": "Generated root struct name, e.g. `KuCoin`; `[python].name` by default.",
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "package": {
+          "description": "Directory of the generated modules under `src`; `[project].name` by default.",
+          "minLength": 1,
+          "title": "Package",
+          "type": "string"
+        },
+        "src": {
+          "default": "src",
+          "description": "Directory the package lives under, relative to the project root.",
+          "title": "Src",
+          "type": "string"
+        }
+      },
+      "title": "RustCodegenConfig",
+      "type": "object"
+    },
+    "ScoreTable": {
+      "additionalProperties": false,
+      "description": "`[score]`: facts about the project that no command can measure.",
+      "properties": {
+        "stranger": {
+          "description": "The day a newcomer last completed the quickstart from the published package and docs\nalone.",
+          "format": "date",
+          "title": "Stranger",
+          "type": "string"
+        }
+      },
+      "title": "ScoreTable",
+      "type": "object"
+    },
+    "SecretsTable": {
+      "additionalProperties": false,
+      "description": "`[secrets]`: the environment variables a caller sets, by name only. Their values go in\n`.env`, which is git-ignored, and nowhere else.",
+      "properties": {
+        "required": {
+          "description": "Variables the client cannot run without.",
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "type": "string"
+          },
+          "title": "Required",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "optional": {
+          "description": "Variables that unlock more of the API when set.",
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "type": "string"
+          },
+          "title": "Optional",
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "title": "SecretsTable",
+      "type": "object"
+    },
+    "SpecTable": {
+      "additionalProperties": false,
+      "description": "`[spec]`: where the spec lives.",
+      "properties": {
+        "dir": {
+          "default": "spec",
+          "description": "The spec directory, relative to `truewire.toml`; it holds `endpoints/` and `schemas.json`.",
+          "minLength": 1,
+          "title": "Dir",
+          "type": "string"
+        }
+      },
+      "title": "SpecTable",
+      "type": "object"
+    },
+    "TypescriptCodegenConfig": {
+      "additionalProperties": false,
+      "description": "`[typescript]`: the generated TypeScript package.",
+      "properties": {
+        "name": {
+          "description": "Generated root class name, e.g. `KuCoin`; `[python].name` by default.",
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "package": {
+          "description": "Directory of the generated package under `src`; `[project].name` by default.",
+          "minLength": 1,
+          "title": "Package",
+          "type": "string"
+        },
+        "src": {
+          "default": "src",
+          "description": "Directory the package lives under, relative to the project root.",
+          "title": "Src",
+          "type": "string"
+        },
+        "extras": {
+          "additionalProperties": {
+            "items": {
+              "$ref": "#/$defs/TypescriptExtraEntry"
+            },
+            "type": "array"
+          },
+          "description": "Router node (dotted, `\"spot.account\"`; `\"\"` for the root) -> hand-written classes folded into it.",
+          "title": "Extras",
+          "type": "object"
+        }
+      },
+      "title": "TypescriptCodegenConfig",
+      "type": "object"
+    },
+    "TypescriptExtraEntry": {
+      "additionalProperties": false,
+      "description": "A hand-written TypeScript class a generated router folds in beside its generated endpoints.",
+      "properties": {
+        "file": {
+          "description": "The module exporting the class, without `.ts`, beside the router's `index.ts`.",
+          "minLength": 1,
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "title": "File",
+          "type": "string"
+        },
+        "class": {
+          "description": "The class `file` exports.",
+          "minLength": 1,
+          "title": "Class",
+          "type": "string"
+        },
+        "methods": {
+          "description": "The methods of the class the router exposes, by their TypeScript names.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Methods",
+          "type": "array"
+        },
+        "replaces": {
+          "description": "The generated child endpoint this class stands in for, by its spec segment. Without it, the class is added beside the generated ones.",
+          "title": "Replaces",
+          "type": "string"
+        },
+        "field": {
+          "description": "Under a composite router, the field of its core the class is built from; `client` by default.",
+          "title": "Field",
+          "type": "string"
+        }
+      },
+      "required": [
+        "file",
+        "class"
+      ],
+      "title": "TypescriptExtraEntry",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "`truewire.toml`, the one project file of a Truewire project.",
+  "properties": {
+    "python": {
+      "$ref": "#/$defs/PythonCodegenConfig",
+      "description": "The generated Python package."
+    },
+    "typescript": {
+      "$ref": "#/$defs/TypescriptCodegenConfig",
+      "description": "The generated TypeScript package."
+    },
+    "rust": {
+      "$ref": "#/$defs/RustCodegenConfig",
+      "description": "The generated Rust crate."
+    },
+    "go": {
+      "$ref": "#/$defs/GoCodegenConfig",
+      "description": "The generated Go packages."
+    },
+    "cores": {
+      "additionalProperties": {
+        "$ref": "#/$defs/CoreConfig"
+      },
+      "description": "Core name -> facts about it that hold in every language; most cores need no entry.",
+      "title": "Cores",
+      "type": "object"
+    },
+    "project": {
+      "$ref": "#/$defs/ProjectTable",
+      "description": "What the project is called; a file without it is named after its directory."
+    },
+    "spec": {
+      "$ref": "#/$defs/SpecTable",
+      "description": "Where the spec lives."
+    },
+    "secrets": {
+      "$ref": "#/$defs/SecretsTable",
+      "description": "The environment variables a caller sets, by name only."
+    },
+    "policy": {
+      "$ref": "#/$defs/PolicyTable",
+      "description": "What the client may do on its own behalf: pacing, retries, refusals."
+    },
+    "score": {
+      "$ref": "#/$defs/ScoreTable",
+      "description": "Facts about the project that no command can measure."
+    }
+  },
+  "title": "truewire.toml",
+  "type": "object"
+}

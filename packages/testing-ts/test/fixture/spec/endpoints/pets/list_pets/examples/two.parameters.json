@@ -1,0 +1,5 @@
+{
+  "description": "The first two pets.",
+  "parameters": {"limit": 2},
+  "payload": {"jsonrpc": "2.0", "id": 0, "method": "pets_list", "params": {"limit": 2}}
+}

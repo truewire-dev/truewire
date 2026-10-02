@@ -559,6 +559,77 @@ def test_spec_test_validates_the_whole_frame_when_reply_payload_is_empty(capsys)
   assert 'Result: OK' in out
 
 
+def write_client_with_one_reply_typed_stream(root: Path, *, reply_contents: object) -> None:
+  """One new-shape `kind: 'stream'` endpoint declaring `reply` (ADR 0014) beside
+  `payload`, with an enveloped ack recorded as its whole raw frame -- dydx's real shape,
+  the recorded `contents` being whatever the test wants validated."""
+  import json
+
+  stream_dir = root / 'spec' / 'endpoints' / 'streams' / 'orders'
+  examples = stream_dir / 'examples'
+  examples.mkdir(parents=True)
+  (stream_dir / 'endpoint.json').write_text(json.dumps({
+    'meta': {},
+    'spec': {
+      'kind': 'stream',
+      'channel': 'v4_orderbook:{id}',
+      'description': 'Order book feed.',
+      'parameters': {
+        'title': 'OrdersParameters', 'type': 'object',
+        'properties': {'id': {'type': 'string', 'description': 'Market.'}},
+        'required': ['id'],
+      },
+      'payload': {
+        'title': 'BookUpdate', 'type': 'object',
+        'properties': {'bids': {'type': 'array', 'items': {'type': 'string'}, 'description': 'Bids.'}},
+      },
+      'reply': {
+        'title': 'BookSnapshot', 'type': 'object',
+        'properties': {'bids': {
+          'type': 'array', 'description': 'Bids.',
+          'items': {
+            'title': 'BookLevel', 'type': 'object',
+            'properties': {'price': {'type': 'string', 'description': 'Price.'}},
+            'required': ['price'],
+          },
+        }},
+        'required': ['bids'],
+      },
+    },
+    'envelope': {
+      'payload': 'contents',
+      'verb': {'path': 'type', 'subscribe': 'subscribe', 'unsubscribe': 'unsubscribe'},
+    },
+  }))
+  (examples / 'btc.parameters.json').write_text(json.dumps({'parameters': {'id': 'BTC-USD'}}))
+  (examples / 'btc.reply.json').write_text(json.dumps({
+    'type': 'subscribed', 'channel': 'v4_orderbook', 'id': 'BTC-USD', 'contents': reply_contents,
+  }))
+  (examples / 'btc.messages.json').write_text(json.dumps([
+    {'type': 'channel_data', 'channel': 'v4_orderbook', 'id': 'BTC-USD', 'contents': {'bids': ['1']}},
+  ]))
+
+
+def test_spec_test_validates_a_recorded_reply_against_the_declared_reply_schema(tmp_path, capsys):
+  """A stream's `.reply.json` is extracted through the envelope and validated against
+  `reply` (ADR 0014): the recorded `{price}` objects pass, and the same frame recorded
+  with `[price, size]` tuples -- the push shape, dydx's real `v4_orderbook` split -- is
+  reported as an error rather than waved through."""
+  write_client_with_one_reply_typed_stream(tmp_path, reply_contents={'bids': [{'price': '1'}]})
+  spec_test(path=str(tmp_path), verbose=False)
+  out = capsys.readouterr().out
+  assert 'Example validation:\n  endpoints  1/1\n  files      2\n  errors     0' in out
+  assert 'Result: OK' in out
+
+  bad = tmp_path / 'bad'
+  write_client_with_one_reply_typed_stream(bad, reply_contents={'bids': [['1', '2']]})
+  with pytest.raises(typer.Exit):
+    spec_test(path=str(bad), verbose=False)
+  captured = capsys.readouterr()
+  assert 'errors     1' in captured.out
+  assert 'btc.reply.json: bids[0]:' in captured.err
+
+
 def write_client_with_one_grpc_endpoint(root: Path) -> None:
   """One `kind: 'grpc'` endpoint with a paired example, alongside one HTTP endpoint.
 
@@ -620,4 +691,73 @@ def test_spec_test_counts_a_grpc_endpoint_without_crashing(tmp_path, capsys):
   # Decision 1), and the HTTP widget has no examples at all here -- zero endpoints
   # reach schema validation, which is the correct outcome, not a crash.
   assert 'Example validation:\n  endpoints  0/2\n  files      0\n  errors     0' in out
+  assert 'Result: OK' in out
+
+
+def write_client_with_one_ack_less_stream(root: Path, *, reply: object = ..., push: bool = False) -> None:
+  """One `req_id`-correlated stream (Kraken's `executions` shape) whose subscribe example
+  records `reply` as `<id>.reply.json`, or no reply file at all when `reply` is omitted."""
+  import json
+
+  stream_dir = root / 'spec' / 'endpoints' / 'streams' / 'executions'
+  examples = stream_dir / 'examples'
+  examples.mkdir(parents=True)
+  endpoint: dict = {
+    'meta': {},
+    'spec': {
+      'kind': 'stream',
+      'channel': 'executions',
+      'description': 'Executions feed.',
+      'parameters': {'title': 'ExecutionsParameters', 'type': 'object', 'properties': {}},
+      'payload': {
+        'title': 'ExecutionsMessage', 'type': 'object',
+        'properties': {'channel': {'type': 'string', 'description': 'Channel.'}},
+      },
+      'reply': {
+        'title': 'ExecutionsAck', 'type': 'object',
+        'properties': {'success': {'type': 'boolean', 'description': 'Accepted.'}},
+        'required': ['success'],
+      },
+    },
+    'envelope': {
+      'payload': '',
+      'correlate': 'req_id',
+      'verb': {'path': 'method', 'subscribe': 'subscribe', 'unsubscribe': 'unsubscribe'},
+    },
+  }
+  if push:
+    endpoint['push'] = {'trigger': 'connect'}
+  (stream_dir / 'endpoint.json').write_text(json.dumps(endpoint))
+  (examples / 'default.parameters.json').write_text(json.dumps({'parameters': {}}))
+  (examples / 'default.messages.json').write_text(json.dumps([{'channel': 'executions'}]))
+  if reply is not ...:
+    (examples / 'default.reply.json').write_text(json.dumps(reply))
+
+
+def test_spec_test_warns_about_a_subscribe_example_with_no_recorded_ack(tmp_path, capsys):
+  """The mock answers a non-`envelope.channel` subscribe only with its recorded reply, so a
+  missing one hangs a core waiting for its ack: `check` names it, as a warning."""
+  write_client_with_one_ack_less_stream(tmp_path)
+  spec_test(path=str(tmp_path), verbose=False)
+  out = capsys.readouterr().out
+  assert 'Missing subscribe acks (1, warning)' in out
+  assert '  streams/executions :: default' in out
+  assert 'Result: OK' in out
+
+
+@pytest.mark.parametrize(
+  'setup',
+  [
+    {'reply': {'success': True}},
+    {'reply': None},
+    {'push': True},
+  ],
+  ids=['recorded ack', 'recorded null: the API sends no ack', 'push stream sends no subscribe'],
+)
+def test_spec_test_does_not_warn_when_the_subscribe_ack_is_accounted_for(tmp_path, capsys, setup):
+  write_client_with_one_ack_less_stream(tmp_path, **setup)
+  spec_test(path=str(tmp_path), verbose=False)
+  out = capsys.readouterr().out
+  assert 'Missing subscribe acks' not in out
+  assert 'errors     0' in out
   assert 'Result: OK' in out

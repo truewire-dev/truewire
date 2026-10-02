@@ -7,9 +7,10 @@
  * error mapping) to your API; the generated code never changes when you do.
  */
 import {
-  ApiError, AuthError, BadRequest, HttpClient, RateLimited, parseJson,
-  type HttpCall, type HttpEndpoint, type Query,
+  ApiError, AuthError, BadRequest, HttpClient, LogicError, RateLimited, parseJson,
+  type HttpCall, type HttpEndpoint, type Query, parseJsonText, stringifyJson
 } from '@truewire/core'
+import { GitHub } from '../main.js'
 import type { DefaultMeta } from '../meta.js'
 
 export interface CoreOptions {
@@ -19,8 +20,10 @@ export interface CoreOptions {
   token?: string
   /** Validate responses by default; a call's own `validate` option overrides it. */
   validate?: boolean
-  /** The `fetch` wrapper to send through; one is made when omitted. */
+  /** The `fetch` wrapper to send through; one paced and retrying as `GitHub.RATE` and `GitHub.RETRY` say when omitted. */
   http?: HttpClient
+  /** HTTP(S) proxy URL every request goes through (Node, with the optional peer `undici`). Not together with `http`. */
+  proxy?: string
 }
 
 /** The shared HTTP transport: base URL, GitHub's headers, the optional token and error mapping. */
@@ -34,7 +37,8 @@ export class Core implements HttpEndpoint<DefaultMeta> {
     this.baseUrl = (options.baseUrl ?? 'https://api.github.com').replace(/\/+$/, '')
     this.token = options.token
     this.validate = options.validate ?? true
-    this.http = options.http ?? new HttpClient()
+    if (options.proxy && options.http) throw new LogicError('Core: pass `http` or `proxy`, not both')
+    this.http = options.http ?? new HttpClient({ proxy: options.proxy, rate: GitHub.RATE, retry: GitHub.RETRY })
   }
 
   /** Headers for one call: GitHub's media type, API version and a User-Agent, plus the token when one was given. */
@@ -74,7 +78,7 @@ export class Core implements HttpEndpoint<DefaultMeta> {
     if (response.status >= 400) throw mapError(method, path, response, text)
     if (call.responseCodec === undefined) return undefined as Res
     if (call.validate ?? this.validate) return parseJson(call.responseCodec, text)
-    return JSON.parse(text) as Res
+    return parseJsonText(text) as Res
   }
 }
 
@@ -83,7 +87,7 @@ function query(params: Record<string, unknown>): Query {
   const out: Record<string, string | number | boolean> = {}
   for (const [name, value] of Object.entries(params)) {
     if (value === null || value === undefined) continue
-    out[name] = typeof value === 'object' ? JSON.stringify(value) : (value as string | number | boolean)
+    out[name] = typeof value === 'object' ? stringifyJson(value) : typeof value === 'bigint' ? String(value) : (value as string | number | boolean)
   }
   return out
 }
@@ -91,7 +95,7 @@ function query(params: Record<string, unknown>): Query {
 /** A non-2xx reply as the `ApiError` subclass its status calls for. */
 function mapError(method: string, path: string, response: Response, text: string): ApiError {
   let body: unknown = text
-  try { body = JSON.parse(text) } catch { /* not JSON: keep the text */ }
+  try { body = parseJsonText(text) } catch { /* not JSON: keep the text */ }
   const detail = typeof body === 'object' && body !== null && 'message' in body ? String((body as { message: unknown }).message) : text.slice(0, 200)
   const message = `${method} ${path}: HTTP ${response.status}: ${detail}`
   const options = { status: response.status, body }

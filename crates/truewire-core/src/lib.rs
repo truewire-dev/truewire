@@ -11,31 +11,41 @@
 //! - [`ws`]: [`Socket`](ws::Socket) over `tokio-tungstenite` with request/reply
 //!   correlation, channel subscriptions and serial acknowledgements.
 //! - [`errors`]: the one [`Error`] enum every function here returns.
+//! - `proto` (feature `proto`): protobuf messages as JSON values, for binary frames.
+//! - `grpc` (feature `grpc`): unary gRPC calls over those messages.
 //!
 //! See `docs/rust.md` in the repository for what a core must implement.
 
 pub mod contract;
 pub mod decimal;
 pub mod errors;
+#[cfg(feature = "grpc")]
+pub mod grpc;
 pub mod http;
 pub mod paging;
+#[cfg(feature = "proto")]
+pub mod proto;
 pub mod times;
 pub mod types;
 pub mod validation;
 pub mod ws;
 
+pub use bigdecimal;
 pub use chrono;
-pub use rust_decimal;
 pub use serde_json;
 
-pub use contract::{CallOptions, CommandCall, CommandEndpoint, HttpCall, HttpEndpoint, StreamEndpoint, SubscribeCall};
+pub use contract::{
+    CallOptions, CommandCall, CommandEndpoint, GrpcCall, GrpcEndpoint, HttpCall, HttpEndpoint, StreamEndpoint,
+    SubscribeCall, Transport,
+};
 pub use errors::{ApiError, ApiKind, Error, Issue, LogicError, NetworkError, Result, ValidationError};
 pub use http::{Exchange, HttpClient, HttpClientOptions, Recording, RequestOptions, Response};
-pub use paging::{Page, PaginatedResponse};
+pub use paging::{Page, PaginatedResponse, Seek, SeekKey, SeekState, SpanUnit};
 pub use times::{DateConverter, EpochConverter, IsoConverter};
 pub use types::{
-    BooleanString, DateIso, DecimalString, IntegerString, TimestampIso, TimestampMicros, TimestampMillis,
-    TimestampNanos, TimestampSeconds,
+    BooleanString, DateIso, DecimalString, IntegerString, TimestampIso, TimestampMicros, TimestampMicrosFloat,
+    TimestampMicrosString, TimestampMillis, TimestampMillisFloat, TimestampMillisString, TimestampNanos,
+    TimestampNanosFloat, TimestampNanosString, TimestampSeconds, TimestampSecondsFloat, TimestampSecondsString,
 };
 pub use validation::{decode, decode_ref, dump, dump_json, parse_json, parse_slice, parse_value};
 pub use ws::Stream;

@@ -1,0 +1,94 @@
+syntax = "proto3";
+package demo.bank.v1;
+
+import "gogoproto/gogo.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+import "demo/base/v1/coin.proto";
+import "demo/base/v1/pagination.proto";
+import "demo/bank/v1/bank.proto"; // not part of the tree
+
+option go_package = "github.com/example/demo/x/bank/types";
+
+// Query is the bank module's query service.
+service Query {
+  // Balance queries one denomination's balance of an address.
+  rpc Balance(QueryBalanceRequest) returns (QueryBalanceResponse) {
+    option (google.api.http).get = "/demo/bank/v1/balances/{address}/by_denom";
+  }
+  // AllBalances queries every balance of an address.
+  rpc AllBalances(QueryAllBalancesRequest) returns (QueryAllBalancesResponse) {
+    option (google.api.http) = {
+      get: "/demo/bank/v1/balances/{address}"
+      additional_bindings { get: "/demo/bank/v1/all/{address}" }
+    };
+  }
+  // Search pages through coins by page number.
+  rpc Search(SearchRequest) returns (SearchResponse);
+  // Params needs a message from a file the tree does not hold: pruned from the stubs.
+  rpc Params(QueryParamsRequest) returns (Params);
+}
+
+message QueryBalanceRequest {
+  option (gogoproto.equal) = false;
+  string address = 1;
+  string denom = 2;
+}
+
+message QueryBalanceResponse {
+  demo.base.v1.Coin balance = 1;
+  google.protobuf.Timestamp as_of = 2;
+}
+
+message QueryAllBalancesRequest {
+  string address = 1;
+  demo.base.v1.PageRequest pagination = 2;
+  optional bool resolve_denom = 3;
+}
+
+message QueryAllBalancesResponse {
+  repeated demo.base.v1.Coin balances = 1 [(gogoproto.nullable) = false, deprecated = true];
+  demo.base.v1.PageResponse pagination = 2;
+}
+
+message SearchRequest {
+  // Order is the order rows come back in.
+  enum Order {
+    ORDER_UNSPECIFIED = 0;
+    ORDER_ASC = 1;
+    ORDER_DESC = 2;
+  }
+  string query = 1;
+  Order order_by = 2;
+  uint64 page = 3;
+  uint64 limit = 4;
+  map<string, string> labels = 5;
+}
+
+message SearchResponse {
+  message Hit {
+    demo.base.v1.Coin coin = 1;
+    uint32 score = 2;
+  }
+  repeated Hit hits = 1;
+  uint64 total = 2;
+  oneof detail {
+    string note = 3;
+    int64 code = 4;
+  }
+}
+
+// Unused is reached by no endpoint, and names types from a file the tree does not hold:
+// the stub build drops `missing`, the `gone` group and `metadata`, and keeps the rest.
+message Unused {
+  oneof detail {
+    string note = 1;
+    MissingDetail missing = 2;
+  }
+  oneof gone {
+    MissingDetail only = 3;
+  }
+  Metadata metadata = 4;
+}
+
+message QueryParamsRequest {}

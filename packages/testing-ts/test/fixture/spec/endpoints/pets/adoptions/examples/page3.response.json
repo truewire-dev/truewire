@@ -1,0 +1,17 @@
+{
+  "status": 200,
+  "payload": {
+    "jsonrpc": "2.0",
+    "id": 3,
+    "result": [
+      {
+        "at": 4,
+        "pet": "Bella"
+      },
+      {
+        "at": 5,
+        "pet": "Coco"
+      }
+    ]
+  }
+}

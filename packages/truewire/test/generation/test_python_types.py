@@ -293,3 +293,81 @@ def test_a_nested_record_is_still_unnested():
   }, inline=False)
   assert 'leg: Leg' in rendered.definitions['Order']
   assert rendered.definitions['Order/leg'].startswith('class Leg(TypedDict):')
+
+
+def test_a_ref_property_keeps_its_own_description():
+  """A `$ref` property's sibling `description` is the field's docstring: the referenced
+  class's own docstring says what the type is, not what the field means here."""
+  result = render({'Product': {
+    'title': 'Product',
+    'type': 'object',
+    'required': ['details'],
+    'properties': {'details': {
+      '$ref': 'FutureProductDetails',
+      'description': 'Futures metadata, populated when this product is a future.',
+    }},
+  }})
+  assert 'Futures metadata, populated when this product is a future.' in result.definitions['Product']
+
+
+def test_number_with_epoch_seconds_format_renders_as_timestamp_seconds_float():
+  """A fractional epoch (`type: number`, kraken's `trades_history` `time`) keeps its format
+  instead of rendering a bare `float`, and renders the `...Float` twin, which dumps the
+  fraction back rather than a whole count."""
+  parser = Parser()
+  result = parser(Schema(type='number', format='epoch-seconds'))
+  assert result == {'type': 'scalar', 'base': 'number', 'format': 'epoch-seconds'}
+  assert rendered(result) == ('TimestampSecondsFloat', {'truewire_core.types': {'TimestampSecondsFloat'}})
+
+
+@pytest.mark.parametrize('fmt, alias', [
+  ('epoch-millis', 'TimestampMillisFloat'), ('epoch-micros', 'TimestampMicrosFloat'),
+  ('epoch-nanos', 'TimestampNanosFloat'),
+])
+def test_every_number_epoch_renders_its_float_twin(fmt, alias):
+  assert rendered(parse({'type': 'number', 'format': fmt}))[0] == alias
+  assert rendered(parse({'type': 'integer', 'format': fmt}))[0] == alias.removesuffix('Float')
+
+
+def test_a_nullable_number_epoch_renders_the_float_twin():
+  assert rendered(parse({'type': ['number', 'null'], 'format': 'epoch-seconds'}))[0] == (
+    'TimestampSecondsFloat | None'
+  )
+
+
+def test_record_fields_do_not_shadow_builtin_annotations():
+  """A field named after a builtin (`list`, `int`) binds that name in the class body, so
+  later annotations qualify it through `builtins`; keys and literal values stay bare."""
+  from pydantic import TypeAdapter
+  from truewire.generation.python.code.imports import Imports
+
+  out = generate({'Request': {
+    'title': 'Request', 'type': 'object', 'required': ['list', 'int', 'label'],
+    'properties': {
+      'list': {'type': 'array', 'items': {'type': 'integer'}},
+      'int': {'type': 'integer'},
+      'hedge': {'type': 'array', 'items': {'type': 'integer'}},
+      'label': {'type': 'string', 'enum': ['list', 'int']},
+    },
+  }})
+  definition = out.definitions['Request']
+  assert 'list: list[int]' in definition
+  assert 'hedge: NotRequired[builtins.list[builtins.int]]' in definition
+  assert "Literal['list', 'int']" in definition
+  code = Imports(out.imports).code()
+  assert code.startswith('import builtins\n')
+  namespace: dict = {}
+  exec(code + '\n' + definition, namespace)
+  adapter = TypeAdapter(namespace['Request'])
+  payload = {'list': [1], 'int': 2, 'label': 'list'}
+  assert adapter.validate_python(payload) == payload
+  assert adapter.validate_python({**payload, 'hedge': [3]})['hedge'] == [3]
+
+
+def test_record_without_builtin_collision_needs_no_builtins_import():
+  out = generate({'Request': {
+    'title': 'Request', 'type': 'object', 'required': ['items'],
+    'properties': {'items': {'type': 'array', 'items': {'type': 'string'}}},
+  }})
+  assert 'items: list[str]' in out.definitions['Request']
+  assert 'builtins' not in out.imports

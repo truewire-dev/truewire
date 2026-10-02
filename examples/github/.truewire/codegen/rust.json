@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "files": [
+    "client.rs",
+    "dispatch.rs",
+    "issues/list.rs",
+    "issues/mod.rs",
+    "lib.rs",
+    "meta.rs",
+    "repos/get.rs",
+    "repos/get_commit.rs",
+    "repos/list_commits.rs",
+    "repos/list_releases.rs",
+    "repos/list_tags.rs",
+    "repos/mod.rs",
+    "types/mod.rs"
+  ]
+}

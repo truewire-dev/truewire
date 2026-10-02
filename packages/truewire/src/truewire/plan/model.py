@@ -59,8 +59,9 @@ class RouterChildPlan(PlanModel):
   """The attribute the child is reached through (`repos` in `client.repos`)."""
   kind: Literal['endpoint', 'router']
   class_: str = Field(alias='class')
-  """The class a backend names the child after: PascalCase of `name`. A backend may
-  still rename an endpoint class that collides with a type in the same module."""
+  """The class a backend names the child after: PascalCase of `name`, or for a router the
+  `class` its `router.json` declares. A backend may still rename an endpoint class that
+  collides with a type in the same module."""
 
 
 class RouterPlan(PlanModel):
@@ -101,8 +102,9 @@ class RequestFieldPlan(PlanModel):
 
 
 class RequestPlan(PlanModel):
-  """The request side of an endpoint: a flat object, one union, one array, or nothing."""
-  shape: Literal['none', 'fields', 'union', 'array']
+  """The request side of an endpoint: a flat object, one union, one array, nothing, or (for
+  a gRPC endpoint) the proto message `grpc.request` names."""
+  shape: Literal['none', 'fields', 'union', 'array', 'message']
   type: str | None = None
   """The `types` entry holding the whole request (`Request`/`Parameters`), when one is rendered."""
   fields: list[RequestFieldPlan] = []
@@ -144,44 +146,135 @@ class StreamPlan(PlanModel):
   """`envelope.verb`: how subscribe/unsubscribe frames state their intent."""
   reply_payload: str | None = None
   """`envelope.reply_payload`, when the ack's value sits at a different path."""
+  reply: str | None = None
+  """The subscribe acknowledgement's type (`spec.reply`, ADR 0014): a `types` entry, or a
+  shared scope's. `null` when the stream declares none, and the reply stays untyped."""
 
 
 class PaginationPlan(PlanModel):
   """Everything a backend decides before it renders a page walker."""
-  strategy: Literal['page', 'token', 'seek', 'offset', 'window']
+  strategy: Literal['page', 'token', 'seek', 'offset']
   driver: str
   """Wire name of the request parameter the walk advances (page index, cursor, offset,
-  or the moving window bound)."""
+  or a `seek` walk's anchored bound)."""
   driver_required: bool
-  """Whether a `token`/`seek` cursor is required on the single call, so the first page
-  is seeded from the caller's own value rather than a zero value."""
+  """Whether a `token` cursor is required on the single call, so the first page is
+  seeded from the caller's own value rather than a zero value."""
   size: str | None = None
   """Wire name of the page-size parameter, when declared and present on the request."""
   size_default: int | None = None
   """The API's documented default page size, from the size property's own `default`."""
+  size_maximum: int | None = None
+  """The largest page size the API serves, from the size property's own `maximum`: a caller
+  asking for more gets a page full at this many rows, so a walk measures a short page (or a
+  `seek` walk's full page) against it."""
   start: int | None = None
   """`index.start` for a `page` walk."""
   done: dict[str, Any]
-  """The declared terminator, as written."""
+  """The declared terminator, as written; `{}` for a `seek` walk, which has none (ADR 0013)."""
   rows: str | None = None
-  """`done.rows`: the response path holding the page's rows, when declared."""
+  """`done.rows` (or a `seek` walk's own `rows`): the response path holding the page's
+  rows, when declared."""
   cursor_from: str | None = None
-  """`cursor.from`: where the next cursor is read (a response path, or a last-row field)."""
-  overlap: dict[str, Any] | None = None
-  window: dict[str, Any] | None = None
-  """`bound`/`order`/`step` for a `window` walk."""
+  """`cursor.from` of a `token` walk: the response path the next cursor is read from."""
+  seek: dict[str, Any] | None = None
+  """A `seek` walk's declaration beyond `rows`/`size` (ADR 0013): `cursor` (`field`,
+  `unique`), `bound` (`start`/`end`), `anchor`, `cap`, `span`, `exclusive` (`parameters`,
+  `first`, `far`: the parameters sent on the first request only, `null` when none), plus
+  the derived `moving` and `far` bound names and `descending`."""
   row_type: Type | None = None
-  """One row's type, resolved through `done.rows` (or the payload itself when it is the
+  """One row's type, resolved through `rows` (or the payload itself when it is the
   collection); `null` when the tree cannot name it."""
   state_type: Type | None = None
   """The walk state's type: the driver parameter's own type without its `null`."""
+  cursor_type: Type | None = None
+  """A `seek` walk's cursor field on one row, its own type without `null`: what a backend
+  parses a raw row value through before comparing it with the bound, since the two may
+  declare different timestamp formats (a row's `epoch-seconds` under an `epoch-millis`
+  bound). `null` for any other strategy, or when the tree cannot name the field."""
   seedable: bool
   """Whether a `PaginatedResponse`-shaped walker can seed its first state: any strategy
-  but `token`/`seek`, a cursor with a zero value, or a required cursor."""
+  but `token`, a cursor with a zero value, or a required cursor. A `seek` walk always
+  can: its first state is the caller's own bound, or none."""
   walker: Literal['paginated', 'generator', 'none']
   """`paginated`: rows and a seedable state, so the walker exposes pages and a state to
   resume from. `generator`: a plain async iterator of responses. `none`: the declaration
   cannot be walked (an `offset` walk with nothing to step by)."""
+
+
+class ProtoTypePlan(PlanModel):
+  """A proto type a gRPC endpoint names, resolved against the project's `spec/proto/` tree."""
+  kind: Literal['scalar', 'message', 'enum']
+  name: str
+  """A scalar's proto name (`bytes`, `uint64`), or a message's or enum's fully-qualified
+  name without the leading dot (`cosmos.base.query.v1beta1.PageRequest`)."""
+  file: str | None = None
+  """The `.proto` declaring it, relative to `spec/proto/`; `null` for a scalar. A well-known
+  type (`google.protobuf.Timestamp`) names the file every toolchain ships."""
+  package: str | None = None
+  """The proto package declaring it, so a backend spells a nested type from its path inside
+  the package (`SearchResponse.Hit`); `null` for a scalar or a name the tree lacks."""
+
+
+class ProtoFieldPlan(PlanModel):
+  """One field of a proto message."""
+  name: str
+  """The field's proto name (`next_key`), which the proto JSON mapping also accepts."""
+  json_name: str
+  """Its JSON name (`nextKey`)."""
+  number: int
+  type: ProtoTypePlan
+  """The element type for a `repeated` field, the value type for a map."""
+  repeated: bool = False
+  map_key: str | None = None
+  """The key scalar of a `map<K, V>` field."""
+  presence: bool = False
+  """Whether the field tells absent from its zero value: a message, a proto3 `optional`,
+  or a scalar the endpoint lists in `optional_scalars`."""
+  optional: bool = False
+  """Whether the field is declared `optional` (explicit presence in the stubs: a pointer in
+  Go, an optional property in TypeScript)."""
+  oneof: str | None = None
+
+
+class GrpcPagingPlan(PlanModel):
+  """The dotted paths a gRPC endpoint's `pagination` declares, each resolved hop by hop
+  through the request or response message: a backend reads a hop's type to build nested
+  messages and to spell a cursor's state (`bytes`, `uint64`)."""
+  driver: list[ProtoFieldPlan]
+  """The request path the walk advances (`pagination.key`, or `page`)."""
+  size: list[ProtoFieldPlan] | None = None
+  """The request path of the page size (`pagination.limit`)."""
+  cursor: list[ProtoFieldPlan] | None = None
+  """The response path the next cursor is read from, for a `token` walk (`pagination.next_key`)."""
+  rows: list[ProtoFieldPlan] | None = None
+  """The response path of the page's rows (a repeated field)."""
+  total: list[ProtoFieldPlan] | None = None
+  """The response path of a `total` terminator."""
+
+
+class GrpcPlan(PlanModel):
+  """What a gRPC endpoint adds (ADR 0017): the service method and its proto types.
+
+  `wire.path` is the call's HTTP/2 path (`/<service>/<rpc>`). The request is the whole
+  `request` message (`RequestPlan.shape` is `message`) and the method returns the whole
+  `response` message; both are rendered by the language's protobuf stubs, built from the
+  same `spec/proto/` tree (`truewire protos`), never by the plan's type tree.
+  """
+  service: str
+  """Fully-qualified service (`cosmos.bank.v1beta1.Query`)."""
+  service_file: str
+  """The `.proto` declaring the service, relative to `spec/proto/`."""
+  rpc: str
+  """The method's proto name (`AllBalances`)."""
+  streaming: Literal['unary', 'server', 'client', 'bidi'] = 'unary'
+  request: ProtoTypePlan
+  response: ProtoTypePlan
+  request_fields: list[ProtoFieldPlan] = []
+  optional_scalars: list[str] = []
+  paging: GrpcPagingPlan | None = None
+  """`pagination`'s paths, resolved; `null` without a pagination or when a path does not
+  resolve (then `pagination.walker` is `none`)."""
 
 
 class DocsPlan(PlanModel):
@@ -194,18 +287,28 @@ class EndpointPlan(PlanModel):
   """One leaf of the function tree."""
   path: list[str]
   """Function path, last segment the method name."""
-  kind: Literal['rpc', 'stream']
+  kind: Literal['rpc', 'stream', 'grpc']
   transports: list[Literal['http', 'ws']]
+  """Empty for a gRPC endpoint, whose transport is HTTP/2 by definition."""
   wire: WirePlan
   core: str
   """Symbolic core name, from the nearest `router.json`."""
   auth: Literal['public', 'required'] | None = None
   """Reserved (architecture review, item 4): no spec field declares it yet."""
+  surface: Literal['handwritten'] | None = None
+  """`handwritten` when the spec declares `surface: {kind: handwritten}`: a backend that
+  honours it renders no method and the project supplies one (`[python.extras]`,
+  `[typescript.extras]`). An `absent` endpoint has no plan at all."""
   meta: dict[str, Any] = {}
   deprecated: bool = False
+  refused: bool = False
+  """Named in `[policy].refuse` (W15): every generated method fails with the package's
+  `RefusedByPolicy` before any request is made."""
   request: RequestPlan
   response: ResponsePlan
   stream: StreamPlan | None = None
+  grpc: GrpcPlan | None = None
+  """The service method and proto types, for `kind: grpc` (ADR 0017)."""
   pagination: PaginationPlan | None = None
   types: TypeSet = {}
   """The endpoint module's own types: `Request`/`Parameters`, the returned value, and

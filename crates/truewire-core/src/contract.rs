@@ -32,6 +32,9 @@
 //! - [`CommandEndpoint::request`]: one WebSocket command/reply call.
 //! - [`StreamEndpoint::subscribe`]: one channel subscription, returning a
 //!   [`Stream`] of pushed payloads the caller iterates and unsubscribes.
+//! - [`GrpcEndpoint::invoke`]: one unary gRPC call, the request and the reply encoded
+//!   protobuf messages (the one contract that does not speak `Value`: a generated gRPC
+//!   method takes and returns the `prost` messages `truewire protos rust` builds).
 //!
 //! There is no `ClientRoot` or `Composite` trait: a Rust root is a struct the generator
 //! writes with one field per transport the `truewire.toml` core declares, and the
@@ -46,11 +49,23 @@ use serde_json::Value;
 use crate::errors::Result;
 use crate::ws::Stream;
 
+/// Which transport an `rpc` endpoint declaring both `http` and `ws` is called over.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Transport {
+    /// One HTTP call ([`HttpEndpoint::request`]).
+    Http,
+    /// One WebSocket command ([`CommandEndpoint::request`]).
+    Ws,
+}
+
 /// Options every generated method takes as its last parameter.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct CallOptions {
     /// Time before this call is abandoned with a `NetworkError`; the core's default when `None`.
     pub timeout: Option<Duration>,
+    /// The transport a dual-transport `rpc` endpoint is called over; the first one its spec
+    /// lists when `None`. An endpoint with one transport ignores it.
+    pub transport: Option<Transport>,
 }
 
 impl CallOptions {
@@ -60,6 +75,11 @@ impl CallOptions {
 
     pub fn timeout(mut self, timeout: Duration) -> Self {
         self.timeout = Some(timeout);
+        self
+    }
+
+    pub fn transport(mut self, transport: Transport) -> Self {
+        self.transport = Some(transport);
         self
     }
 }
@@ -97,6 +117,30 @@ pub struct SubscribeCall<'a, Meta> {
     pub parameters: Option<Value>,
     pub meta: &'a Meta,
     pub options: CallOptions,
+}
+
+/// One unary gRPC call (ADR 0017): `method` is the HTTP/2 path
+/// (`/cosmos.bank.v1beta1.Query/Balance`), `request` the request message already encoded
+/// (a generated method encodes its `prost` message; nothing here depends on `prost`).
+#[derive(Debug, Clone)]
+pub struct GrpcCall<'a, Meta> {
+    pub method: &'a str,
+    pub request: Vec<u8>,
+    /// The endpoint's declared `meta`, in the shape its core's schema states.
+    pub meta: &'a Meta,
+    pub options: CallOptions,
+}
+
+/// Base of a generated `grpc` endpoint. The contract carries encoded messages, so one
+/// object-safe trait serves every message type and needs no feature; a core implements it
+/// with `truewire_core::grpc::GrpcClient` (feature `grpc`, which implements it for every
+/// `Meta`) or anything else that can answer. The generated method decodes the reply into
+/// its response message, so a core never sees a message type.
+#[async_trait]
+pub trait GrpcEndpoint<Meta = ()>: Send + Sync {
+    /// Send one call and return the encoded response message, its status mapped onto the
+    /// error taxonomy.
+    async fn invoke(&self, call: GrpcCall<'_, Meta>) -> Result<Vec<u8>>;
 }
 
 /// Base of a generated `rpc` endpoint reached over HTTP.
@@ -149,6 +193,17 @@ where
 {
     async fn request(&self, call: CommandCall<'_, Meta>) -> Result<Value> {
         (**self).request(call).await
+    }
+}
+
+#[async_trait]
+impl<Meta, T> GrpcEndpoint<Meta> for Arc<T>
+where
+    Meta: Send + Sync,
+    T: GrpcEndpoint<Meta> + ?Sized,
+{
+    async fn invoke(&self, call: GrpcCall<'_, Meta>) -> Result<Vec<u8>> {
+        (**self).invoke(call).await
     }
 }
 

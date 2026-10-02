@@ -74,6 +74,7 @@ export interface CommitDetail {
   node_id?: string
   /** Web page of the commit. */
   html_url?: string
+  /** The underlying git commit. */
   commit: GitCommit
   /** GitHub account matched to the author, when known. */
   author?: SimpleUser | null

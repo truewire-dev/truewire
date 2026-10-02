@@ -18,7 +18,10 @@ async def test_commits_walk_ends_on_the_short_fourth_page(client):
     pages = [
       page
       async for page in client.repos.list_commits_paged(
-        owner='truewire-dev', repo='truewire', sha=RELEASE_0_1_0, per_page=3,
+        owner='truewire-dev',
+        repo='truewire',
+        sha=RELEASE_0_1_0,
+        per_page=3,
       )
     ]
   assert [len(page) for page in pages] == [3, 3, 3, 2]
@@ -33,7 +36,10 @@ async def test_commits_walk_ends_on_the_short_fourth_page(client):
 async def test_commits_walk_flattens_when_awaited(client):
   async with client:
     commits = await client.repos.list_commits_paged(
-      owner='truewire-dev', repo='truewire', sha=RELEASE_0_1_0, per_page=3,
+      owner='truewire-dev',
+      repo='truewire',
+      sha=RELEASE_0_1_0,
+      per_page=3,
     )
   assert len(commits) == 11
   assert commits[0]['commit']['message'].startswith('Release truewire 0.1.0')
@@ -45,7 +51,9 @@ async def test_issues_walk_ends_on_an_empty_page(client):
   walk. The count moves with the repository (every release adds a pull request), so the
   assertions are about the walk, not the number."""
   async with client:
-    issues = await client.issues.list_paged(owner='truewire-dev', repo='truewire', state='all', per_page=1)
+    issues = await client.issues.list_paged(
+      owner='truewire-dev', repo='truewire', state='all', per_page=1
+    )
   numbers = [issue['number'] for issue in issues]
   assert numbers and numbers == sorted(numbers, reverse=True)
   assert all(issue['pull_request']['merged_at'] is not None for issue in issues)

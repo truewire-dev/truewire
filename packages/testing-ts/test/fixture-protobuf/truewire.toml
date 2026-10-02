@@ -1,0 +1,5 @@
+[project]
+name = "ticks"
+
+[cores.market]
+meta = { type = "object", properties = { proto_field = { type = "string" } }, required = ["proto_field"], additionalProperties = false }

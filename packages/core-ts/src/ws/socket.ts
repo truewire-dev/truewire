@@ -1,9 +1,10 @@
 /**
  * Base WebSocket client over the global `WebSocket` (Node 22+, browsers), or any
  * compatible object handed in through `createWebSocket` (the `ws` package on Node 20, a
- * test double).
+ * test double), or undici's through a `proxy`.
  */
-import { NetworkError } from '../errors.js'
+import { LogicError, NetworkError } from '../errors.js'
+import { checkProxy, redactedProxy, proxiedWebSocket } from '../proxy.js'
 import { Deferred } from './async.js'
 
 /** What a socket receives: text frames as strings, binary frames as `ArrayBuffer`s. */
@@ -43,6 +44,14 @@ export interface SocketOptions {
   pingInterval?: number
   /** Factory for the raw connection; defaults to the global `WebSocket`. */
   createWebSocket?: (url: string) => WebSocketLike
+  /**
+   * HTTP(S) proxy URL every connection goes through as a `CONNECT` tunnel, `ws://` and
+   * `wss://` alike (`http://host:3128`, credentials in the userinfo). Node only, and it
+   * needs the optional peer dependency `undici`; in a browser it throws, since the browser
+   * connects through its own proxy settings. Omitted or `''`, connections use the global
+   * `WebSocket` as before. Not together with `createWebSocket`. Packages clause P18.
+   */
+  proxy?: string
 }
 
 type WebSocketCtor = new (url: string) => WebSocketLike
@@ -66,6 +75,9 @@ export abstract class Socket implements AsyncDisposable {
   readonly timeout: number
   readonly pingInterval: number
   protected readonly createWebSocket: (url: string) => WebSocketLike
+  /** The proxy every connection goes through, with credentials removed, when one was given. */
+  readonly proxy: string | undefined
+  readonly #proxied: (() => Promise<(url: string) => WebSocketLike>) | undefined
   #opening: Promise<Context> | null = null
   #current: Context | null = null
   #closing: Promise<void> | null = null
@@ -75,6 +87,13 @@ export abstract class Socket implements AsyncDisposable {
     this.timeout = options.timeout ?? 10_000
     this.pingInterval = options.pingInterval ?? 86_400_000
     this.createWebSocket = options.createWebSocket ?? (url => new ((globalThis as { WebSocket: WebSocketCtor }).WebSocket)(url))
+    const proxy = options.proxy || undefined
+    if (proxy !== undefined) {
+      checkProxy('Socket', proxy)
+      if (options.createWebSocket) throw new LogicError('Socket: pass `createWebSocket` or `proxy`, not both')
+      this.proxy = redactedProxy(proxy)
+      this.#proxied = proxiedWebSocket(proxy)
+    }
   }
 
   /** Handle one incoming message. Throwing fails the connection; see `wait`. */
@@ -127,11 +146,20 @@ export abstract class Socket implements AsyncDisposable {
     return this.attach(ws)
   }
 
-  /** Dial `url`; a failure or a `timeout` is a `NetworkError`. */
+  /**
+   * Dial `url`; a failure or a `timeout` is a `NetworkError`. With a `proxy` whose undici
+   * cannot be loaded, the `LogicError` saying so.
+   */
   protected connect(): Promise<WebSocketLike> {
+    // Not `async`: without a proxy the connection is created in this very call, as it
+    // always was.
+    return this.#proxied ? this.#proxied().then(create => this.#dial(create)) : this.#dial(this.createWebSocket)
+  }
+
+  #dial(create: (url: string) => WebSocketLike): Promise<WebSocketLike> {
     return new Promise<WebSocketLike>((resolve, reject) => {
       let ws: WebSocketLike
-      try { ws = this.createWebSocket(this.url) } catch (e) {
+      try { ws = create(this.url) } catch (e) {
         return reject(new NetworkError(`Failed to connect to ${this.url}`, { cause: e }))
       }
       const timer = setTimeout(() => { fail(new Error(`timed out after ${this.timeout} ms`)); ws.close() }, this.timeout)

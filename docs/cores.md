@@ -1,6 +1,6 @@
 # Core templates
 
-`truewire init <name> --template <template>` writes the hand-written half of a project: `src/<pkg>/core/` and the `[cores.*]` and `[python.cores.*]` tables of `truewire.toml` that wire it to the code `truewire generate python` emits. A template is a working core for one common API shape, not a stub: a fresh project built on any of them passes `truewire check` and `truewire generate python`, and pyright accepts the core as written. Adapt the core to the API; the generated code never changes when you do, because the generator reads nothing from it (ADR 0011) and calls it only through the protocols in `truewire_core.contract`.
+`truewire init <name> --template <template>` writes the hand-written half of a project: `src/<pkg>/core/` and the `[cores.*]` and `[python.cores.*]` tables of `truewire.toml` that wire it to the code `truewire generate python` emits. A template is a working core for one common API shape, not a stub: a fresh project built on any of them, once it has one endpoint spec, passes `truewire check` and `truewire generate python` (both refuse an empty `spec/endpoints`), and pyright accepts the core as written. Adapt the core to the API; the generated code never changes when you do, because the generator reads nothing from it (ADR 0011) and calls it only through the protocols in `truewire_core.contract`.
 
 | Template | Transport | Auth | Envelope | Errors |
 | --- | --- | --- | --- | --- |
@@ -9,11 +9,15 @@
 | `jsonrpc` | HTTP, one URL, `POST` only | `Authorization: Bearer <api_key>` on non-public calls | `{jsonrpc, id, method, params}` out, `result` back, `error` raised | by JSON-RPC code, then by status |
 | `ws` | HTTP as `bearer`, plus one WebSocket connection | as `bearer` | none | as `bearer`; `ApiError` on a subscribe error frame |
 
-Every template shares one shape, described in the [core skill](../.agents/skills/core/SKILL.md): `Transport` (how a request reaches the wire), `ClientBase` (the root class the generated `main.py` subclasses, with `new(...)` and the context manager) and `Endpoint` (the base every generated endpoint class subclasses, whose `request()` sends and validates). `meta.py` is generated from `[cores.default].meta`, which every template declares as `{ public: boolean }`: an endpoint whose `meta` is `{"public": true}` is sent without credentials. `truewire import openapi` sets it for every operation with no `security` requirement.
+Every template shares one shape, described in the [core skill](../packages/truewire/src/truewire/resources/agents/skills/core/SKILL.md): `Transport` (how a request reaches the wire), `ClientBase` (the root class the generated `main.py` subclasses, with `new(...)` and the context manager) and `Endpoint` (the base every generated endpoint class subclasses, whose `request()` sends and validates). `meta.py` is generated from `[cores.default].meta`, which every template declares as `{ public: boolean }`: an endpoint whose `meta` is `{"public": true}` is sent without credentials. `truewire import openapi` sets it for every operation with no `security` requirement.
+
+Every template's `new(...)` takes `proxy=`, a proxy URL for HTTP and, in `ws`, the socket too; left `None`, the runtime reads `HTTPS_PROXY` (packages clause P18). Keep the keyword when you rewrite `new(...)`: a caller in a sandbox cannot always set the environment.
+
+`ClientBase` also declares `RATE = None` and `RETRY = False`, and `new(...)` builds its `HttpClient(proxy=proxy, rate=cls.RATE, retry=cls.RETRY)`. The generated root overrides both when `[policy]` sets `rate` or `retry` (packages clause P19), so the client paces and retries as the project declares. A caller who wants another pace subclasses the root and sets `RATE`. A core written before this ignores `[policy]` until its `new(...)` passes them on. TypeScript and Rust cores do the same with the root's `static readonly RATE`/`RETRY` (`new HttpClient({ rate: Root.RATE, retry: Root.RETRY })`) and associated consts (`HttpClient::default().with_rate(Root::RATE).with_retry(Root::RETRY)`); `examples/github` and `examples/kraken` show both, and an `http` option passed in replaces them.
 
 ## `bearer`
 
-The plain HTTP core. `Transport.headers()` returns `{}` for a public call and a bearer header otherwise; `Transport.send()` fills `{name}` placeholders in the path from the request, sends the rest as the query string (or a JSON body for `POST`/`PUT`/`PATCH`), and raises `ApiError` on a non-2xx status. `Endpoint.request()` validates the raw body against the generated response type.
+The plain HTTP core. `Transport.headers()` returns `{}` for a public call and a bearer header otherwise; `Transport.send()` fills `{name}` placeholders in the path from the request, sends the rest as the query string (or a JSON body with `Content-Type: application/json` for `POST`/`PUT`/`PATCH`), and raises `ApiError` on a non-2xx status. `Endpoint.request()` dumps the request through the generated request type in JSON mode, so a datetime is the same ISO string on the query as in a body, and validates the raw body against the generated response type.
 
 What to change:
 
@@ -34,7 +38,7 @@ The `bearer` core with request signing. Three pure functions carry the recipe:
 What to change:
 
 - The order, separators and casing in `signature_message`; the digest or the encoding (base64, say) in `sign`; the header names at the top of the module.
-- Where the injected values travel. The template puts them in headers, which a recorded example never holds, so nothing is declared in the spec. An API that wants the timestamp, a nonce or the signature as a query or body field gets it added in `send()`, and every endpoint that carries it lists the field under `redacted` in its `endpoint.json`: a recorded example then never pins a value that changes on every call, and `truewire mock` ignores the field when matching a request. `truewire capture` records the parameters the call was made with, never the wire body, so an injected field is absent from the example either way; `redacted` is what tells the mock to ignore it on the wire.
+- Where the injected values travel. The template puts them in headers, which a recorded example never holds, so nothing is declared in the spec. An API that wants the timestamp, a nonce or the signature as a query or body field gets it added in the per-attempt auth hook, and every endpoint that carries it lists the field under `redacted` in its `endpoint.json`: a recorded example then never pins a value that changes on every call, and `truewire mock` ignores the field when matching a request. `truewire capture` records the parameters the call was made with, never the wire body, so an injected field is absent from the example either way; `redacted` is what tells the mock to ignore it on the wire. A field nested out of a flat name's reach, like a login frame's `args[0].sign`, is named by path under `match.ignore` instead (ADR 0018).
 
 ## `jsonrpc`
 
@@ -50,7 +54,7 @@ The core:
 What to change:
 
 - `AUTH_CODES` and `RATE_LIMIT_CODES`: put the API's own codes there. The defaults are placeholders, one uncommon code each.
-- Positional parameters: return a list from `build_request`, in the order the endpoint's `request` schema declares its properties. `truewire mock` compares a positional `params` element by element.
+- Positional parameters: return a list from `build_request`, in the order the endpoint's `request` schema declares its properties. Declare that packing on the endpoint as `envelope.positional`, one entry per wire slot: a property name, `{"spread": "transactions"}` (an array property's elements, one slot each) or `{"fold": ["pageKey", "maxCount"]}` (one object of those present). Trailing absent slots are dropped. `truewire mock` builds the expected `params` from the recorded request that way and compares element by element; without `positional` it expects `[request]`.
 - An error shape that is not `{code, message, data}`: change `raise_error`.
 - Batch requests, a method that lives on its own URL, an API-key query parameter: `Transport.call` and `Transport.headers`.
 
@@ -88,6 +92,23 @@ What to change:
 
 ## Proving a core
 
-The core skill's gate applies to every template: `truewire generate python` (with a `pyrightconfig.json` in the project so it type-checks), then one `truewire capture` of the simplest public endpoint whose recording passes `truewire check`. The toolchain's own tests run every template through `init`, `check` and `generate` with pyright, call `bearer`, `hmac` and `jsonrpc` cores through `truewire mock`, and drive the `ws` core through a subscribe, push and unsubscribe round trip (`packages/truewire/test/test_init_templates.py`).
+The core skill's gate applies to every template: `truewire generate python` (with a `pyrightconfig.json` in the project so it type-checks), then one `truewire capture` of the simplest public endpoint whose recording passes `truewire check`. The toolchain's own tests run every template through `init`, `check` and `generate` with pyright, call `bearer`, `hmac` and `jsonrpc` cores through `truewire mock`, check that `bearer`, `hmac` and `ws` send a datetime query parameter as ISO and a JSON body with its `Content-Type`, and drive the `ws` core through a subscribe, push and unsubscribe round trip (`packages/truewire/test/test_init_templates.py`).
 
 A core that sends more than one request per call -- minting a token, refreshing an expired one, fetching a ticket, retrying after a 401 -- needs nothing special to capture: `truewire capture` records the exchange whose method and path (or JSON-RPC method name) the endpoint declares, names the ones it skipped, and refuses rather than record anything when none of them matches. A token endpoint's own response therefore never lands in another endpoint's example (authoring rule 6).
+
+Signing must run after pacing and on every retry. The HMAC template passes an
+`httpx.Auth` hook to `HttpClient.request(auth=...)`; HTTPX invokes it inside each attempt.
+For a body nonce, the auth hook builds a new `httpx.Request` with the new body and matching
+content length (as Kraken does). TypeScript offers `RequestOptions.prepare(request)`,
+which returns the signed request; Rust offers `request_prepared(method, url, prepare)`, whose callback builds fresh
+`RequestOptions` per attempt and returns them as a `Result`. The existing Rust
+`RequestOptions` fields are unchanged. Do not pre-sign before calling the runtime:
+queued requests and retries would otherwise reuse stale timestamps and nonces.
+
+Connection failures during a followed redirect cannot prove the origin did nothing.
+Python therefore suppresses connection retries when redirects are enabled (including
+an underlying HTTPX client's default). Fetch and reqwest follow redirects by default,
+so TypeScript and Rust only retry connection failures for safe HTTP methods (GET,
+HEAD, OPTIONS, TRACE); TypeScript also allows them when a prepared request disables
+redirects. A POST's direct 429/503 response is still retryable. Responses identified as
+coming through a redirect are returned without restarting the original request.

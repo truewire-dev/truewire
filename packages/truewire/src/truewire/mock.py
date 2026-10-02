@@ -29,6 +29,8 @@ from .spec import (
   Push,
   RpcEnvelopeSpec,
   StreamEnvelopeSpec,
+  positional_params,
+  path_segments,
   read_dotted_path,
   rpc_selector,
   write_dotted_path,
@@ -104,9 +106,14 @@ class EndpointExample:
   response: MockResponse
   envelope: EnvelopeSpec | None = None
   rpc_method: str | None = None
+  ignored_paths: tuple[str, ...] = ()
+  """Located request paths the endpoint declares under `match.ignore` (ADR 0018), dropped
+  from both the incoming JSON body and the recorded one before comparing."""
+  query_arrays: str = 'repeat'
+  """Wire form for query-string lists; JSON body arrays retain their structure."""
 
   def request_summary(self) -> Any:
-    return self.raw_request
+    return _redact_summary(self.raw_request, self.redacted_names)
 
 
 @dataclass(frozen=True)
@@ -128,6 +135,9 @@ class WsEndpointExample:
   rpc_method: str | None = None
   """The declared JSON-RPC method name, when this is a `kind: 'rpc'` example. `None` for
   a subscription or a non-JSON-RPC command."""
+  synthesized: bool = False
+  """Synthesized from an HTTP recording (`spec.WsExample.synthesized`): `reply` is the
+  recorded body and is sent even when it is `null`. A native `null` reply sends nothing."""
   envelope: EnvelopeSpec | None = None
   """This endpoint's own declared envelope, read straight off its `Endpoint`. `None` for
   the large majority of WS examples -- per `docs/spec/spec.md`'s WS Commands section, a
@@ -139,6 +149,9 @@ class WsEndpointExample:
   (`spec.WsExample.unsubscribe_reply`), when this example recorded one. `None` for every
   example that hasn't -- a pure additive tier ahead of the declared-channel reply-reuse and
   synthesized fallbacks in `_handle`'s unsubscribe branch."""
+  ignored_paths: tuple[str, ...] = ()
+  """Located frame paths the endpoint declares under `match.ignore` (ADR 0018), dropped from
+  both the incoming frame and the recorded one before comparing -- see `_ignore_paths`."""
   push: Push | None = None
   """This endpoint's own declared `push` trigger (`docs/spec/authoring.md` rule 11), read
   straight off its `Endpoint`. `None` for the large majority of WS examples, matched by an
@@ -219,11 +232,97 @@ def _normalize_json(value: Any) -> Any:
   return value
 
 
+def _pooled_json_matches(actual: Any, expected: Any) -> bool:
+  """Compare pooled JSON arrays recursively, without Python's bool/number aliasing."""
+  if isinstance(actual, bool) or isinstance(expected, bool):
+    return type(actual) is type(expected) and actual == expected
+  if isinstance(actual, list) and isinstance(expected, list):
+    return len(actual) == len(expected) and all(
+      _pooled_json_matches(left, right) for left, right in zip(actual, expected)
+    )
+  if isinstance(actual, dict) and isinstance(expected, dict):
+    return actual.keys() == expected.keys() and all(
+      _pooled_json_matches(actual[key], expected[key]) for key in actual
+    )
+  return actual == expected
+
+
+def _nested_text(value: Any) -> Any:
+  """A nested object (or an object inside a list) as canonical JSON text, keys sorted.
+
+  `httpx.QueryParams` renders a dict with Python's own `str()`, which keeps insertion
+  order, so a JSON body whose array items carry the recorded keys in another order (a
+  client serializing its struct in schema order, say `AddOrderBatch`'s `orders`) never
+  matched the recording that holds the same value.
+  """
+  if isinstance(value, dict):
+    return json.dumps(value, sort_keys=True, separators=(',', ':'))
+  if isinstance(value, list):
+    return [
+      json.dumps(item, sort_keys=True, separators=(',', ':')) if isinstance(item, (dict, list)) else item
+      for item in value
+    ]
+  return value
+
+
+def _join_query_arrays(query: dict[str, Any]) -> dict[str, Any]:
+  """A recorded query with each list value joined into one comma-separated item (ADR 0019).
+
+  Items render the way `_normalize_query` renders them (`true`, not `True`), so a joined
+  value compares like a repeated one would. An empty list is left out, as a repeated key with
+  no values is: a client has nothing to send for it either way.
+
+  Args:
+    query: Query fields built from an example's recorded request.
+  """
+  joined: dict[str, Any] = {}
+  for key, value in query.items():
+    if isinstance(value, list):
+      if not value:
+        continue
+      items = httpx.QueryParams({key: _nested_text(value)}).multi_items()
+      value = ','.join(item for _, item in items)
+    joined[key] = value
+  return joined
+
+
 def _normalize_query(value: Any) -> list[tuple[str, str]]:
   if not isinstance(value, dict):
     return []
-  params = httpx.QueryParams(value)
+  params = httpx.QueryParams({key: _nested_text(item) for key, item in value.items()})
   return sorted((key, item) for key, item in params.multi_items())
+
+
+def _query_matches_form(
+  actual: list[tuple[str, str]], expected: dict[str, Any], form: str
+) -> bool:
+  """Compare comma-list items in order with the usual scalar tolerance.
+
+  Only recorded lists use comma syntax. Scalar strings containing commas stay whole.
+  Joining then splitting the expected list retains the wire's inherent ambiguity for
+  list items containing commas, while rejecting more than one occurrence of the key.
+  """
+  if form == 'comma':
+    expected = dict(expected)
+    for key, value in list(expected.items()):
+      if not isinstance(value, list):
+        continue
+      values = [item for name, item in actual if name == key]
+      if not value:
+        if values:
+          return False
+      else:
+        if len(values) != 1:
+          return False
+        joined = _join_query_arrays({key: value})[key]
+        if not query_matches(
+          [(key, item) for item in values[0].split(',')],
+          [(key, item) for item in joined.split(',')],
+        ):
+          return False
+      actual = [(name, item) for name, item in actual if name != key]
+      del expected[key]
+  return query_matches(actual, _normalize_query(expected))
 
 
 def query_matches(
@@ -285,6 +384,71 @@ def _redact(value: Any, names: frozenset[str]) -> Any:
   if not names or not isinstance(value, dict):
     return value
   return {key: item for key, item in value.items() if key not in names}
+
+
+def _redact_summary(value: Any, names: frozenset[str]) -> Any:
+  """Remove credential names throughout diagnostic recording envelopes."""
+  if isinstance(value, dict):
+    return {
+      key: _redact_summary(item, names)
+      for key, item in value.items() if key not in names
+    }
+  if isinstance(value, list):
+    return [_redact_summary(item, names) for item in value]
+  return value
+
+
+def _ignore_paths(value: Any, paths: tuple[str, ...]) -> Any:
+  """Drop declared `match.ignore` paths (ADR 0018) out of a JSON-shaped request value.
+
+  Each path is rooted at `value` itself and walked with the response-path grammar (dotted
+  keys, bracket indices, `[-1]` for the last element). The addressed dict key is removed; an
+  addressed list element is blanked to `None` rather than deleted, so every later path's index
+  still names the element it was written against (`args[1]` after `args[0]`). A path that
+  doesn't resolve is skipped, so a recording that never held a keyed field compares the same
+  as one that did. Only the containers along a
+  path are copied: `value` itself is never mutated.
+
+  Args:
+    value: The parsed WS frame or HTTP JSON body.
+    paths: Validated `match.ignore` paths. `value` is returned unchanged when empty.
+  """
+  for path in paths:
+    value = _without_path(value, path_segments(path))
+  return value
+
+
+def _without_path(value: Any, segments: list[tuple[str, Any]]) -> Any:
+  """`value` with the one field `segments` addresses removed -- see `_ignore_paths`."""
+  if not segments:
+    return value
+  (kind, key), rest = segments[0], segments[1:]
+  if kind == 'index':
+    if not isinstance(value, list):
+      return value
+    index = key if key >= 0 else len(value) + key
+    if not 0 <= index < len(value):
+      return value
+    copy = list(value)
+    if rest:
+      copy[index] = _without_path(copy[index], rest)
+    else:
+      copy[index] = None
+    return copy
+  if not isinstance(value, dict) or key not in value:
+    return value
+  copy = dict(value)
+  if rest:
+    copy[key] = _without_path(copy[key], rest)
+  else:
+    del copy[key]
+  return copy
+
+
+def _strip_volatile(value: Any, example: 'EndpointExample | WsEndpointExample') -> Any:
+  """Both declared ways a request field is left out of a comparison: `match.ignore`'s
+  located paths (ADR 0018) off the root, then `redacted`'s flat top-level names (ADR 0007)."""
+  return _redact(_ignore_paths(value, example.ignored_paths), example.redacted_names)
 
 
 def _flat_body_parameter_names(endpoint: SpecHttpExample) -> frozenset[str]:
@@ -436,6 +600,7 @@ def _json_rpc_call_matches(
   selector: str = 'method',
   params: str = 'params',
   redacted: frozenset[str] = frozenset(),
+  ignored: tuple[str, ...] = (),
 ) -> bool:
   """
   Compare two RPC-shaped call frames by selector + params, ignoring `id` on both sides.
@@ -459,9 +624,14 @@ def _json_rpc_call_matches(
     selector: Dotted path naming the operation, read off both sides.
     params: Dotted path naming the arguments, read off both sides.
     redacted: Key names stripped from both sides' `params`, when both parse as a dict.
+    ignored: `match.ignore` paths (ADR 0018), rooted at the whole frame and dropped from both
+      sides before anything is read -- the way a volatile field inside a positional `params`
+      (a login's `args[0].sign`) is left out, which `redacted` cannot reach.
   """
   if not isinstance(actual, dict) or not isinstance(expected, dict):
     return False
+  actual = _ignore_paths(actual, ignored)
+  expected = _ignore_paths(expected, ignored)
   if read_dotted_path(actual, selector) != read_dotted_path(expected, selector):
     return False
   actual_params = read_dotted_path(actual, params)
@@ -475,7 +645,12 @@ def _json_rpc_call_matches(
 
 
 def _request_match(
-  example: EndpointExample, path: str, query_items: list[tuple[str, str]], body: Any
+  example: EndpointExample,
+  path: str,
+  query_items: list[tuple[str, str]],
+  body: Any,
+  *,
+  body_is_form: bool = False,
 ) -> bool:
   """Match one incoming HTTP request against one recorded example.
 
@@ -498,6 +673,8 @@ def _request_match(
     body items are pooled before matching against `expected_query`: a `query`-role
     parameter's real wire channel is API/verb-dependent (ADR 0006), not something a
     `parameters`-recorded example claims either way.
+    `body_is_form` preserves the wire format: form fields use query serialization,
+    whereas JSON arrays must match the recorded array structurally.
   """
   if example.rpc_method is not None:
     selector = rpc_selector(example.envelope)
@@ -512,6 +689,7 @@ def _request_match(
       selector=selector,
       params=params,
       redacted=example.redacted_names,
+      ignored=example.ignored_paths,
     )
 
   path_match = example.route_pattern.match(path)
@@ -524,8 +702,25 @@ def _request_match(
   ):
     return False
 
+  body = _ignore_paths(body, example.ignored_paths)
+  expected_query = _redact(example.expected_query, example.redacted_names)
   consumed_body = False
   if example.expected_body is None and isinstance(body, dict):
+    body = _redact(body, example.redacted_names)
+    if example.query_arrays == 'comma' and not body_is_form:
+      # Preserve JSON arrays before pooling erases their source and structure. A key
+      # supplied in both channels is still a duplicate, even when its values agree.
+      expected_query = dict(expected_query)
+      body = dict(body)
+      for key, value in list(body.items()):
+        if not isinstance(value, list) and not isinstance(expected_query.get(key), list):
+          continue
+        if key not in expected_query or any(name == key for name, _ in query_items):
+          return False
+        if not _pooled_json_matches(value, expected_query[key]):
+          return False
+        del body[key]
+        del expected_query[key]
     # ADR 0006: `in: 'query'` states a parameter's *role*, not its literal wire
     # placement -- a query-role parameter can travel in the query string for one HTTP
     # verb and a form-encoded body for another (a signed POST/PUT), and a
@@ -555,15 +750,14 @@ def _request_match(
   # in `expected_query` too. Stripping only the actual side would force an exact match on a
   # value `redacted` says is never fixed -- the opposite of "redaction only widens what the
   # mock accepts" -- and make such an example permanently unmatchable.
-  expected_query = _redact(example.expected_query, example.redacted_names)
-  if not query_matches(query_items, _normalize_query(expected_query)):
+  if not _query_matches_form(query_items, expected_query, example.query_arrays):
     return False
 
   if example.expected_body is not None:
     # Symmetric with `expected_query` above, for the same reason: a redacted key legitimately
     # recorded in the body too must not be forced into an exact match.
     redacted_body = _redact(body, example.redacted_names)
-    expected_body = _redact(example.expected_body, example.redacted_names)
+    expected_body = _strip_volatile(example.expected_body, example)
     return _normalize_json(redacted_body) == _normalize_json(expected_body)
 
   return consumed_body or body is None
@@ -735,6 +929,18 @@ def _mock_http_example(spec_example: SpecHttpExample, *, spec_root: Path) -> End
       else:
         expected_body = request_parameters or spec_example.request.payload or None
 
+  envelope = endpoint.envelope
+  if (
+    rpc_method is not None
+    and isinstance(envelope, RpcEnvelopeSpec)
+    and envelope.positional is not None
+    and isinstance(request_parameters, dict)
+  ):
+    # The endpoint declares how its flat request packs into positional `params`
+    # (`[address, tokenSpec, {pageKey?, maxCount?}?]`, `[transaction]`, `[*transactions]`),
+    # so the recorded request is matched in that wire shape rather than as `[request]`.
+    expected_body = positional_params(envelope.positional, request_parameters)
+
   return EndpointExample(
     endpoint_path=spec_example.endpoint_path,
     function=endpoint.function or endpoint.resolved_function(spec_example.endpoint_path, spec_root),
@@ -753,6 +959,8 @@ def _mock_http_example(spec_example: SpecHttpExample, *, spec_root: Path) -> End
     ),
     envelope=endpoint.envelope,
     rpc_method=rpc_method,
+    ignored_paths=endpoint.ignored_paths,
+    query_arrays=endpoint.query_arrays,
   )
 
 
@@ -790,6 +998,7 @@ def _mock_ws_example(spec_example: SpecWsExample, *, spec_root: Path) -> WsEndpo
     endpoint_path=spec_example.endpoint_path,
     function=endpoint.function or endpoint.resolved_function(spec_example.endpoint_path, spec_root),
     channel=endpoint.channel,
+    synthesized=spec_example.synthesized,
     example_id=spec_example.example_id,
     expected_parameters=spec_example.parameters.parameters,
     expected_payload=spec_example.parameters.payload,
@@ -798,6 +1007,7 @@ def _mock_ws_example(spec_example: SpecWsExample, *, spec_root: Path) -> WsEndpo
     messages=spec_example.messages,
     message_frames=spec_example.message_frames,
     redacted_names=endpoint.redacted_names,
+    ignored_paths=endpoint.ignored_paths,
     rpc_method=endpoint.channel if endpoint.spec.kind == 'rpc' else None,
     envelope=endpoint.envelope,
     push=endpoint.push,
@@ -812,7 +1022,13 @@ class MockRegistry:
     self.examples = load_http_examples(root)
 
   def match(
-    self, method: str, path: str, query_items: list[tuple[str, str]], body: Any
+    self,
+    method: str,
+    path: str,
+    query_items: list[tuple[str, str]],
+    body: Any,
+    *,
+    body_is_form: bool = False,
   ) -> MockMatch | None:
     """Return the one matching example, or raise when zero or several candidates match.
 
@@ -847,7 +1063,7 @@ class MockRegistry:
     passing = [
       example
       for example in route_candidates
-      if _request_match(example, path, query_items, body)
+      if _request_match(example, path, query_items, body, body_is_form=body_is_form)
     ]
     if len(passing) == 1:
       example = passing[0]
@@ -886,7 +1102,13 @@ def _interpolated_channel(example: WsEndpointExample) -> str:
     string directly, under whatever key `envelope.channel`'s own last path segment names.
     Reading it there first, before ever trying to substitute a template that has nothing
     to substitute from, is what a declared-channel example needs.
+
+  `envelope.subscribe_channel`, when declared, replaces `example.channel` as the template:
+  the frame names that channel while pushes arrive on `spec.channel`.
   """
+  template = example.channel
+  if isinstance(example.envelope, StreamEnvelopeSpec) and example.envelope.subscribe_channel is not None:
+    template = example.envelope.subscribe_channel
   channel_key = _channel_key(example.envelope)
   if channel_key is not None:
     name = channel_key.rsplit('.', 1)[-1]
@@ -900,7 +1122,7 @@ def _interpolated_channel(example: WsEndpointExample) -> str:
     value = example.expected_parameters.get(match.group(1))
     return str(value) if value is not None else match.group(0)
 
-  return CHANNEL_PARAM.sub(substitute, example.channel)
+  return CHANNEL_PARAM.sub(substitute, template)
 
 
 async def _push_example_messages(
@@ -952,6 +1174,16 @@ def _synthesized_ack(example: WsEndpointExample, message: dict[str, Any]) -> Any
   return ack
 
 
+def _sends_rpc_reply(example: WsEndpointExample) -> bool:
+  """Whether a matched rpc example answers with its `reply` frame.
+
+  A native `null` reply records that the API sends nothing (`docs/spec/authoring.md` rule
+  11). A reply synthesized from an HTTP recording is that recording's body, and `null` is a
+  body the API really returned, so it is sent as the frame `null`.
+  """
+  return example.reply is not None or example.synthesized
+
+
 def _ws_subscription_key(channel: str, id: str | None) -> str:
   return f'{channel}:{id}' if id is not None else channel
 
@@ -996,8 +1228,8 @@ def _subscribe_matches(example: WsEndpointExample, message: dict[str, Any]) -> b
   """
   if example.expected_payload is None and _channel_key(example.envelope) is not None:
     return True
-  redacted_message = _redact(message, example.redacted_names)
-  redacted_expected = _redact(_ws_subscribe_message(example), example.redacted_names)
+  redacted_message = _strip_volatile(message, example)
+  redacted_expected = _strip_volatile(_ws_subscribe_message(example), example)
   return _normalize_json(redacted_message) == _normalize_json(redacted_expected)
 
 
@@ -1151,15 +1383,15 @@ def _match_active_subscription(
     elif (expected := _expected_unsubscribe_frame(example)) is not None:
       # Declared-verb path (ADR 0004): precise, not a guess -- see `_expected_unsubscribe_
       # frame`. Tried before the blind-swap fallback below for every migrated example.
-      redacted_message = _redact(message, example.redacted_names)
-      redacted_expected = _redact(expected, example.redacted_names)
+      redacted_message = _strip_volatile(message, example)
+      redacted_expected = _strip_volatile(expected, example)
       if _normalize_json(redacted_message) == _normalize_json(redacted_expected):
         return key
     elif example.expected_payload is not None:
       derived = _unsubscribe_payload_from_subscribe(example.expected_payload)
       if derived is not None:
-        redacted_message = _redact(message, example.redacted_names)
-        redacted_derived = _redact(derived, example.redacted_names)
+        redacted_message = _strip_volatile(message, example)
+        redacted_derived = _strip_volatile(derived, example)
         if _normalize_json(redacted_message) == _normalize_json(redacted_derived):
           return key
     elif key == _ws_subscription_key(str(channel or ''), message.get('id')):
@@ -1250,6 +1482,7 @@ class WsMockRegistry:
         selector=selector,
         params=params,
         redacted=example.redacted_names,
+        ignored=example.ignored_paths,
       )
       if matches:
         passing.append(example)
@@ -1375,6 +1608,7 @@ def _request_error_candidates(
       'example_id': candidate.example_id,
       'route': candidate.route_display,
       'expected_request': candidate.request_summary(),
+      'query_arrays': candidate.query_arrays,
     }
     for candidate in candidates
   ]
@@ -1432,7 +1666,14 @@ class MockRequestHandler(BaseHTTPRequestHandler):
     query_items = sorted(parse_qsl(parsed.query, keep_blank_values=True))
 
     try:
-      match = self.registry.match(self.command, parsed.path, query_items, body)
+      match = self.registry.match(
+        self.command,
+        parsed.path,
+        query_items,
+        body,
+        body_is_form='application/x-www-form-urlencoded'
+        in self.headers.get('content-type', ''),
+      )
     except UnexpectedRequestParameters as exc:
       self._write_json(
         EXPECTED_PARAM_STATUS,
@@ -1683,14 +1924,10 @@ def start_ws_server(
           example = active.pop(active_key, None) if active_key is not None else None
 
           if rpc_match is not None:
-            reply = (
-              serve_response(
+            if _sends_rpc_reply(rpc_match.example):
+              reply = serve_response(
                 rpc_match.example.reply, message, rpc_match.example.envelope
               )
-              if rpc_match.example.reply is not None
-              else None
-            )
-            if reply is not None:
               await connection.send(json.dumps(reply))
             continue
 
@@ -1825,12 +2062,8 @@ def start_ws_server(
 
         if rpc_match is not None:
           example = rpc_match.example
-          reply = (
-            serve_response(example.reply, message, example.envelope)
-            if example.reply is not None
-            else None
-          )
-          if reply is not None:
+          if _sends_rpc_reply(example):
+            reply = serve_response(example.reply, message, example.envelope)
             await connection.send(json.dumps(reply))
           # `after_rpc`-triggered push (`docs/spec/authoring.md` rule 11): once this RPC
           # example's own reply has been served -- or skipped, for a no-reply RPC like

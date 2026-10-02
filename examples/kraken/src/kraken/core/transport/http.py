@@ -83,19 +83,7 @@ class HttpRpcClient(RpcClient):
     Raises:
       AuthError: This client was built with no credentials (`public=True` upstream).
     """
-    if self.credentials is None:
-      raise AuthError('No credentials: this client was built with `public=True`.')
-    nonce = await self.nonce.next()
-    encoded_body = urlencode({'nonce': nonce, **(data or {})})
-    signature = sign(path, nonce, encoded_body, self.credentials.private_key)
-    headers = {
-      'API-Key': self.credentials.api_key,
-      'API-Sign': signature,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    }
-    response = await self.http.request(
-      'POST', self.base_url + path, content=encoded_body, headers=headers
-    )
+    response = await self._signed_post(path, data, json=False)
     return self.result(response, validator=validator, validate=validate)
 
   async def authed_json_request(
@@ -114,19 +102,7 @@ class HttpRpcClient(RpcClient):
     Raises:
       AuthError: This client was built with no credentials (`public=True` upstream).
     """
-    if self.credentials is None:
-      raise AuthError('No credentials: this client was built with `public=True`.')
-    nonce = await self.nonce.next()
-    encoded_body = json_module.dumps({'nonce': nonce, **(data or {})})
-    signature = sign(path, nonce, encoded_body, self.credentials.private_key)
-    headers = {
-      'API-Key': self.credentials.api_key,
-      'API-Sign': signature,
-      'Content-Type': 'application/json',
-    }
-    response = await self.http.request(
-      'POST', self.base_url + path, content=encoded_body, headers=headers
-    )
+    response = await self._signed_post(path, data, json=True)
     return self.result(response, validator=validator, validate=validate)
 
   async def authed_raw_request(
@@ -146,22 +122,35 @@ class HttpRpcClient(RpcClient):
     Raises:
       AuthError: This client was built with no credentials (`public=True` upstream).
     """
-    if self.credentials is None:
-      raise AuthError('No credentials: this client was built with `public=True`.')
-    nonce = await self.nonce.next()
-    encoded_body = urlencode({'nonce': nonce, **(data or {})})
-    signature = sign(path, nonce, encoded_body, self.credentials.private_key)
-    headers = {
-      'API-Key': self.credentials.api_key,
-      'API-Sign': signature,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    }
-    response = await self.http.request(
-      'POST', self.base_url + path, content=encoded_body, headers=headers
-    )
+    response = await self._signed_post(path, data, json=False)
     if not response.is_success:
       raise_http_status(response)
     return response.content
+
+  async def _signed_post(self, path: str, data: Mapping[str, Any] | None, *, json: bool) -> httpx.Response:
+    credentials = self.credentials
+    if credentials is None:
+      raise AuthError('No credentials: this client was built with `public=True`.')
+    nonce_generator = self.nonce
+
+    class Auth(httpx.Auth):
+      async def async_auth_flow(self, request: httpx.Request):
+        nonce = await nonce_generator.next()
+        values = {'nonce': nonce, **(data or {})}
+        values['nonce'] = nonce
+        body = json_module.dumps(values) if json else urlencode(values)
+        headers = httpx.Headers(request.headers)
+        headers.update({
+          'API-Key': credentials.api_key,
+          'API-Sign': sign(path, nonce, body, credentials.private_key),
+          'Content-Type': 'application/json' if json else 'application/x-www-form-urlencoded',
+          'Content-Length': str(len(body.encode())),
+        })
+        yield httpx.Request(
+          request.method, request.url, content=body, headers=headers, extensions=request.extensions,
+        )
+
+    return await self.http.request('POST', self.base_url + path, auth=Auth())
 
   async def get_ws_token(self) -> AuthResult:
     """Fetch a fresh WebSocket auth token (`GetWebSocketsToken`, ~900s TTL), adapted to

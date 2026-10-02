@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Truewire upstream endpoint inventory",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["source", "approved", "endpoints"],
+  "properties": {
+    "$schema": {"$ref": "#/$defs/uri"},
+    "source": {"$ref": "#/$defs/uri"},
+    "approved": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["by", "date"],
+      "properties": {
+        "by": {"$ref": "#/$defs/line"},
+        "date": {"type": "string", "format": "date"}
+      }
+    },
+    "endpoints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["method", "path"],
+        "properties": {
+          "method": {"$ref": "#/$defs/line"},
+          "path": {"$ref": "#/$defs/line"},
+          "endpoint": {"type": "string", "pattern": "^[^./\\s]+(?:\\.[^./\\s]+)*$", "not": {"pattern": "[\\r\\n]"}},
+          "excluded": {"$ref": "#/$defs/line"}
+        },
+        "not": {"required": ["endpoint", "excluded"]}
+      }
+    }
+  },
+  "$defs": {
+    "uri": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^[A-Za-z][A-Za-z0-9+.-]*:\\S+$",
+      "not": {"pattern": "\\s"}
+    },
+    "line": {"type": "string", "pattern": "\\S", "not": {"pattern": "[\\r\\n]"}}
+  }
+}

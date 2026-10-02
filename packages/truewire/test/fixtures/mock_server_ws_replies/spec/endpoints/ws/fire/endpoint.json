@@ -1,0 +1,13 @@
+{
+  "function": "ws.fire",
+  "notes": ["Synthetic WS-only command whose native `doc.reply.json` is `null`: the API sends no reply, so the mock sends nothing."],
+  "spec": {
+    "kind": "rpc",
+    "transports": ["ws"],
+    "path": "fire",
+    "openapi": {
+      "description": "Fire-and-forget command.",
+      "responses": {"reply": {"description": "No reply is sent."}}
+    }
+  }
+}

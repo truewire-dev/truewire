@@ -1,0 +1,41 @@
+{
+  "meta": {},
+  "function": "acme.ws_login",
+  "notes": [
+    "Synthetic Bitget-shaped WS login: no JSON-RPC `method`, the operation under `op`, and one credential object inside a positional `args` array whose `timestamp` and `sign` are minted per connection. `redacted` cannot reach them (flat names, dict params only); `match.ignore` names them by path. `apiKey` is deliberately not ignored, so a different key still fails to match."
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": ["ws"],
+    "path": "login",
+    "request": {
+      "title": "LoginRequest",
+      "type": "object",
+      "properties": {
+        "op": {"type": "string", "enum": ["login"]},
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "apiKey": {"type": "string"},
+              "timestamp": {"type": "string"},
+              "sign": {"type": "string"}
+            },
+            "required": ["apiKey", "timestamp", "sign"]
+          }
+        }
+      },
+      "required": ["op", "args"]
+    },
+    "response": {
+      "title": "LoginReply",
+      "type": "object",
+      "properties": {"event": {"type": "string"}, "code": {"type": "integer"}},
+      "required": ["event", "code"]
+    },
+    "description": "Authenticate the connection."
+  },
+  "envelope": {"payload": "", "selector": "op", "params": "args"},
+  "match": {"ignore": ["args[0].timestamp", "args[0].sign"]}
+}

@@ -147,6 +147,7 @@ class KrakenSocketClient(SocketClient):
     validate: bool = True,
     timeout: timedelta = timedelta(seconds=10),
     ping_interval: timedelta = timedelta(seconds=30),
+    proxy: str | None = None,
   ):
     """Build one connection. Thin: no environment lookup -- the root's `.new()` owns
     that.
@@ -157,12 +158,14 @@ class KrakenSocketClient(SocketClient):
       token_cache: Set together with `fetch_token` for the private connection; both
         `None` for the public connection.
       fetch_token: Bound to the Spot HTTP client's `get_ws_token`.
+      proxy: Proxy URL the connection goes through; `None` falls back to `HTTPS_PROXY`.
     """
     token_source = None
     if token_cache is not None and fetch_token is not None:
       token_source = lambda: token_cache.get(fetch_token)  # noqa: E731
     conn = SocketConnection(
-      url=url, timeout=timeout, ping_interval=ping_interval, token_source=token_source
+      url=url, timeout=timeout, ping_interval=ping_interval, token_source=token_source,
+      proxy=proxy,
     )
     return cls(conn=conn, validate=validate)
 

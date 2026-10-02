@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import { Decimal } from '../src/decimal.js'
 import { ValidationError } from '../src/errors.js'
-import { DateIso } from '../src/times.js'
+import { DateIso, PreciseDate, epochNanoseconds } from '../src/times.js'
 import * as t from '../src/validation.js'
 import { dumpJson, parseJson, type Codec } from '../src/validation.js'
 
@@ -153,13 +153,28 @@ describe('wire formats', () => {
   })
 
   it('integer-string', () => {
-    expect(t.integerString.parse('42')).toBe(42)
-    expect(t.integerString.parse('-7')).toBe(-7)
-    expect(t.integerString.dump(42)).toBe('42')
+    expect(t.integerString.parse('42')).toBe(42n)
+    expect(t.integerString.parse('-7')).toBe(-7n)
+    expect(t.integerString.dump(42n)).toBe('42')
+    expect(t.integerString.dump(42 as unknown as bigint)).toBe('42')
     expect(failure(() => t.integerString.parse('4.2')).message).toMatch(/^expected integer string, got "4.2": not an integer at \/$/)
-    expect(failure(() => t.integerString.parse('9007199254740993')).message).toMatch(/beyond safe integer/)
+    // Beyond 2^53 and 2^64: every digit survives both ways (wei amounts, ERC-1155 ids).
+    const wei = '115792089237316195423570985008687907853269984665640564039457584007913129639935'
+    expect(t.integerString.parse('9007199254740993')).toBe(9007199254740993n)
+    expect(t.integerString.dump(t.integerString.parse(wei))).toBe(wei)
     expect(failure(() => t.integerString.parse(42)).message).toBe('expected string, got 42 at /')
-    expect(() => t.integerString.dump(1.5)).toThrow(ValidationError)
+    expect(() => t.integerString.dump(1.5 as unknown as bigint)).toThrow(ValidationError)
+  })
+
+  it('int64', () => {
+    expect(t.int64.parse(42)).toBe(42)
+    expect(t.int64.parse(211961158951763973n)).toBe(211961158951763973n)
+    expect(t.int64.dump(211961158951763973n)).toBe(211961158951763973n)
+    expect(failure(() => t.int64.parse(4.2)).message).toBe('expected integer, got 4.2 at /')
+    expect(failure(() => t.int64.parse('42')).message).toBe('expected integer, got "42" at /')
+    const codec = t.object({ id: t.int64, small: t.int64 })
+    const text = '{"id":211961158951763973,"small":7}'
+    expect(dumpJson(codec, parseJson(codec, text))).toBe(text)
   })
 
   it('boolean-string', () => {
@@ -188,6 +203,19 @@ describe('timestamps', () => {
     expect(dumpJson(t.epochNanos, dt)).toBe('1717072496123000000')
     expect(t.epochNanos.parse(t.epochNanos.dump(dt))).toEqual(dt)
     expect(t.epochMillis.parse('1717072496123')).toEqual(dt)
+  })
+
+  it('a number-schema epoch keeps the fraction both ways; an integer one floors it on dump', () => {
+    const at = t.epochSecondsFloat.parse(1688669448.4712)
+    expect(at.toISOString()).toBe('2023-07-06T18:50:48.471Z')
+    expect(dumpJson(t.epochSecondsFloat, at)).toBe('1688669448.4712')
+    expect(t.epochSecondsFloat.dump(new Date(1688669448471))).toBe(1688669448.471)
+    expect(t.epochSecondsFloat.dump(new Date(1688669448000))).toBe(1688669448)
+    expect(epochNanoseconds(t.epochMillisFloat.parse(1717072496123.5))).toBe(1717072496123500000n)
+    expect(t.epochMillisFloat.dump(new PreciseDate(1717072496123500000n))).toBe(1717072496123.5)
+    expect(dumpJson(t.epochNanosFloat, new PreciseDate(1717072496123456789n))).toBe('1717072496123456789')
+    expect(t.epochSeconds.parse(1688669448.4712).toISOString()).toBe('2023-07-06T18:50:48.471Z')
+    expect(t.epochSeconds.dump(new Date(1688669448471))).toBe(1688669448)
   })
 
   it('rejects non-epoch values on both sides', () => {
@@ -302,5 +330,41 @@ describe('types', () => {
     // @ts-expect-error `a` is required
     const missing: Parsed = { c: 'x' }
     expect([value, value2, missing]).toHaveLength(3)
+  })
+})
+
+describe('big integers and precise epochs through the lossless parse', () => {
+  it('rejects an integer a number cannot hold, by name, rather than rounding it', () => {
+    expect(failure(() => parseJson(t.object({ id: t.integer }), '{"id": 9007199254740993}')).message)
+      .toMatch(/^expected integer, got 9007199254740993: beyond Number\.MAX_SAFE_INTEGER.* at \/id$/)
+    expect(parseJson(t.object({ id: t.integer }), '{"id": 9007199254740991}')).toEqual({ id: 9007199254740991 })
+  })
+
+  it('an integer-string beyond 2^64 and a nanosecond epoch round-trip through parseJson/dumpJson', () => {
+    const codec = t.object({ amount: t.integerString, at: t.epochNanos, ms: t.epochMillis })
+    const text = '{"amount":"340282366920938463463374607431768211457","at":1786302600123456789,"ms":1786302600123}'
+    const value = parseJson(codec, text)
+    expect(value.amount).toBe(340282366920938463463374607431768211457n)
+    expect(epochNanoseconds(value.at)).toBe(1786302600123456789n)
+    expect(dumpJson(codec, value)).toBe(text)
+  })
+})
+
+describe('a bigint from the lossless parse', () => {
+  it('is a number where the schema says number, alone or inside a union', () => {
+    const Row = t.object({ usd_value: t.number, maybe: t.nullable(t.number), either: t.union(t.string, t.number) })
+    const text = '{"usd_value": 27087904528118290000, "maybe": 27087904528118290000, "either": 27087904528118290000}'
+    expect(parseJson(Row, text)).toEqual({ usd_value: 27087904528118290000, maybe: 27087904528118290000, either: 27087904528118290000 })
+    expect(dumpJson(Row, parseJson(Row, text))).toBe('{"usd_value":27087904528118290000,"maybe":27087904528118290000,"either":27087904528118290000}')
+  })
+
+  it('matches a numeric literal', () => {
+    expect(t.literal(1e20).parse(100000000000000000000n)).toBe(1e20)
+    expect(failure(() => t.literal(1, 2).parse(100000000000000000000n)).message).toMatch(/expected 1 \| 2/)
+  })
+
+  it('still fails t.integer by name, and a union falls through to a variant that fits', () => {
+    expect(failure(() => parseJson(t.object({ n: t.integer }), '{"n": 27087904528118290000}')).message).toMatch(/beyond Number\.MAX_SAFE_INTEGER/)
+    expect(parseJson(t.union(t.integer, t.number), '27087904528118290000')).toBe(27087904528118290000)
   })
 })

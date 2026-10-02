@@ -3,10 +3,11 @@
  * wire: epoch seconds/millis/micros/nanos, RFC 3339 date-times, and plain calendar dates.
  *
  * Timestamps are `Date`s behind the aliases below, so a later move to `Temporal.Instant` is
- * one alias change. A `Date` holds milliseconds: `epoch-micros`/`epoch-nanos` and
- * sub-millisecond RFC 3339 fractions lose their extra digits on parse, but the arithmetic
- * is exact integer (`BigInt`) arithmetic throughout, so the digits that survive are the
- * right ones and a millisecond-precision value round-trips through every unit exactly.
+ * one alias change. A `Date` holds milliseconds; a value with digits below the millisecond
+ * (`epoch-micros`/`epoch-nanos`, a long RFC 3339 fraction) parses to a `PreciseDate`, a
+ * `Date` that also keeps its sub-millisecond nanoseconds, and dumps back with every digit.
+ * The arithmetic is exact integer (`BigInt`) arithmetic throughout. (Python keeps
+ * microseconds and rounds nanoseconds; this keeps nanoseconds.)
  */
 import { LogicError } from './errors.js'
 
@@ -33,6 +34,59 @@ export interface TimeConverter<W> {
   now(): W
 }
 
+/**
+ * A `Date` that keeps the nanoseconds below its millisecond: `subMillisecondNanos` is
+ * `0`–`999999`, added to `getTime()`'s milliseconds. The `Date` setters move only the
+ * millisecond part.
+ */
+export class PreciseDate extends Date {
+  readonly subMillisecondNanos: number
+
+  /** The instant `epochNanoseconds` nanoseconds after the epoch. */
+  constructor(epochNanoseconds: bigint) {
+    super(Number(floorDiv(epochNanoseconds, 1_000_000n)))
+    this.subMillisecondNanos = Number(epochNanoseconds - floorDiv(epochNanoseconds, 1_000_000n) * 1_000_000n)
+  }
+
+  /** Nanoseconds since the epoch, exact. */
+  get epochNanoseconds(): bigint {
+    return BigInt(this.getTime()) * 1_000_000n + BigInt(this.subMillisecondNanos)
+  }
+
+  /** `toISOString` with the fraction extended to microseconds or nanoseconds when the value needs them. */
+  toPreciseISOString(): string {
+    return isoWithNanos(this)
+  }
+}
+
+/** Nanoseconds since the epoch of any `Date`: exact for a `PreciseDate`, whole milliseconds otherwise. */
+export function epochNanoseconds(date: Date): bigint {
+  const ms = date.getTime()
+  if (Number.isNaN(ms)) throw new LogicError('Invalid Date')
+  return date instanceof PreciseDate ? date.epochNanoseconds : BigInt(ms) * 1_000_000n
+}
+
+/** The instant `nanos` after the epoch: a plain `Date` when it is whole milliseconds, else a `PreciseDate`. */
+export function fromEpochNanoseconds(nanos: bigint): Date {
+  return nanos % 1_000_000n === 0n ? new Date(Number(nanos / 1_000_000n)) : new PreciseDate(nanos)
+}
+
+/**
+ * `toISOString` with the shortest fraction of 0, 3, 6 or 9 digits that holds the value, as
+ * the Rust and Go runtimes write it: `.733340` stays six digits, while redundant zero groups
+ * (`.000`, `.500000`) are dropped and any offset is written as `Z`. The source text's own
+ * width is not kept.
+ */
+function isoWithNanos(date: Date): string {
+  const sub = date instanceof PreciseDate ? date.subMillisecondNanos : 0
+  // `toISOString` always ends `.mmmZ`; the year before it can be four digits or a signed six.
+  const iso = date.toISOString()
+  const seconds = iso.slice(0, -5)
+  const nanos = iso.slice(-4, -1) + String(sub).padStart(6, '0')
+  const width = sub === 0 ? (nanos.startsWith('000') ? 0 : 3) : sub % 1000 === 0 ? 6 : 9
+  return width === 0 ? `${seconds}Z` : `${seconds}.${nanos.slice(0, width)}Z`
+}
+
 /** Floor division on `BigInt`s (`/` truncates toward zero). */
 function floorDiv(n: bigint, d: bigint): bigint {
   const q = n / d
@@ -42,11 +96,29 @@ function floorDiv(n: bigint, d: bigint): bigint {
 function toBigInt(value: number | string | bigint, what: string): bigint {
   if (typeof value === 'bigint') return value
   if (typeof value === 'number') {
-    if (!Number.isFinite(value)) throw new LogicError(`Not an epoch ${what}: ${value}`)
-    return BigInt(Math.trunc(value))
+    if (!Number.isInteger(value)) throw new LogicError(`Not an epoch ${what}: ${value}`)
+    return BigInt(value)
   }
   if (!/^[+-]?\d+$/.test(value.trim())) throw new LogicError(`Not an epoch ${what}: ${JSON.stringify(value)}`)
   return BigInt(value.trim())
+}
+
+const NUMERAL = /^([+-]?)(\d+)(?:\.(\d*))?(?:e([+-]?\d+))?$/i
+
+/**
+ * A fractional `number` of `unit`s per second in nanoseconds: read through its shortest
+ * decimal form (the digits the wire sent, `1688669448.4712`), exactly, then rounded half
+ * away from zero to the nanosecond, as the Rust runtime rounds.
+ */
+function fractionalNanos(value: number, unit: bigint): bigint {
+  const [, sign, whole, fraction = '', exponent = '0'] = NUMERAL.exec(String(value))!
+  const shift = Number(exponent) - fraction.length
+  let num = BigInt(whole + fraction) * 1_000_000_000n
+  let den = unit
+  if (shift >= 0) num *= 10n ** BigInt(shift)
+  else den *= 10n ** BigInt(-shift)
+  const nanos = (2n * num + den) / (2n * den)
+  return sign === '-' ? -nanos : nanos
 }
 
 /** Converter for epoch timestamps in a specific unit. */
@@ -65,12 +137,16 @@ export class EpochConverter implements TimeConverter<number> {
 
   /**
    * Parse an epoch timestamp. Some APIs serialize it as a numeral string rather than a bare
-   * number (`"timestamp": "1786302600000"`); a string is read exactly, so a nanosecond
-   * value beyond `Number.MAX_SAFE_INTEGER` keeps its millisecond digits intact.
+   * number (`"timestamp": "1786302600000"`); a string or `bigint` is read exactly, so a
+   * nanosecond value beyond `Number.MAX_SAFE_INTEGER` keeps every digit (a `PreciseDate`).
+   * A fractional `number` (kraken's `1688669448.4712` seconds) keeps its fraction, to the
+   * nearest nanosecond, as the Python and Rust runtimes keep theirs.
    */
   parse(value: number | string | bigint): Date {
-    const millis = floorDiv(toBigInt(value, 'timestamp') * 1_000n, this.unit)
-    return new Date(Number(millis))
+    if (typeof value === 'number' && Number.isFinite(value) && !Number.isInteger(value)) {
+      return fromEpochNanoseconds(fractionalNanos(value, this.unit))
+    }
+    return fromEpochNanoseconds(floorDiv(toBigInt(value, 'timestamp') * 1_000_000_000n, this.unit))
   }
 
   /**
@@ -82,11 +158,26 @@ export class EpochConverter implements TimeConverter<number> {
     return Number(this.dumpBigInt(date))
   }
 
-  /** `dump`, exact at any magnitude. */
+  /** `dump`, exact at any magnitude and down to a `PreciseDate`'s nanoseconds. */
   dumpBigInt(date: Date): bigint {
-    const ms = date.getTime()
-    if (Number.isNaN(ms)) throw new LogicError('Invalid Date')
-    return floorDiv(BigInt(ms) * this.unit, 1_000n)
+    return floorDiv(epochNanoseconds(date) * this.unit, 1_000_000_000n)
+  }
+
+  /**
+   * The count for a `number` schema, keeping a fraction of a unit: whole units exactly (a
+   * `bigint` beyond `Number.MAX_SAFE_INTEGER`), anything between two units as the `number`
+   * nearest the exact decimal, so a fraction `parse` read goes back as the digits it came as.
+   */
+  dumpNumber(date: Date): number | bigint {
+    const scaled = epochNanoseconds(date) * this.unit
+    const magnitude = scaled < 0n ? -scaled : scaled
+    const rest = magnitude % 1_000_000_000n
+    if (rest === 0n) {
+      const whole = scaled / 1_000_000_000n
+      return Number.isSafeInteger(Number(whole)) ? Number(whole) : whole
+    }
+    const sign = scaled < 0n ? '-' : ''
+    return Number(`${sign}${magnitude / 1_000_000_000n}.${String(rest).padStart(9, '0')}`)
   }
 
   /** The current time, in this unit. */
@@ -95,33 +186,55 @@ export class EpochConverter implements TimeConverter<number> {
   }
 }
 
-const DATE_TIME = /^(\d{4})-(\d{2})-(\d{2})[Tt ](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(?:([Zz])|([+-])(\d{2}):(\d{2}))$/
+const DATE_TIME = /^(\d{4})-(\d{2})-(\d{2})[Tt ](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(?:([Zz])|([+-])(\d{2}):(\d{2}))?$/
 
 /** Converter for RFC 3339 date-times, always UTC and `Z`-suffixed on the wire. */
 export class IsoConverter implements TimeConverter<string> {
   /**
    * Parse a `Z`-suffixed or offset RFC 3339 date-time with a fraction of any length
-   * (some APIs send milliseconds, others nanoseconds); digits beyond milliseconds are
-   * dropped, digits short of them padded.
+   * (some APIs send milliseconds, others nanoseconds); digits down to nanoseconds are
+   * kept (a `PreciseDate` when any fall below the millisecond), further ones dropped. A
+   * date-time with no offset at all (Hyperliquid's `1970-01-01T00:00:00`) is read as UTC,
+   * as Python's converter reads it.
    */
   parse(value: string): Date {
     const m = DATE_TIME.exec(value)
     if (!m) throw new LogicError(`Not an RFC 3339 date-time: ${JSON.stringify(value)}`)
     const [, y, mo, d, h, mi, s, frac, , sign, oh, om] = m
-    const ms = frac ? Number((frac + '00').slice(0, 3)) : 0
-    let utc = Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), Number(s), ms)
-    if (sign) utc -= (sign === '-' ? -1 : 1) * (Number(oh) * 60 + Number(om)) * 60_000
-    const date = new Date(utc)
-    if (date.getUTCMonth() !== Number(mo) - 1 || Number(d) > 31 || Number(h) > 23 || Number(mi) > 59 || Number(s) > 60) {
+    const nanos = frac ? (frac + '00000000').slice(0, 9) : '000000000'
+    const ms = Number(nanos.slice(0, 3))
+    // `setUTCFullYear`, not `Date.UTC`, which reads years 0000-0099 as 1900-1999. The
+    // calendar check reads the local fields, before the offset moves the instant into
+    // another month (`2026-09-30T17:30:00-10:00` is October in UTC).
+    const local = new Date(0)
+    local.setUTCFullYear(Number(y), Number(mo) - 1, Number(d))
+    local.setUTCHours(Number(h), Number(mi), Number(s), ms)
+    if (
+      local.getUTCMonth() !== Number(mo) - 1 || Number(d) > 31 || Number(h) > 23 || Number(mi) > 59 || Number(s) > 60 ||
+      (sign && (Number(oh) > 23 || Number(om) > 59))
+    ) {
       throw new LogicError(`Not an RFC 3339 date-time: ${JSON.stringify(value)}`)
     }
-    return date
+    let utc = local.getTime()
+    if (sign) utc -= (sign === '-' ? -1 : 1) * (Number(oh) * 60 + Number(om)) * 60_000
+    const date = new Date(utc)
+    // The wire form is UTC with a four-digit year, so an offset may not carry it past either end.
+    if (date.getUTCFullYear() < 0 || date.getUTCFullYear() > 9999) {
+      throw new LogicError(`Not an RFC 3339 date-time in years 0000-9999 UTC: ${JSON.stringify(value)}`)
+    }
+    const sub = Number(nanos.slice(3))
+    return sub === 0 ? date : new PreciseDate(BigInt(utc) * 1_000_000n + BigInt(sub))
   }
 
-  /** Render a `Date` as UTC, `Z`-suffixed, with milliseconds only when they are non-zero. */
+  /**
+   * Render a `Date` as UTC, `Z`-suffixed, with a fraction only when it is non-zero: three,
+   * six or nine digits, as many as the value needs (a `PreciseDate` takes six or nine), as
+   * the Rust and Go runtimes render it. A `Date` keeps no record of the width it was read
+   * in, so a wire fraction of another width (`.5`, `.1234`) comes back padded to the group.
+   */
   dump(date: Date): string {
     if (Number.isNaN(date.getTime())) throw new LogicError('Invalid Date')
-    return date.toISOString().replace('.000Z', 'Z')
+    return isoWithNanos(date)
   }
 
   now(): string {

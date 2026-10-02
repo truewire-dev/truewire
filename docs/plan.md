@@ -58,6 +58,7 @@ One endpoint:
   "core": "default",                      // nearest router.json's `core`
   "meta": { "public": true },
   "deprecated": false,
+  "refused": false,                       // named in [policy].refuse: every method fails first
   "request": {
     "shape": "fields",                    // none | fields | union | array
     "type": "Request",                    // the `types` entry holding the whole request
@@ -112,12 +113,15 @@ call. A `ref` names an entry of the same endpoint's `types` or of a shared scope
   (`seedable`): the backend exposes pages and a resumable state
   (`PaginatedResponse[row, state]` in Python).
 - `generator`: a plain async iterator of responses, for a declaration the resumable shape
-  does not cover (`offset`, `window`, `seek` with `overlap`, or rows the tree cannot name).
+  does not cover (an `offset` walk, or rows the tree cannot name). The Python backend
+  renders every walk as a `PaginatedResponse` (ADR 0013); TypeScript and Rust still use this.
 - `none`: the declaration cannot be walked at all (an `offset` walk ending on an item
   count with no rows to count and no page size to step by).
 
-`stateType` is the driver parameter's type without its `null`; `seedable` is true unless
-the strategy is `token`/`seek` and the cursor has neither a zero value (`''`, `0`) nor is
+`stateType` is the driver parameter's type without its `null`; a `seek` walk's `cursorType`
+is its `cursor.field`'s own type on one row, so a backend parses a raw row value in the
+row's timestamp format when it differs from the bound's (`seek_cursor_format`); `seedable` is true unless
+the strategy is `token` and the cursor has neither a zero value (`''`, `0`) nor is
 required on the single call. `sizeDefault` is the size property's own `default`.
 
 ## How the Python backend uses it
@@ -149,7 +153,8 @@ gives each child's attribute name, kind and class, `core` which declared base co
 it, and `cores[core]` how (`forward`, `params`, `children`). `schemas` gives every shared
 scope's types, keyed by the directory that owns them. Identifiers Truewire invents
 (`class`, `rootClass`) are PascalCase and language-neutral; identifiers the API invented
-(`fields[].wire`, `driver`, `size`) are verbatim.
+(`fields[].wire`, `driver`, `size`) are verbatim. A router child's `class` is the one its
+`router.json` declares when it declares one (`docs/spec/authoring.md` rule 14).
 
 The tests in `packages/truewire/test/test_plan.py` pin the GitHub example's plan as
 `test/fixtures/plans/github.json`, so a change to the shape is a visible diff.
@@ -165,8 +170,11 @@ The tests in `packages/truewire/test/test_plan.py` pin the GitHub example's plan
 - Python-side naming: which request fields are positional (`_flat_request_kwargs`),
   identifier sanitising (`safe_identifier`), and an endpoint class renamed to dodge an
   imported name (`Any`, `Literal`, ...) rather than a type in its module.
-- gRPC endpoints and OpenAPI-shaped (not yet migrated) endpoints are not planned; the
-  Python backend keeps its own path for both.
+- OpenAPI-shaped (not yet migrated) endpoints are not planned; the Python backend keeps
+  its own path for them. gRPC endpoints are planned (`kind: grpc`, a `grpc` block with the
+  service, messages, request fields and pagination paths resolved through `spec/proto/`,
+  ADR 0017); the Python backend still renders them from betterproto2 introspection rather
+  than from that block.
 - `auth` is reserved (architecture review, item 4) and always `null`: no spec field
   declares it yet.
 - **Integer width and signedness.** `scalar{base: "integer"}` carries no range and no

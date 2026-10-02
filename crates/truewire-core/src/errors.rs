@@ -4,8 +4,9 @@
 //! `@truewire/core`'s classes: transport failures ([`Error::Network`]), replies that do not
 //! match their declared shape ([`Error::Validation`]), errors the API returned
 //! ([`Error::Api`], carrying the wire status and body and a [`ApiKind`] of `Api`,
-//! `BadRequest`, `Auth` or `RateLimited`) and SDK-side bugs ([`Error::Logic`]). Every
-//! variant is a sibling: matching on `Error::Api` never swallows a dropped connection.
+//! `BadRequest`, `Auth` or `RateLimited`) and SDK-side bugs or calls the SDK refuses before
+//! sending ([`Error::Logic`]). Every variant is a sibling: matching on `Error::Api` never
+//! swallows a dropped connection.
 //!
 //! Each error carries a string [`code`](Error::code) equal to the TypeScript runtime's
 //! `ErrorCode`, so a log line or a foreign boundary can name the kind without the type.
@@ -30,7 +31,8 @@ pub enum Error {
     Validation(ValidationError),
     /// An error the API returned.
     Api(ApiError),
-    /// Invalid assumptions, logic, or other bugs on the SDK side.
+    /// Invalid assumptions, logic, or other bugs on the SDK side, and calls the SDK refuses
+    /// before sending anything (a walk given parameters the venue refuses together).
     Logic(LogicError),
 }
 
@@ -83,7 +85,8 @@ pub struct ApiError {
     pub source: Option<Source>,
 }
 
-/// Logic error: invalid assumptions, logic, or other bugs on the SDK side.
+/// Logic error: invalid assumptions, logic, or other bugs on the SDK side, and calls the SDK
+/// refuses before sending anything (a walk given parameters the venue refuses together).
 #[derive(Debug, Clone, Default)]
 pub struct LogicError {
     pub message: String,

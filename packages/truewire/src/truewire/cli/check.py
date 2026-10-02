@@ -1,11 +1,11 @@
 import json
-from copy import deepcopy
 from pathlib import Path
 from typing_extensions import Any
 
 import typer
 
-from truewire.project import Project, spec_dir as project_spec_dir
+from truewire.project import Project, resolve, spec_dir as project_spec_dir
+from truewire.spec.inventory import load_inventory
 from truewire.spec import (
   StreamEnvelopeSpec,
   endpoint_records,
@@ -20,11 +20,59 @@ from truewire.spec import (
 from .common import PATH_OPTION, PROJECT_OPTION, resolve_spec_scope
 from truewire.spec.authoring import (
   RULE_HEADINGS, WARNING_RULES, audit, check_meta, check_mixed_leaf_router,
-  check_router_names, check_schema_cycles, severity,
+  check_root_router_class, check_router_loads, check_router_names, check_schema_cycles,
+  severity,
 )
 
 max_samples = 5
 """Offending locations shown per rule before the remainder collapses into a count."""
+
+
+def unanswered_subscribes(endpoint_path: Path, endpoint_data: dict[str, Any]) -> list[str]:
+  """Ids of a stream endpoint's subscribe examples the mock would answer with nothing.
+
+  An example sends a subscribe frame unless its endpoint declares `push` (rule 11: no frame
+  of its own). The mock replies with the recorded `<id>.reply.json`, and only synthesizes
+  a generic `{type: 'ack'}` for an `envelope.channel` dialect; any other subscribe with no
+  recording is met with silence, and a core that waits for its ack (Kraken's `req_id`
+  correlated one) hangs in every language's replay. A recorded literal `null` is the
+  explicit "this API sends no ack" and is not reported.
+
+  Args:
+    endpoint_path: The endpoint's `endpoint.json`.
+    endpoint_data: Its parsed contents.
+  """
+  if endpoint_data.get('push') is not None:
+    return []
+  if (endpoint_data.get('envelope') or {}).get('channel') is not None:
+    return []
+  examples_dir = endpoint_path.parent / 'examples'
+  suffix = '.parameters.json'
+  return sorted(
+    path.name[: -len(suffix)]
+    for path in examples_dir.glob(f'*{suffix}')
+    if not (examples_dir / f'{path.name[: -len(suffix)]}.reply.json').exists()
+  )
+
+
+def unknown_refusals(root: Path | Project) -> list[str]:
+  """The `[policy].refuse` ids that name no endpoint in the project's spec, in file order.
+
+  An id is an endpoint's function path (`account.withdraw`), the same name `truewire
+  capture` takes. A refusal of an endpoint that does not exist refuses nothing, so a typo
+  here would leave the endpoint it meant callable.
+
+  Args:
+    root: Project (or project root); the whole spec is read, whatever scope `check` runs over.
+  """
+  project = resolve(root)
+  if not project.policy.refuse:
+    return []
+  spec_root = project.spec_dir
+  functions = {
+    record.endpoint.resolved_function(record.path, spec_root) for record in endpoint_records(project)
+  }
+  return [function for function in project.policy.refuse if function not in functions]
 
 
 def report_authoring(
@@ -51,6 +99,11 @@ def report_authoring(
   backend sections: it runs here with no `language`, so the gate judges the declared
   client name of every backend the project declares at once, where
   `truewire generate <language>`'s own refusal narrows it to the one being generated.
+  `check_router_loads` (rule 14) runs before both of the `router.json` readers: a file that
+  does not load is reported as a finding, and `check_meta`/`check_router_names` are not
+  run (and say so) until it does, instead of the first of them raising on it. Rule 14's
+  other finding, a `class` on the root `router.json`, is a file that loads, so it holds
+  back neither.
 
   Args:
     root: Project (or project root).
@@ -85,9 +138,13 @@ def report_authoring(
       grouped.setdefault(violation['rule'], []).append(
         f'{function}  {violation["location"]}: {violation["message"]}'
       )
+  # `check_meta` and `check_router_names` both read every `router.json`; a file that does
+  # not load is reported once, here, and those two wait until it does.
+  unloadable = check_router_loads(root)
   for violation in [
-    *check_mixed_leaf_router(root), *check_meta(root), *check_schema_cycles(root),
-    *check_router_names(root),
+    *unloadable, *check_root_router_class(root), *check_mixed_leaf_router(root),
+    *check_schema_cycles(root),
+    *([] if unloadable else [*check_meta(root), *check_router_names(root)]),
   ]:
     if severity(violation) == 'error':
       errors += 1
@@ -102,6 +159,11 @@ def report_authoring(
   typer.echo(f'  pagination  {paginated}')
   typer.echo(f'  violations {errors}')
   typer.echo(f'  warnings   {warnings}')
+  if unloadable:
+    typer.echo(
+      '  not run    meta and rule 18 (router names), until every router.json loads',
+      err=True,
+    )
   if not errors and not warnings:
     return 0
 
@@ -157,37 +219,14 @@ def check(
   """
   from jsonschema import Draft202012Validator
   from jsonschema.exceptions import ValidationError
+
+  from truewire.spec.validation import http_response_schema, response_json_schema, validator_for
   from referencing.exceptions import Unresolvable
 
   max_errors_per_file = 20
 
   class TestError(Exception):
     pass
-
-  def rewrite_refs(obj: Any) -> Any:
-    if isinstance(obj, dict):
-      out: dict[str, Any] = {}
-      for key, value in obj.items():
-        if key == '$ref' and isinstance(value, str) and not value.startswith('#/'):
-          out[key] = f'#/$defs/{value}'
-        else:
-          out[key] = rewrite_refs(value)
-      return out
-    if isinstance(obj, list):
-      return [rewrite_refs(value) for value in obj]
-    return obj
-
-  def response_json_schema(response: dict[str, Any]) -> dict[str, Any] | None:
-    content = response.get('content')
-    if not isinstance(content, dict):
-      return None
-    media = content.get('application/json')
-    if not isinstance(media, dict):
-      return None
-    schema = media.get('schema')
-    if not isinstance(schema, dict):
-      return None
-    return schema
 
   def has_protobuf_content(response: dict[str, Any]) -> bool:
     """Return whether the response declares Protobuf wire content."""
@@ -223,25 +262,6 @@ def check(
     except Unresolvable as exc:
       return [ValidationError(f'unresolvable $ref: {exc}')]
 
-  def validator_for(
-    schema: dict[str, Any], shared_schemas: dict[str, Any]
-  ) -> Draft202012Validator:
-    defs: dict[str, Any] = {}
-
-    def assign_def(key: str, value: Any):
-      parts = key.split('/')
-      node = defs
-      for part in parts[:-1]:
-        node = node.setdefault(part, {})
-      node[parts[-1]] = rewrite_refs(value)
-
-    root = deepcopy(rewrite_refs(schema))
-    root.setdefault('$schema', 'https://json-schema.org/draft/2020-12/schema')
-    for key, value in shared_schemas.items():
-      assign_def(key, value)
-    root['$defs'] = defs
-    return Draft202012Validator(root)
-
   def http_examples(endpoint_path: Path) -> list[Path]:
     examples_dir = endpoint_path.parent / 'examples'
     if not examples_dir.is_dir():
@@ -265,30 +285,16 @@ def check(
   ) -> list[str]:
     example = response_example_payload(example_path)
     spec = endpoint_data['spec']
-    status = str(example['status'])
     # The recorded body, validated whole: the response schema describes the wire frame
     # and a declared `envelope.payload` only selects the returned value inside it (ADR
     # 0010) -- nothing to extract before validating.
     payload = example['payload']
 
-    # A migrated endpoint carries `request`/`response` directly -- one schema
-    # for the whole 2xx reply, no per-status `openapi.responses` map to look a status code
-    # up in at all. Mirrors the identical dual-shape branch `truewire.spec.authoring`'s
-    # own checks already take (`spec.request if spec.request is not None else
-    # spec.parameters`) -- not a new mechanism, just this checker catching up to it.
-    new_shape = spec.get('request') is not None or spec.get('response') is not None
-    if new_shape:
-      schema = spec.get('response')
-      if schema is None:
-        return [f'{example_path}: endpoint declares no `response` schema']
-    else:
-      responses = spec['openapi'].get('responses', {})
-      if status not in responses:
-        return [f'{example_path}: status {status} not present in endpoint responses']
-
-      schema = response_json_schema(responses[status])
-      if schema is None:
-        return [f'{example_path}: response {status} has no application/json schema']
+    # A migrated endpoint carries `request`/`response` directly -- one schema for the
+    # whole 2xx reply; a legacy one looks the recorded status up in `openapi.responses`.
+    schema, missing = http_response_schema(spec, example['status'])
+    if schema is None:
+      return [f'{example_path}: {missing}']
 
     validator = validator_for(schema, shared_schemas)
     errors = schema_errors(validator, payload)
@@ -308,27 +314,33 @@ def check(
     new_shape = (
       spec.get('request') is not None or spec.get('response') is not None
       or spec.get('parameters') is not None or spec.get('payload') is not None
+      or spec.get('reply') is not None
     )
     if new_shape:
       if spec['kind'] == 'stream':
-        # A migrated `stream` endpoint's subscribe acknowledgement has no schema of its
-        # own any more (`StreamEndpointSpec` carries `request`/`parameters`/`payload`
-        # only, replacing the legacy `openapi.responses.reply` slot) --
-        # nothing left to validate a recorded `.reply.json` ack frame against.
-        return []
-      schema = spec.get('response')
-      if schema is None:
-        # docs/spec/authoring.md rule 11's "no-reply RPC" case (an `authenticate`
-        # command that is never answered, say): a genuinely no-reply rpc
-        # command (`spec.response: null`) records its own reply example as the literal
-        # JSON `null`, matching `truewire.mock`'s own `after_rpc` dispatch
-        # (`example.reply is None` -- "sends nothing back on the wire"), not a spec-
-        # authoring gap. Any other recorded payload on a response-less endpoint still
-        # errors -- there is nothing declared for it to validate against.
-        payload = json.loads(example_path.read_text())
-        if payload is None:
+        # A migrated `stream` endpoint's subscribe acknowledgement is typed by its own
+        # optional `reply` schema (ADR 0014, the request/response-shape rewrite of the
+        # legacy `openapi.responses.reply` slot). One that declares none has nothing to
+        # validate a recorded `.reply.json` ack frame against, and passes as before. A
+        # recorded literal `null` states the API sends no ack at all (rule 11), the same
+        # convention as a no-reply rpc below, and is not a frame to validate either.
+        schema = spec.get('reply')
+        if schema is None or json.loads(example_path.read_text()) is None:
           return []
-        return [f'{example_path}: endpoint declares no `response` schema']
+      else:
+        schema = spec.get('response')
+        if schema is None:
+          # docs/spec/authoring.md rule 11's "no-reply RPC" case (an `authenticate`
+          # command that is never answered, say): a genuinely no-reply rpc
+          # command (`spec.response: null`) records its own reply example as the literal
+          # JSON `null`, matching `truewire.mock`'s own `after_rpc` dispatch
+          # (`example.reply is None` -- "sends nothing back on the wire"), not a spec-
+          # authoring gap. Any other recorded payload on a response-less endpoint still
+          # errors -- there is nothing declared for it to validate against.
+          payload = json.loads(example_path.read_text())
+          if payload is None:
+            return []
+          return [f'{example_path}: endpoint declares no `response` schema']
     else:
       responses = spec['openapi'].get('responses', {})
       if 'reply' not in responses:
@@ -374,6 +386,7 @@ def check(
     new_shape = (
       spec.get('request') is not None or spec.get('response') is not None
       or spec.get('parameters') is not None or spec.get('payload') is not None
+      or spec.get('reply') is not None
     )
     if new_shape:
       schema = spec.get('payload')
@@ -466,6 +479,9 @@ def check(
   client = loaded.name
   try:
     root = loaded
+    _, inventory_errors = load_inventory(root.spec_dir)
+    if inventory_errors:
+      raise TestError('\n'.join(inventory_errors))
     endpoints_root = scoped.endpoints_root
     shared_schemas = load_shared_schemas(root)
 
@@ -501,6 +517,7 @@ def check(
     checked_endpoints = 0
     checked_examples = 0
     failures: list[str] = []
+    missing_acks: list[str] = []
 
     for endpoint_path, data in endpoint_data:
       spec = data.get('spec', {})
@@ -547,6 +564,10 @@ def check(
         replies, messages = ws_examples(endpoint_path)
         if not replies and not messages:
           continue
+        missing_acks.extend(
+          f'{endpoint_path.parent.relative_to(endpoints_root)} :: {example_id}'
+          for example_id in unanswered_subscribes(endpoint_path, data)
+        )
         checked_endpoints += 1
         for example_path in replies:
           checked_examples += 1
@@ -571,6 +592,19 @@ def check(
     typer.echo(f'  files      {checked_examples}')
     typer.echo(f'  errors     {len(failures)}')
 
+    if missing_acks:
+      # A warning, not an error, while the corpus catches up (the same staging
+      # `WARNING_RULES` uses). See `docs/spec/authoring.md` rule 11.
+      typer.echo()
+      typer.echo(
+        f'Missing subscribe acks ({len(missing_acks)}, warning): a subscribe example with no '
+        '`<id>.reply.json` gets no reply from the mock, so a client core waiting for its ack '
+        'hangs. Record the ack, add a documented one, or record `null` if the API sends none '
+        '(docs/spec/authoring.md rule 11).'
+      )
+      for missing in missing_acks:
+        typer.echo(f'  {missing}')
+
     if failures:
       typer.echo()
       typer.echo('Validation errors:', err=True)
@@ -579,9 +613,16 @@ def check(
 
     typer.echo()
     violations = report_authoring(root, client, verbose=verbose, scope=scoped.scope)
+    refusals = unknown_refusals(root)
+    if refusals:
+      typer.echo()
+      typer.echo('Policy errors:', err=True)
+      for function in refusals:
+        typer.echo(f'  [policy].refuse names {function!r}, which is no endpoint in the spec', err=True)
     typer.echo()
-    typer.echo(f'Result: {"FAILED" if failures or violations else "OK"}')
-    if failures or violations:
+    failed = bool(failures or violations or refusals)
+    typer.echo(f'Result: {"FAILED" if failed else "OK"}')
+    if failed:
       raise typer.Exit(code=1)
   except TestError as exc:
     typer.echo(str(exc), err=True)

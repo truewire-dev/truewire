@@ -1,0 +1,66 @@
+{
+  "meta": {},
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/ledger",
+    "method": "GET",
+    "description": "Ledger rows by a string id, newest first, no far bound.",
+    "request": {
+      "title": "LedgerRequest",
+      "type": "object",
+      "properties": {
+        "idLessThan": {
+          "type": "string"
+        },
+        "limit": {
+          "type": "integer"
+        }
+      }
+    },
+    "response": {
+      "title": "Ledger",
+      "type": "object",
+      "properties": {
+        "rows": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "title": "LedgerRow",
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "amount": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "pagination": {
+    "strategy": "seek",
+    "cursor": {
+      "field": "[-1].id",
+      "unique": true
+    },
+    "bound": {
+      "end": "idLessThan"
+    },
+    "anchor": "end",
+    "size": {
+      "parameter": "limit"
+    },
+    "rows": "rows"
+  }
+}

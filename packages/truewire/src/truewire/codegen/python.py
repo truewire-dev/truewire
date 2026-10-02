@@ -22,7 +22,7 @@ from types import UnionType
 
 from truewire.generation.openapi import BODY_KEY, PARAMETER_KEY, RESPONSE_KEY, normalize_schemas
 from truewire.generation.python import TypeGenerator, Parser, Renderer
-from truewire.generation.python.types.parser import TYPES_PACKAGE
+from truewire.generation.python.types.parser import TIMESTAMP_FORMATS as TIMESTAMP_ALIASES, TYPES_PACKAGE
 from truewire.generation.python.code import Docstring, Function, HttpRequest, self_shadowing_alias
 from truewire.generation.python.code.functions import group_lines
 from truewire.generation.python.code.imports import Imports as ImportsRenderer
@@ -31,33 +31,61 @@ from truewire.generation.types import ExternalReference, Imports, RenderedTypes,
 from truewire.generation.schema import Operation, Reference, ResolutionError, Schema, ensure_nonref
 from truewire.generation.util import indent, snake_case
 
-from truewire.codegen.layout import class_name as router_class_name
+from truewire.codegen.layout import group_class_name
+from truewire.codegen.policy import POLICY_MODULE, http_policy_lines
+from truewire.codegen.seek import exclusive_sentences
 from truewire.plan.build import (
   PlanBuilder, channel_direct_params, connect_channel_param, direct_channel_scalar,
-  driver_parameter,
 )
 from truewire.plan.model import EndpointPlan, PackagePlan
-from truewire.plan.types import Type as PlanType
+from truewire.plan.types import Type as PlanType, seek_cursor_format
 from truewire.project import Project
 from truewire.spec import (
   Endpoint, GrpcEndpointSpec, Pagination, RouterDoc, RpcEndpointSpec, RpcEnvelopeSpec,
-  StreamEndpointSpec, TokenPagination, WindowOverlap, WindowPagination, last_row_field,
+  SeekExclusive, StreamEndpointSpec, last_row_field,
   load_router, load_shared_schemas, path_segments, select_schema,
 )
 from truewire.spec.codegen_toml import CodegenConfig, PythonCoreConfig
+from truewire.spec.endpoint import last_row_field_prose, seek_move_prose
 from truewire.spec.request import PLACEHOLDER
+
+
+def raw_paged_return_type(return_type: str) -> str:
+  """Swap a `PaginatedResponse[Rows, State]` annotation's row type for `Any`.
+
+  The `validate=False` overload of a `_paged` walker yields raw rows. The row type can
+  itself hold a top-level comma inside brackets (`dict[str, Any]`), so the split is
+  bracket-aware rather than at the first `, `.
+
+  Args:
+    return_type: The walker's rendered return annotation.
+  """
+  prefix = 'PaginatedResponse['
+  if not return_type.startswith(prefix):
+    return return_type
+  depth = 0
+  for index in range(len(prefix), len(return_type)):
+    char = return_type[index]
+    if char == '[':
+      depth += 1
+    elif char == ']':
+      depth -= 1
+    elif char == ',' and depth == 0:
+      return prefix + 'Any' + return_type[index:]
+  return return_type
 
 PAGED_SUFFIX = '_paged'
 """Suffix separating a generated page iterator from the single-request method it drives."""
 PAGED_CALL_NAME = 'paged'
 """Name a page iterator takes when the method it drives is its class's `__call__`."""
-PAGED_IMPORTS: Mapping[str, set[str]] = {'typing_extensions': {'AsyncIterator'}}
-"""Imports a generated module needs once it carries a page iterator."""
-PAGED_TRUNCATION_IMPORTS: Mapping[str, set[str]] = {'truewire_core.exceptions': {'LogicError'}}
-"""Imports a generated module needs once a window walk carries its truncation guard, or a
-`seek` walk carries `pagination.overlap`'s order-stability/full-page raises."""
-PAGED_TRUNCATION_PARAM = 'allow_truncation'
-"""Keyword that lets a caller keep a window walk running past rows the API withheld."""
+PAGED_IMPORTS: Mapping[str, set[str]] = {
+  'truewire_core': {'PaginatedResponse'}, 'typing_extensions': {'Sequence'},
+}
+"""Imports a generated module needs once it carries a page method (ADR 0021: every one is
+`PaginatedResponse`-shaped)."""
+PAGED_LOGIC_ERROR_IMPORTS: Mapping[str, set[str]] = {'truewire_core.exceptions': {'LogicError'}}
+"""Imports a generated module needs once a `seek` walk carries its full-page-one-key or
+carried-row-missing raises."""
 VALIDATE_PARAM = 'validate'
 """Keyword every request/reply method takes to override the client's response validation."""
 VALIDATE_OVERLOAD_IMPORTS: Mapping[str, set[str]] = {
@@ -76,21 +104,6 @@ CHANNEL_PLACEHOLDER = PLACEHOLDER
 """Placeholder in a channel template, filled from an `in: 'path'` parameter."""
 STREAM_PAYLOAD_KEY = '$stream/payload'
 """Reference id under which a subscription's payload schema is rendered."""
-TIMESTAMP_TICKS: Mapping[str, str] = {
-  'TimestampSeconds': 'seconds',
-  'TimestampMillis': 'milliseconds',
-  'TimestampMicros': 'microseconds',
-}
-"""Timestamp render id -> the `timedelta` keyword naming one wire tick of that unit.
-
-`paged_overlap_seek`'s fallback cursor advance (`cursor += 1`) assumes an arithmetic
-cursor, which does not hold for a `seek`+`overlap` cursor declared with a timestamp
-`format` (rule 3/S7) -- there the generated cursor is a `datetime` and `+= 1` is not
-arithmetic. Time-cursored endpoints (`funding_history`, `user_fills_by_time`) are the
-real case this generalizes from. `TimestampNanos`/`TimestampIso`/`DateIso` have no fixed-duration `timedelta`
-equivalent a generic single-tick advance could express, so they're not covered."""
-
-
 _SCALAR_ZERO_VALUES: Mapping[str, str] = {
   'bytes': "b''", 'str': "''", 'int': '0', 'bool': 'False', 'float': '0.0',
 }
@@ -405,6 +418,37 @@ def subtree_transport(
     return 'ws'
   return 'mixed'
 
+TYPE_CAST_ALIAS_RE = re.compile(r'^\w+\s*=\s*(Literal\[|Any\s*$)')
+
+def needs_type_cast(defn: str | None) -> bool:
+  """Whether a rendered type definition is a bare `Literal[...]`/`Any` alias -- not a
+  real class -- which pyright refuses to accept where a `type[T] | UnionType | None`
+  argument is expected: `type[Literal[...]]`/`type[Any]` matches neither `type[T]` nor
+  `UnionType` when the module only ever binds it to a plain module-level `{name} = ...`
+  assignment (rather than, say, a genuine class definition). A genuine union of real
+  classes/records (`A | B`) is unaffected -- the `UnionType` branch already accepts that
+  fine -- so this only fires for these two narrower alias shapes.
+
+  Confirmed live: bybit's `spot_margin.fixedborrow.renew`
+  (`Response = Literal['Success', 'Failure']`) and kucoin's `spot.orders_hf.
+  cancel_all_by_symbol`/`margin.orders_hf.cancel_all_by_symbol` (`Response =
+  Literal['success']`) for the `Literal` case; kucoin's `streams.futures_private.
+  order`/`all_orders` (`Payload = Any`, an undocumented push payload) for the `Any`
+  case -- both hit this once `response_type=Response`/`response_type=Payload` is passed
+  straight through to `core.request()`/`core.subscribe()` (design §7's own "generated
+  code passes bare types" rule). The generated call wraps the value in `cast(type,
+  ...)` at the call site instead of a `# type: ignore` comment -- `group_lines` packs
+  multiple call arguments onto one physical line, and a trailing comment would silently
+  swallow whatever else shares that line.
+
+  Args:
+    defn: The rendered definition text for this type's own id (`types.definitions.get
+      (id)`), or `None` when it resolved externally (an already-rendered shared schema,
+      or a bare `$ref` response) -- never a bare-Literal/Any alias either way.
+  """
+  return defn is not None and bool(TYPE_CAST_ALIAS_RE.match(defn.strip()))
+
+
 def _fstring_literal(text: str) -> str:
   """Escape one literal (non-placeholder) segment of a `channel` template for splicing
   into a single-quoted f-string source (`Generator.channel_expr`'s default rendering) --
@@ -487,6 +531,12 @@ class Generator:
   `schemas()` call -- the base implementation then falls back to root scope (`()`).
   """
 
+  refusing: str | None = None
+  """The function path of the endpoint `endpoint()` is rendering when `[policy].refuse`
+  names it (W15), else `None`: set around each `rpc_endpoint`/`stream_endpoint`/
+  `grpc_endpoint` call, the `router_context`-style stash, so each one puts `refusal()`'s
+  decorator above its class without a new parameter a legacy override would not accept."""
+
   plan: PackagePlan | None = None
   """The whole package's plan (`truewire.plan.build.build_plan`), attached by the CLI once
   per run. `rpc_endpoint`/`stream_endpoint` read their endpoint's decisions from it --
@@ -494,6 +544,14 @@ class Generator:
   every pagination fact -- instead of re-deriving them from rendered strings. `None` for a
   `Generator` built outside the CLI (a unit test, say): `endpoint_plan` then computes the
   one endpoint's plan on demand from `project`."""
+
+  def refusal(self) -> tuple[list[str], Imports]:
+    """`@refused(...)` for the class of the endpoint being rendered, and its import, when
+    `[policy].refuse` names it (`refusing`); nothing otherwise. The decorator makes every
+    public method raise the package's `RefusedByPolicy` before any request."""
+    if self.refusing is None or self.project is None:
+      return [], {}
+    return [f'@refused({self.refusing!r})'], {f'{self.project.package_name}.{POLICY_MODULE}': {'refused'}}
 
   def endpoint_plan(self, endpoint: Endpoint, endpoint_dir: Path) -> EndpointPlan:
     """This endpoint's plan: looked up on the attached `plan` by function path, or
@@ -525,11 +583,6 @@ class Generator:
     -- the same renderer every `Request`/`Response` field goes through, so a cursor's
     seed type reads exactly as its parameter's annotation does."""
     return self.type_generator().render.code(type).iden
-
-  _cursor_render_id: str | None = None
-  """Set for the duration of one `paged_overlap_seek` call, to the seek cursor's rendered
-  timestamp type (`'TimestampMillis'`, ...) when it has one -- see `row_field_expression`'s
-  own timestamp-normalizing branch below, and `TIMESTAMP_TICKS`."""
 
   def router_doc(self, section: str) -> RouterDoc | None:
     """
@@ -790,6 +843,8 @@ class Generator:
     for pkg in sorted(imports):
       if imports[pkg]:
         lines.append(f'from {pkg} import {", ".join(sorted(imports[pkg]))}')
+      else:
+        lines.append(f'import {pkg}')
     lines.append('')
     lines.append('')
     for def_id in rendered.generation_order:
@@ -1054,12 +1109,20 @@ class Generator:
       return schemas
     if isinstance(spec, StreamEndpointSpec):
       parameters_raw = spec.parameters if spec.parameters is not None else spec.request
-      if parameters_raw is not None or spec.payload is not None:
+      if spec.new_shape:
         schemas = {}
         if parameters_raw is not None:
           schemas['$parameters'] = Schema.model_validate(parameters_raw).model_copy(update={'title': None})
         if spec.payload is not None:
           schemas['$payload'] = Schema.model_validate(spec.payload)
+        if spec.reply is not None:
+          # A bare `$ref` stays a reference (ADR 0022): `Schema.model_validate` would read
+          # it as an empty, untyped schema, invisible to the collision check this feeds.
+          schemas['$reply'] = (
+            Reference.model_validate(spec.reply)
+            if isinstance(spec.reply, dict) and set(spec.reply) == {'$ref'}
+            else Schema.model_validate(spec.reply)
+          )
         return schemas
     # A dual-transport rpc (`transports: ['http', 'ws']`) is representable, but not yet
     # handled here: the first matching branch returns, so an http-and-ws endpoint only
@@ -1185,23 +1248,29 @@ class Generator:
     Args:
       pagination: Declaration carried by the endpoint.
     """
-    return driver_parameter(pagination)
+    if pagination.strategy == 'page':
+      return pagination.index.parameter
+    if pagination.strategy == 'token':
+      return pagination.cursor.parameter
+    if pagination.strategy == 'seek':
+      return pagination.moving
+    return pagination.offset.parameter
 
   def pagination_driver_required(
     self, header: 'Function', pagination: Pagination,
   ) -> bool:
-    """Whether a `token`/`seek` walk's cursor parameter is required on the
-    single-request method (no server-side default), the way `paged_method` and
-    `paged_response_seek`/`paged_response_method`'s own `token` branch each decide it
-    independently -- factored out here so a dispatch site deciding whether an endpoint
+    """Whether a `token` walk's cursor parameter is required on the single-request
+    method (no server-side default), the way `paged_response_token` decides it --
+    factored out here so a dispatch site deciding whether an endpoint
     is `PaginatedResponse`-*seedable* (`rpc_endpoint`/`grpc_endpoint`'s own `seedable`
     gate) can ask the identical question before ever calling into either.
 
     `False` for every other strategy: `page`/`offset` seed from `pagination.index.start`
     or `0`, never ambiguous with "done" the way an absent `token`/`seek` cursor is, so
-    neither needs this question asked at all. A `token` endpoint whose `end_timestamp`
-    is required, and a `seek` endpoint whose `start_timestamp` is, are the real,
-    motivating cases.
+    neither needs this question asked at all. deribit's `market_data.
+    get_volatility_index_data` (`token`, `end_timestamp` required) and its
+    `get_mark_price_history`/`get_funding_rate_history` (`seek`, `start_timestamp`
+    required) are the real, motivating cases.
 
     Args:
       header: Rendered header of the single-request method the walk drives, *before* any
@@ -1210,7 +1279,7 @@ class Generator:
         own scope note).
       pagination: Declaration carried by the endpoint.
     """
-    if pagination.strategy not in ('token', 'seek'):
+    if pagination.strategy != 'token':
       return False
     driver = self.identifier(self.pagination_driver(pagination))
     driver_param = next(
@@ -1224,8 +1293,8 @@ class Generator:
   ) -> str:
     """Resolve the bare (non-`| None`) rendered type of a paginated endpoint's cursor
     parameter, for `paged_response_method`'s `state_type` -- a `token`/`seek` cursor is
-    not always a string: a `get_trade_history` `lastId` may be a genuine `integer`
-    cursor, confirmed against a
+    not always a string: kucoin's `spot.orders_hf.get_trade_history`/`margin.orders_hf.
+    get_trade_history` (`lastId`) is a genuine `integer` cursor, confirmed against a
     real generation failure (the caller's own correctly-`int`-typed `last_id` keyword
     rejected by a `_paged` loop hardcoded to `state: str = ...`). Falls back to `'str'`
     when the driver parameter can't be resolved on `header` at all (a stream-derived or
@@ -1237,9 +1306,8 @@ class Generator:
     (`flatten_nested_pagination`'s own shape) when the cursor is a dotted reference into
     a single nested request parameter (`_nested_pagination_ref`) -- `header` never carries
     a real parameter named `pagination.key`, only the outer `pagination` group's own
-    (wrapper-typed) parameter, which is the wrong type entirely for the inner field.
-    Cosmos-SDK-style gRPC `token`/`absent_cursor` endpoints are the motivating case: `key`
-    is a `bytes`
+    (wrapper-typed) parameter, which is the wrong type entirely for the inner field. dYdX's
+    gRPC `token`/`absent_cursor` endpoints are the motivating case: `key` is a `bytes`
     field nested inside `cosmos.base.query.v1beta1.PageRequest`, not the group's own
     `PageRequest | None` type `header` would otherwise resolve to.
 
@@ -1266,21 +1334,22 @@ class Generator:
   def paged_window_bound(
     self, expression: str, *, unit: str, param: 'Function.Param',
   ) -> tuple[str, bool]:
-    """Return the expression that reduces a window bound to the number the API takes,
+    """Return the expression that reduces a `seek` bound to the number the venue takes,
     and whether that expression is still a `datetime`.
 
-    A window walk subtracts its bounds from each other, so a project whose timestamp
-    parameters also accept a `datetime` overrides this to normalise them first —
-    `datetime - int` is not arithmetic. The unit is passed because an API that bounds in
-    seconds and one that bounds in milliseconds need different conversions.
+    A `seek` walk declaring a `span` adds the span to its moving bound, so a client whose
+    timestamp parameters also accept a `datetime` overrides this to normalise them first
+    (`datetime + int` is not arithmetic). The unit is passed because a venue that bounds
+    in seconds and one that bounds in milliseconds need different conversions.
 
     The second element of the return is not decoration: it is the one place a backend
-    states what the loop variable ends up being, and `paged_step_expression` reads it
-    from here rather than re-deriving it from `param.type`. A bound normalised to an
-    integer here and a step still rendered as `timedelta(...)` is a `TypeError` at
-    runtime — a real project hit exactly this — and the two cannot say different things because
-    there is only one place either of them is said. **An override that normalises a
-    `datetime` bound to a number must return `False`, not the declared type.**
+    states what the loop variable ends up being, and `paged_response_seek` renders the
+    span as a `timedelta(...)` or a bare count from it rather than re-deriving it from
+    `param.type`. A bound normalised to an integer here and a span still rendered as
+    `timedelta(...)` is a `TypeError` at runtime, and the two cannot say different
+    things because there is only one place either of them is said. **An override that
+    normalises a `datetime` bound to a number must return `False`, not the declared
+    type.**
 
     Args:
       expression: Expression holding the bound as the caller passed it.
@@ -1295,126 +1364,6 @@ class Generator:
 
   _TIMEDELTA_UNITS = {'us': 'microseconds', 'ms': 'milliseconds', 's': 'seconds'}
   """`pagination.step.unit` code -> the `timedelta` keyword it names."""
-
-  def paged_step_expression(
-    self, step: int, *, unit: str, is_datetime: bool,
-  ) -> str:
-    """Render the amount a window walk adds to clear the edge it just covered.
-
-    A window bounded by integers steps by a bare count of the API's own ticks. A window
-    bounded by `datetime` steps by a `timedelta`, because `datetime + 1` is not arithmetic —
-    which is why the declaration carries a unit at all.
-
-    `is_datetime` is the second element `paged_window_bound` returned for this bound, not
-    `param.type` — a backend that normalises the bound to an integer there has already
-    made this decision, and asking the declared type again here is exactly how the two
-    fell out of sync before.
-
-    Args:
-      step: Ticks between one window's edge and the next window's.
-      unit: Unit the declaration states the bounds in.
-      is_datetime: Whether the bound `paged_window_bound` produced is still a `datetime`.
-    """
-    if not is_datetime:
-      return str(step)
-    return f'timedelta({self._TIMEDELTA_UNITS[unit]}={step})'
-
-  def paged_window(
-    self, pagination: WindowPagination, *,
-    method_name: str, parameters: list['Function.Param'], taken: Container[str],
-  ) -> tuple[list[str], list[str], dict[str, str]]:
-    """Emit the setup and advance of a time-window walk, and the bounds it rebinds.
-
-    The walk is arithmetic on the request bounds and nothing else: it keeps the width the
-    caller's own window states and moves that window along, one step past the edge it just
-    covered. The step is declared rather than assumed to be one, because an API whose far
-    bound is inclusive re-reads the boundary row unless the next window clears it, and an
-    API whose far bound is exclusive would skip a row if it did.
-
-    Advancing never moves past the bound the caller originally gave: the caller's own far
-    bound (`end` ascending, `start` descending) is captured once, before the loop ever
-    reassigns anything, and every advance checks the freshly-moved window against it --
-    stopping (no further request made) rather than walking on the way the loop used to,
-    unconditionally, until the first empty page. A plain `>`/`<` would under-stop for a
-    API whose far bound is exclusive (`step: 0`): the very next window's near edge then
-    lands exactly *on* the original bound, a value the walk already knows is out of range
-    (it was never returned, by that same exclusivity), not one step past it -- so the
-    check is `>=`/`<=`, which is exactly as strict for an inclusive bound (`step: 1`, where
-    the next edge is always one past, never equal) and correctly stops one step earlier for
-    an exclusive one.
-
-    The bounds are rebound to loop locals rather than reassigned in place, since a
-    parameter typed `datetime | int` cannot hold the integer the arithmetic produces.
-
-    Args:
-      pagination: Declaration carried by the endpoint.
-      method_name: Name of the single-request method the iterator drives.
-      parameters: Header parameters of that method.
-      taken: Names the generated signature already binds.
-
-    Returns:
-      Statements to run before the loop, statements that advance it, and the expression
-      each bound parameter is passed as.
-
-    Raises:
-      ValueError: When a declared bound is not a parameter of the generated method.
-    """
-    names = {
-      'start': self.identifier(pagination.bound.start),
-      'end': self.identifier(pagination.bound.end),
-    }
-    bounds: dict[str, Function.Param] = {}
-    for role, name in names.items():
-      param = next((item for item in parameters if item.name == name), None)
-      if param is None:
-        raise ValueError(
-          f'the window bound `{name}` is not a parameter of `{method_name}`, so the walk '
-          f'has nothing to advance'
-        )
-      bounds[role] = param
-    lower = self.paged_local('lower', taken)
-    upper = self.paged_local('upper', taken)
-    width = self.paged_local('width', taken)
-    limit = self.paged_local('limit', taken)
-    setup: list[str] = []
-    optional = [name for role, name in names.items() if not self.paged_always_set(bounds[role])]
-    if optional:
-      message = (
-        f'`{self.paged_name(method_name)}` walks a time window: pass both '
-        f'`{names["start"]}` and `{names["end"]}`'
-      )
-      setup.append(f'if {" or ".join(f"{name} is None" for name in optional)}:')
-      setup.append(f'  raise ValueError({message!r})')
-    unit = pagination.step.unit
-    lower_expr, lower_is_datetime = self.paged_window_bound(names['start'], unit=unit, param=bounds['start'])
-    upper_expr, _ = self.paged_window_bound(names['end'], unit=unit, param=bounds['end'])
-    setup.append(f'{lower} = {lower_expr}')
-    setup.append(f'{upper} = {upper_expr}')
-    setup.append(f'{width} = {upper} - {lower}')
-    descending = pagination.order == 'descending'
-    # Captured once, from the caller's own literal (post-normalisation) bounds, before the
-    # loop ever reassigns `lower`/`upper` -- the one value every later advance is checked
-    # against, never a since-advanced one.
-    setup.append(f'{limit} = {lower if descending else upper}')
-    step = pagination.step.size
-    step_code = (
-      self.paged_step_expression(step, unit=unit, is_datetime=lower_is_datetime) if step else None
-    )
-    if descending:
-      advance = [
-        f'{upper} = {lower}{f" - {step_code}" if step_code else ""}',
-        f'{lower} = {upper} - {width}',
-        f'if {upper} <= {limit}:',
-        '  break',
-      ]
-    else:
-      advance = [
-        f'{lower} = {upper}{f" + {step_code}" if step_code else ""}',
-        f'{upper} = {lower} + {width}',
-        f'if {lower} >= {limit}:',
-        '  break',
-      ]
-    return setup, advance, {names['start']: lower, names['end']: upper}
 
   def paged_size(
     self, pagination: Pagination, parameters: list['Function.Param'],
@@ -1435,17 +1384,19 @@ class Generator:
     return next((param for param in parameters if param.name == name), None)
 
   def paged_size_default(self, endpoint: Endpoint) -> int | None:
-    """Return the row cap the API applies when the caller sends no page size.
+    """Return the row cap the venue applies when the caller sends no page size.
 
-    Declared, not inferred, like everything else here: an API documenting a default page
+    Declared, not inferred, like everything else here: a venue documenting a default page
     size states it as `default` on the size parameter's own schema. Prose does not reach
-    the generator — one API writes "defaults to 200" in five descriptions and the walk that
+    the generator — bybit writes "defaults to 200" in five descriptions and the walk that
     read only the parameter could not see any of them.
 
-    A migrated endpoint carries this on `endpoint.request`'s own flat
+    A migrated (design §7) endpoint carries this on `endpoint.request`'s own flat
     `properties[pagination.size.parameter]` rather than `endpoint.openapi.parameters` --
-    mirrors every other dual-shape gate in this module (`_one_shape`'s own pattern).
-    Without this, `paged_step` raised `ValueError` for every migrated
+    mirrors every other dual-shape gate in this module (`_one_shape`'s own pattern), just
+    never extended here, since no migrated client declared an `offset`/`total`-terminated
+    pagination needing a size default before kraken's own `spot.account.trades_history`
+    (Task 34) -- without this, `paged_step` raised `ValueError` for every migrated
     endpoint whose walk genuinely needs one, even when the spec correctly declares it.
 
     Args:
@@ -1472,16 +1423,130 @@ class Generator:
       return None
     return None
 
+  def paged_size_maximum(self, endpoint: Endpoint) -> int | None:
+    """Return the largest page size the venue honours, when the size parameter's schema
+    declares a `maximum`.
+
+    A caller may ask for more than the venue serves (`limit=5000` against a 1000-row
+    clamp); the page that comes back is then full at the venue's maximum, not short at the
+    caller's number, and a walk reading it as short would stop with rows left. Same
+    dual-shape lookup as `paged_size_default`.
+
+    Args:
+      endpoint: The endpoint whose module is being generated.
+    """
+    pagination = endpoint.pagination
+    if pagination is None or pagination.size is None:
+      return None
+    request = endpoint.request
+    if request is not None:
+      properties = request.get('properties') if isinstance(request, dict) else None
+      prop = properties.get(pagination.size.parameter) if isinstance(properties, dict) else None
+      maximum = prop.get('maximum') if isinstance(prop, dict) else None
+      return int(maximum) if isinstance(maximum, (int, float)) and maximum == int(maximum) else None
+    operation = endpoint.openapi
+    if operation is None:
+      return None
+    for parameter in operation.parameters or []:
+      if isinstance(parameter, Reference) or parameter.name != pagination.size.parameter:
+        continue
+      schema = parameter.schema_
+      # `Schema.maximum` parses as a float (JSON Schema allows a non-integer bound); a
+      # page size's maximum is a whole number of rows.
+      maximum = schema.maximum if isinstance(schema, Schema) else None
+      if isinstance(maximum, (int, float)) and maximum == int(maximum):
+        return int(maximum)
+      return None
+    return None
+
+  def paged_size_given(self, endpoint: Endpoint, size: 'Function.Param') -> str:
+    """Return the expression for the page size the venue honours when the caller passes
+    one: the caller's own value, clamped to the schema's `maximum` when declared.
+
+    Args:
+      endpoint: The endpoint whose module is being generated.
+      size: Header parameter carrying the page size.
+    """
+    maximum = self.paged_size_maximum(endpoint)
+    return f'min({size.name}, {maximum})' if maximum is not None else size.name
+
+  def paged_seek_size(self, endpoint: Endpoint, size: 'Function.Param | None') -> str | None:
+    """Return the statement that clamps a `seek` walk's page size before the walk starts,
+    or `None` when there is no integer size to clamp.
+
+    The walk sends the clamped value on every request and measures a full page against
+    it (ADR 0013): at most the schema's `maximum`, when declared, and at least 2. A page
+    of 1 cannot advance past a venue whose moving bound is inclusive: it re-serves the
+    boundary row and nothing else, so every page is full and shares one key. A size the
+    caller omits stays omitted.
+
+    Args:
+      endpoint: The endpoint whose module is being generated.
+      size: Header parameter carrying the page size, when one is declared.
+    """
+    if size is None or (size.type or '').removesuffix(' | None') != 'int':
+      return None
+    maximum = self.paged_size_maximum(endpoint)
+    clamped = f'max({size.name}, 2)'
+    if maximum is not None:
+      clamped = f'min({clamped}, {maximum})'
+    if size.required and not (size.type or '').endswith('| None'):
+      return f'{size.name} = {clamped}'
+    return f'{size.name} = {clamped} if {size.name} is not None else None'
+
+  def paged_seek_size_rule(self, endpoint: Endpoint) -> str:
+    """Return the docstring sentence stating the page sizes `paged_seek_size` lets a `seek`
+    walk request.
+
+    A `maximum` below 2 leaves no room for the floor: the walk requests pages of exactly
+    that many rows, and the sentence makes no claim of a floor.
+
+    Args:
+      endpoint: The endpoint whose module is being generated.
+    """
+    maximum = self.paged_size_maximum(endpoint)
+    if maximum is not None and maximum < 2:
+      return f'The walk requests pages of {maximum} row{"" if maximum == 1 else "s"}.'
+    bounds = f'at least 2 rows and at most {maximum}' if maximum is not None else 'at least 2 rows'
+    return (
+      f'The walk requests pages of {bounds}: a page must hold one new row beside the one '
+      f'it re-reads.'
+    )
+
+  def paged_page_size(
+    self, endpoint: Endpoint, size: 'Function.Param | None', *, fallback: str | None = None,
+  ) -> str | None:
+    """Return the expression for the number of rows the venue serves on one call: the
+    caller's own size, clamped to the venue's declared `maximum` when there is one, or
+    `fallback` (a declared default or fixed cap) when the caller omits an optional size.
+
+    Args:
+      endpoint: The endpoint whose module is being generated.
+      size: Header parameter carrying the page size, when one is declared.
+      fallback: Expression for the venue's own page size when the caller sends none, or
+        `None` when nothing declares it.
+
+    Returns:
+      The expression, or `None` when no size parameter is declared and there is no
+      fallback either.
+    """
+    if size is None:
+      return fallback
+    given = self.paged_size_given(endpoint, size)
+    if self.paged_always_set(size) or (fallback is None and given == size.name):
+      return given
+    return f'({given} if {size.name} is not None else {fallback})'
+
   def paged_cap(self, endpoint: Endpoint, size: 'Function.Param | None') -> str | None:
     """Return the row count a full page is full relative to, when the spec settles one.
 
-    The cap is what the API would have returned had it more to give: the caller's own
-    size where the method always sends one, and the API's declared default where the
+    The cap is what the venue would have returned had it more to give: the caller's own
+    size where the method always sends one, and the venue's declared default where the
     caller may omit it. `None` means the spec settles neither — the size is optional and
     no default is declared — and then no guard is generated at all. A guard reading
     `size is not None` would be silent on precisely the call that loses rows, the one that
     passes bounds and no size, so it would buy a promise the docstring could not keep. The
-    fix for such an endpoint is to declare the default the API documents.
+    fix for such an endpoint is to declare the default the venue documents.
 
     Args:
       endpoint: The endpoint whose module is being generated.
@@ -1513,129 +1578,6 @@ class Generator:
     if not helpers:
       return {}
     return {TYPES_PACKAGE: set(helpers)}
-
-  def paged_imports(self, endpoint: Endpoint, *, header: Function) -> Mapping[str, set[str]]:
-    """Return the imports the page iterator this endpoint generates needs.
-
-    A window walk with a page size to measure against raises on truncation, so it needs
-    the exception. A `page`/`offset` walk terminated by `total` always needs it too, now
-    that a missing or disagreeing total raises (`docs/pagination.md` §4) rather than
-    silently stopping. A window walk that steps by a `timedelta` needs the import for that
-    too — the bound the step advances is the one that tells us, since both bounds share a
-    representation. It asks `paged_window_bound` the same question `paged_step_expression`
-    does, rather than re-deriving it from the parameter's declared type, so a backend that
-    normalises a bound rendered as one of `TimestampSeconds`/`TimestampMillis`/
-    `TimestampMicros`/`TimestampIso` to an integer does not end up with a dead `timedelta`
-    import here while its step is a bare number. No other iterator reaches outside
-    `typing_extensions`.
-
-    Args:
-      endpoint: The endpoint whose module is being generated.
-      header: Rendered header of the single-request method the iterator drives.
-    """
-    pagination = endpoint.pagination
-    if pagination is None:
-      return {}
-    if pagination.strategy == 'seek' and pagination.overlap is not None:
-      imports: Mapping[str, set[str]] = {**PAGED_IMPORTS, **PAGED_TRUNCATION_IMPORTS}
-      base = self._seek_cursor_base_type(endpoint, header=header)
-      if base is None:
-        return imports
-      unit = TIMESTAMP_TICKS.get(base)
-      if unit is None:
-        return imports
-      helper = HttpRequest.TIMESTAMP_HELPERS[base]
-      # `datetime` (the bare class, not just `timedelta`) is needed alongside the helper:
-      # `row_field_expression`'s own `isinstance(x, datetime)` discriminator (Fix 2,
-      # `docs/pagination.md`) is emitted wherever this branch's own `unit is not None`
-      # gate fires -- the identical condition, so it belongs in the same already-gated
-      # `merge_imports` call rather than a separate one.
-      return merge_imports([
-        imports,
-        {'datetime': {'timedelta', 'datetime'}},
-        {TYPES_PACKAGE: {helper}},
-        {'typing_extensions': {'cast'}},
-      ])
-    if pagination.strategy in ('page', 'offset') and pagination.done.kind == 'total':
-      return {**PAGED_IMPORTS, **PAGED_TRUNCATION_IMPORTS}
-    if pagination.strategy == 'window' and pagination.overlap is not None:
-      # Always needs `LogicError` (both raises are unconditional -- no
-      # `allow_truncation`-style opt-out the way a plain window's own guard has). The
-      # `timedelta`/core-helper/`cast` question is the identical one the `seek`+`overlap`
-      # branch above answers, just asked of the window's own `bound.start` instead of a
-      # `seek` cursor.
-      imports: Mapping[str, set[str]] = {**PAGED_IMPORTS, **PAGED_TRUNCATION_IMPORTS}
-      start_name = self.identifier(pagination.bound.start)
-      bound = next(
-        (p for p in (*header.args, *header.kwargs) if p.name == start_name), None,
-      )
-      if bound is None:
-        return imports
-      _, is_datetime = self.paged_window_bound('', unit=pagination.step.unit, param=bound)
-      if not is_datetime:
-        return imports
-      # `datetime` (the bare class), not just `timedelta`: `row_field_expression`'s own
-      # `isinstance(x, datetime)` discriminator (Fix 2) is emitted wherever `is_datetime`
-      # is true here, the identical condition -- so it belongs in the same place, same as
-      # `timedelta` above it.
-      imports = merge_imports([imports, {'datetime': {'timedelta', 'datetime'}}])
-      base = (bound.type or 'str').removesuffix(' | None')
-      helper = HttpRequest.TIMESTAMP_HELPERS.get(base)
-      if helper is None:
-        return imports
-      return merge_imports([
-        imports, {TYPES_PACKAGE: {helper}}, {'typing_extensions': {'cast'}},
-      ])
-    if pagination.strategy != 'window':
-      return PAGED_IMPORTS
-    imports = PAGED_IMPORTS
-    size = self.paged_size(pagination, [*header.args, *header.kwargs])
-    if self.paged_cap(endpoint, size) is not None:
-      imports = {**imports, **PAGED_TRUNCATION_IMPORTS}
-    if pagination.step.size:
-      bound = next(
-        (
-          p for p in (*header.args, *header.kwargs)
-          if p.name == self.identifier(pagination.bound.start)
-        ),
-        None,
-      )
-      if bound is not None:
-        _, is_datetime = self.paged_window_bound('', unit=pagination.step.unit, param=bound)
-        if is_datetime:
-          imports = merge_imports([imports, {'datetime': {'timedelta'}}])
-    return imports
-
-  def paged_truncation(
-    self, *, method_name: str, cap: str, rows: str, lower: str, upper: str,
-  ) -> list[str]:
-    """Emit the guard stopping a window walk from advancing past rows it never saw.
-
-    An API caps a window holding more rows than its page size and says nothing about
-    having done so; the walk then moves the window past the rows that were left out, and
-    the caller reads a series with a hole in it. A full page is the evidence available:
-    a response carrying as many rows as were asked for may have carried more. That is
-    weaker than proof — a window whose rows happen to number exactly the page size trips
-    it too — which is why it is refusable rather than fatal, and why it raises instead of
-    warning. Losing rows silently is the outcome worth spending a false positive on.
-
-    Args:
-      method_name: Name of the single-request method the iterator drives.
-      cap: Expression holding the row count a full page is full relative to.
-      rows: Expression holding the page's rows.
-      lower: Loop-local holding the window's lower bound.
-      upper: Loop-local holding the window's upper bound.
-    """
-    message = (
-      f'`{self.paged_name(method_name)}` requested the window {{{lower}}} to {{{upper}}} and the '
-      f'API returned a full page of {{len({rows})}} rows, so it may hold more; advancing '
-      f'would move past the rows that were left out. Narrow the window, or pass '
-      f'`{PAGED_TRUNCATION_PARAM}=True` to accept the loss.'
-    )
-    return [
-      f'if not {PAGED_TRUNCATION_PARAM} and len({rows}) >= {cap}:',
-      f'  raise LogicError(f{message!r})',
-    ]
 
   def read_path(
     self, path: str, *, subject: str, name: str, accessor: Literal['dict', 'attr'] = 'dict',
@@ -1692,278 +1634,49 @@ class Generator:
       source = target
     return lines
 
-  def row_field_expression(self, row: str, field: str) -> str:
-    """Return an expression reading a dotted-key/bracket-index field off one row, tolerant
-    of a missing key or an out-of-range index at any level -- the same tolerance
-    `read_path` gives a top-level response path.
+  def row_field_read(self, row: str, field: str, name: str) -> list[str]:
+    """Return statements binding `name` to a dotted-key/bracket-index field read off one
+    row, tolerant of a missing key or an out-of-range index at any level -- the same
+    tolerance `read_path` gives a top-level response path.
 
     A dict-key segment emits `.get(key)`; a bracket-index segment emits a bounds-checked
     `[index]`, since indexing a list out of range raises `IndexError` where a dict's
-    `.get` merely returns `None` -- most `window`-strategy rows are positional tuples
-    (a candle's timestamp at a fixed array index), which is exactly what needs this
-    (`docs/pagination.md` §3), where `seek`'s own `LastRowPath` was always a named field.
+    `.get` merely returns `None` -- most candle rows are positional tuples (the open time
+    at a fixed array index), which is exactly what needs this (`docs/pagination.md` §3).
 
-    Normalizes the read value to a `datetime` when `_cursor_render_id` marks the
-    enclosing `paged_overlap_seek`/`paged_window_overlap` call as driving a
-    timestamp-typed cursor/field. That caller compares this expression's value against
-    an already-`datetime` value (a cursor/bound seeded from the caller's own
-    timestamp-typed argument, or reassigned only from values that already passed through
-    this method). The value this expression reads, though, is a *response* field -- typed
-    the same way, but only actually converted to a `datetime` when validation is on (S8);
-    with validation off it is still the raw wire value a `TypedDict` annotation cannot
-    itself enforce -- an `int` (epoch-formatted) or a `str` (candle rows whose wire
-    timestamp is a JSON string, not a number). Comparing either directly
-    against the already-`datetime` cursor then raises `TypeError` the moment a caller
-    disables validation, which is exactly the trade-off `validate=False` is supposed to be
-    safe to make. The discriminator is `not isinstance({expr}, datetime)` rather than
-    `isinstance({expr}, int)` for exactly this reason: the latter falls through unparsed
-    for a wire string, and `not isinstance(..., datetime)` still correctly skips the parse
-    on the one case that's already converted (validation on) while catching both raw wire
-    shapes (validation off) -- confirmed a real, previously-blocking bug on one project's
-    7 candle endpoints (`docs/pagination.md`).
+    Each level but the last binds its own local (`<name>_0`, `<name>_1`, ...), which the
+    next level's `is not None` guard then narrows. One nested expression per level would
+    repeat the whole parent read inside the guard, and pyright never narrows a repeated
+    call expression: weather.gov's `[-1].properties.timestamp` failed standard mode with
+    `"get" is not a known attribute of "None"`.
+
+    Binds the raw wire value. Normalizing it for comparison (parsing an epoch number or
+    numeral string through the row field's own converter when validation is off, casting a
+    numeric id) is `paged_response_seek`'s nested `key_of` helper's job, which narrows
+    `name` past `None` before converting.
 
     Args:
-      row: Expression holding one row of a `seek`/`window` walk's own row collection.
-      field: A `LastRowPath`/`WindowOverlap.field`, its `[-1]` prefix already stripped
+      row: Expression holding one row of a `seek` walk's own row collection.
+      field: A `SeekCursor.field`, its `[-1]` prefix already stripped
         (`last_row_field`) -- everything relative to one row.
+      name: Local the read is bound to; intermediate levels take it as their prefix.
     """
-    expr = row
-    for kind, key in path_segments(field):
-      if kind == 'index':
-        bound = f'len({expr}) > {key}' if key >= 0 else f'len({expr}) >= {-key}'
-        expr = f'({expr}[{key}] if {expr} is not None and {bound} else None)'
-      else:
-        expr = f'({expr}.get({key!r}) if {expr} is not None else None)'
-    if self._cursor_render_id is None:
-      return expr
-    helper = HttpRequest.TIMESTAMP_HELPERS[self._cursor_render_id]
-    return f'({helper}.parse(cast(int, {expr})) if not isinstance({expr}, datetime) else {expr})'
-
-  def read_last_row(
-    self, path: str, *, rows: str, name: str, taken: Container[str], cast: str | None = 'str',
-  ) -> list[str]:
-    """Emit statements binding `name` to a field of the *last* row of `rows` that carries
-    it, or `None` when no row does.
-
-    Mirrors a hand-written `historical_trades_paged`: collect the field off every row,
-    skip the rows that
-    omit it, and take the last one collected -- a page whose very last row happens to omit
-    the field still has a real cursor to advance from.
-
-    Args:
-      path: `last:<dotted-path>` a `SeekCursor.from_` declares.
-      rows: Expression holding the walk's row collection.
-      name: Name the cursor value is bound to.
-      taken: Names the generated signature already binds.
-      cast: Python type constructor the collected value is cast through -- `str` by
-        default, matching the destination cursor parameter's own declared type
-        (`int`/`float`) when it is one of those, so the walk's own local variable never
-        disagrees with the type its own signature declares it as (a row field typed
-        differently on the wire, e.g. a string `id` feeding an `int`-typed
-        `lastId`, is exactly the case this exists for). `None` skips the cast entirely --
-        the destination type's own converted rendering (`TimestampIso`, say) is what the
-        row field already comes back as once read off an already-response-validated row,
-        so wrapping it in `str(...)`/`int(...)` would corrupt a real `datetime` rather
-        than normalize an untyped one; a `get_candles` (cursor `toISO`, read from
-        `startedAt` on an already-typed `Candle` row) is the confirmed motivating case --
-        `str(a_real_datetime)` doesn't round-trip back into `TimestampIso | None`.
-    """
-    field = last_row_field(path)
-    item = self.paged_local('item', taken)
-    value = self.paged_local(f'{name}_value', taken)
-    values = self.paged_local(f'{name}_values', taken)
-    expr = self.row_field_expression(item, field)
-    last = f'{values}[-1]' if cast is None else f'{cast}({values}[-1])'
-    return [
-      # bound via `:=` and yielded as the bare name, not re-evaluated inline, so pyright
-      # narrows the comprehension's own element type past `is not None` -- re-evaluating
-      # `expr` itself in both the yield and the filter (the naive version) type-checks the
-      # list as `X | None` regardless, since pyright cannot prove two syntactically
-      # separate re-evaluations of the same expression agree -- which broke `int(...)`/
-      # `float(...)` below (unlike `str`, neither constructor accepts `None`).
-      f'{values} = [{value} for {item} in {rows} if ({value} := {expr}) is not None]',
-      f'{name} = {last} if {values} else None',
-    ]
-
-  def paged_termination(
-    self, pagination: Pagination, *,
-    response: str, counter: str, driver: str, size: 'Function.Param | None',
-    rows: str | None, rows_read: list[str], taken: Container[str],
-    response_accessor: Literal['dict', 'attr'] = 'dict', driver_cast: str | None = 'str',
-    size_default: int | None = None, method_name: str = '', total_seen: str | None = None,
-  ) -> list[str]:
-    """Emit the statements that end one turn of a paginated walk.
-
-    `rows` is passed in rather than derived here because the advance needs the same
-    expression: an `offset` walk steps by the rows it received, and a terminator and an
-    advance disagreeing about where the rows are is a loop that walks wrong.
-
-    Args:
-      pagination: Declaration carried by the endpoint.
-      response: Name holding the page just yielded.
-      counter: Name holding the number of pages yielded so far.
-      driver: Name of the loop variable the next request is made with.
-      size: Header parameter carrying the page size, when one is declared.
-      rows: Expression holding the page's rows, when the terminator measures them.
-      rows_read: Statements binding `rows`, empty when the payload is itself the rows.
-      taken: Names the generated signature already binds.
-      response_accessor: How the response payload's fields are read -- see `read_path`.
-      driver_cast: `seek` only -- see `read_last_row`'s own `cast` argument.
-      size_default: The API's documented default for `size` (`paged_size_default`),
-        when declared -- an item-counted `total` needs a real numeric size to convert
-        the page count into an item count, and a caller who omits an optional `size`
-        sends the API's own default, not `None`. Without this, the walk had no way
-        to resolve that call and (before this parameter existed) treated the omission
-        itself as "done", silently truncating to page 1 -- exactly the call this
-        exists to serve correctly instead.
-      method_name: `page`/`offset`+`total` only -- name of the single-request method the
-        iterator drives, quoted in the `LogicError` message a missing/disagreeing total
-        raises (`docs/pagination.md` §4).
-      total_seen: `page`/`offset`+`total` only -- loop-local, declared `None` once in
-        `setup` (sibling to the counter/index locals, before the loop -- see
-        `paged_method`'s own call site), holding the `total` a previous turn of this same
-        walk saw. Compared against this turn's own `total` before trusting either: a
-        missing or disagreeing value means continuing the walk's index arithmetic would
-        splice rows fetched against two different `total`s, which is not a coherent
-        result -- see `docs/pagination.md` §4's own reasoning.
-
-    Raises:
-      ValueError: When the declaration cannot decide the walk — a short page or an
-        item-counted total with no page size on the method to measure against.
-    """
+    segments = path_segments(field)
+    if not segments:
+      # A bare `[-1]`: the row itself is the cursor (rows that are plain epoch numbers).
+      return [f'{name} = {row}']
     lines: list[str] = []
-    if pagination.strategy == 'token':
-      cursor = self.read_path(
-        pagination.cursor.from_, subject=response, name=driver, accessor=response_accessor,
-      )
-      if pagination.done.kind == 'absent_cursor':
-        return [*cursor, f'if not {driver}:', '  break']
-      return [*rows_read, f'if not {rows}:', '  break', *cursor]
-    if pagination.strategy == 'seek':
-      assert rows is not None, (
-        'a seek walk ends on `short_page`, `empty` or `unchanged`, which always read rows'
-      )
-      if pagination.done.kind == 'unchanged':
-        # Neither `short_page` nor `empty` is safe when the cursor field isn't unique
-        # enough per row for the API to ever serve a short or an empty page once the
-        # walk is truly done (`UnchangedDone`'s own docstring) -- so this reads the new
-        # cursor and compares it against the one the just-completed request used,
-        # instead of measuring the page at all. `previous` is saved before `cursor`'s own
-        # statements overwrite `driver` with the newly-read value; an empty page reads no
-        # last row and leaves `driver` `None`, which can never equal a real previous
-        # cursor, so that case falls out of the same comparison rather than needing its
-        # own branch.
-        previous = self.paged_local(f'{driver}_previous', taken)
-        cursor = self.read_last_row(
-          pagination.cursor.from_, rows=rows, name=driver, taken=taken, cast=driver_cast,
-        )
-        return [
-          *rows_read,
-          # Unlike `short_page`/`empty` (below), this branch has no `if not {rows}:
-          # break` ahead of `read_last_row`'s own `for item in {rows}` comprehension --
-          # `rows` still reads through `read_path`'s always-guarded `.get(...)`, so
-          # `rows` is `list[X] | None`, not narrowed to `list[X]` by anything before
-          # this point. `for item in None` is a real runtime `TypeError`, not just an
-          # unnarrowed pyright type -- confirmed by generating this exact endpoint
-          # before this line existed. Normalizing here (never mutates what's already
-          # been yielded to the caller -- `response`/`rows` are termination-only
-          # locals by this point) treats a response that omits the rows field the same
-          # as a genuinely empty page, which `unchanged`'s own "empty pages included"
-          # semantics already call for.
-          f'{rows} = {rows} or []',
-          f'{previous} = {driver}',
-          *cursor,
-          f'if {driver} is None or {driver} == {previous}:',
-          '  break',
-        ]
-      cursor = self.read_last_row(
-        pagination.cursor.from_, rows=rows, name=driver, taken=taken, cast=driver_cast,
-      )
-      exhausted = self.paged_rows_exhausted(rows=rows, size=size, done_kind=pagination.done.kind)
-      return [*rows_read, exhausted, '  break', *cursor, f'if {driver} is None:', '  break']
-    done = pagination.done
-    if done.kind == 'total':
-      assert total_seen is not None, (
-        'a page/offset+total walk always declares its own total_seen local -- see '
-        '`paged_method`\'s own call site'
-      )
-      total = self.paged_local('total', taken)
-      lines.extend(self.read_path(
-        done.path, subject=response, name=total, accessor=response_accessor,
-      ))
-      # An API can serialize a total as a numeral string rather than a bare number
-      # (`total: NotRequired[str]`) -- coerced here,
-      # once, rather than at each comparison site below, and guarded for `None` since a
-      # short/absent page already means "no total to compare against."
-      lines.append(f'{total} = int({total}) if {total} is not None else None')
-      # `docs/pagination.md` §4: a page with no `total` at all, or one whose `total`
-      # disagrees with an earlier page of this same walk, is a hard error rather than a
-      # silent stop -- concatenating rows fetched against two different `total` values
-      # isn't a coherent result, and page/offset's own index arithmetic can turn that
-      # splice into a duplicated or skipped row around wherever the underlying data
-      # shifted. Checked (and `total_seen` updated) *after* this turn's rows were already
-      # yielded -- real data, valid on its own -- the same order the window truncation
-      # guard already uses.
-      message = (
-        f'`{self.paged_name(method_name)}` needs a `total` on every page. The API '
-        f'omitted it here, or reported a value ({{{total}}}) that disagrees with an '
-        f'earlier page of this same walk ({{{total_seen}}}); retry the whole walk from '
-        f'the start.'
-      )
-      lines.append(
-        f'if {total} is None or ({total_seen} is not None and {total} != {total_seen}):'
-      )
-      lines.append(f'  raise LogicError(f{message!r})')
-      lines.append(f'{total_seen} = {total}')
-      if done.counts == 'pages':
-        lines.append(f'if {counter} >= {total}:')
+    source = row
+    for index, (kind, key) in enumerate(segments):
+      target = name if index == len(segments) - 1 else f'{name}_{index}'
+      if kind == 'index':
+        bound = f'len({source}) > {key}' if key >= 0 else f'len({source}) >= {-key}'
+        read = f'({source}[{key}] if {source} is not None and {bound} else None)'
       else:
-        if size is None:
-          raise ValueError('a total counting items needs a page size on the method to convert it')
-        if self.paged_always_set(size):
-          lines.append(f'if {counter} * {size.name} >= {total}:')
-        elif size_default is not None:
-          resolved = f'({size.name} if {size.name} is not None else {size_default})'
-          lines.append(f'if {counter} * {resolved} >= {total}:')
-        else:
-          # `size` is optional and the API documents no default -- an omitted
-          # `size` can't be multiplied against a page count to test against the
-          # total at all, and treating the omission itself as "done" (the bug this
-          # replaces) silently truncated every such call to page 1. Only decide by
-          # the arithmetic when the caller actually supplied a real size; a caller
-          # who omits it keeps paging until the API's own terminator (a short or
-          # empty page) would end it -- not modeled here, so this alone cannot
-          # detect that end, but it never *falsely* claims one either.
-          lines.append(f'if {size.name} is not None and {counter} * {size.name} >= {total}:')
-      return [*lines, '  break']
-    lines.extend(rows_read)
-    lines.append(self.paged_rows_exhausted(rows=rows, size=size, done_kind=done.kind))
-    return [*lines, '  break']
-
-  def paged_rows_exhausted(
-    self, *, rows: str | None, size: 'Function.Param | None', done_kind: str,
-  ) -> str:
-    """Return the condition line ending a `short_page`/`empty` walk, without the `break`.
-
-    Shared between the generic `page`/`offset`/`window` terminator above and `seek`'s own
-    below -- both end a walk on a short or empty page the same way, and only `seek` also
-    has a cursor to read once the check says the walk continues.
-
-    Args:
-      rows: Expression holding the page's rows.
-      size: Header parameter carrying the page size, when one is declared.
-      done_kind: `pagination.done.kind`, `'empty'` or `'short_page'`.
-
-    Raises:
-      ValueError: A `short_page` terminator with no page size to measure against.
-    """
-    if done_kind == 'empty':
-      return f'if not {rows}:'
-    if size is None:
-      raise ValueError('a short page is only short relative to a page size on the method')
-    if self.paged_always_set(size):
-      return f'if not {rows} or len({rows}) < {size.name}:'
-    return f'if not {rows} or ({size.name} is not None and len({rows}) < {size.name}):'
+        read = f'({source}.get({key!r}) if {source} is not None else None)'
+      lines.append(f'{target} = {read}')
+      source = target
+    return lines
 
   def paged_step(
     self, size: 'Function.Param | None', *, rows: str | None, default: int | None = None,
@@ -1973,15 +1686,15 @@ class Generator:
     Row count first, because it is what an offset walk means and it is right whether or not
     the caller asked for a page size. A size parameter the method leaves optional cannot be
     added to an integer when it is omitted, which is why this is not simply the size --
-    unless the API documents what it defaults to, the same `default` a `window` walk's
+    unless the venue documents what it defaults to, the same `default` a `seek` walk's
     cap already falls back to (`paged_cap`); the two mirror each other because both are
-    "what the API actually used when the caller left it unset".
+    "what the venue actually used when the caller left it unset".
 
     Args:
       size: Header parameter carrying the page size, when one is declared.
       rows: Expression holding the page's rows, when the terminator measures them.
-      default: The API's documented default for `size`, when declared on its schema
-        (`paged_size_default`). `None` when the API documents none.
+      default: The venue's documented default for `size`, when declared on its schema
+        (`paged_size_default`). `None` when the venue documents none.
 
     Raises:
       ValueError: When none is available — a total-terminated `offset` walk whose size
@@ -2017,9 +1730,9 @@ class Generator:
     same always-present-return-value reasoning `paged_response_method`'s own identical
     read already relies on -- so guarding it as `X | None` here only costs pyright a
     spurious optional it can't prove away, and (once `path` resolves through it, `rows`'
-    own use unconditionally indexed/iterated by `paged_overlap_seek`/`paged_window_overlap`,
-    Fix 1) fails pyright for real: `reportOptionalSubscript`/`reportOptionalIterable`/
-    `len()`-on-`Sized` errors, confirmed against a real generation failure (an
+    own use unconditionally indexed/iterated by `paged_response_seek`) fails pyright for
+    real: `reportOptionalSubscript`/`reportOptionalIterable`/
+    `len()`-on-`Sized` errors, confirmed against a real generation failure (bybit's
     enveloped `market.kline` family, the first real caller to exercise this path with
     `done.rows` actually set).
 
@@ -2041,127 +1754,6 @@ class Generator:
     )
     return rows
 
-  def paged_docstring(
-    self, pagination: Pagination, *,
-    method_name: str, size: str | None, step: str | None, truncation: bool = False,
-    docstring: 'Docstring | None' = None, outer: 'Function | None' = None,
-    extra_params: 'list[Docstring.Param] | None' = None,
-  ) -> str:
-    """Describe the walk a generated iterator performs, and how it ends.
-
-    The terminator is named rather than implied: a caller who has to know whether a walk
-    trusts a total, a short page or an absent token is reading the API's docs, which is
-    the reading the declaration exists to have done once.
-
-    Args:
-      pagination: Declaration carried by the endpoint.
-      method_name: Name of the single-request method the iterator drives.
-      size: Name of the page-size parameter, when one is declared.
-      step: Expression an `offset` walk advances by, as `paged_step` chose it.
-      truncation: Whether a truncation guard was generated. A window walk without one
-        says so, rather than promising a raise the method does not carry.
-      docstring: See `paged_summary`.
-      outer: See `paged_summary`.
-      extra_params: See `paged_summary`.
-    """
-    note: str | None = None
-    if pagination.strategy == 'token':
-      walk = f"Passes each page's token back as `{pagination.cursor.parameter}`"
-      ends = (
-        f'stops when a response carries no `{pagination.cursor.from_}`'
-        if pagination.done.kind == 'absent_cursor'
-        else 'stops on the first empty page'
-      )
-    elif pagination.strategy == 'seek' and pagination.overlap is not None:
-      field = last_row_field(pagination.cursor.from_)
-      cap = pagination.overlap.cap
-      walk = f"Passes the largest `{field}` seen so far back as `{pagination.cursor.parameter}`"
-      ends = 'stops on the first empty page'
-      note = (
-        f'Rows already yielded for that `{field}` value are dropped by position from the '
-        f'next page, so a value shared by more than one row is never duplicated or '
-        f'skipped. Raises `LogicError` if the API\'s row order is not stable across '
-        f'requests, or if a full page of `{cap}` rows shares one `{field}` value, since the '
-        f'rest of it would then be unreachable.'
-      )
-    elif pagination.strategy == 'seek':
-      field = last_row_field(pagination.cursor.from_)
-      walk = (
-        f"Passes the previous page's last row's `{field}` back as "
-        f'`{pagination.cursor.parameter}`'
-      )
-      if pagination.done.kind == 'empty':
-        ends = 'stops on the first empty page'
-      elif pagination.done.kind == 'unchanged':
-        ends = (
-          f"stops once a page's own last row's `{field}` no longer differs from the "
-          f'previous request, empty pages included'
-        )
-      else:
-        ends = f'stops on the first page shorter than `{size}`'
-    elif pagination.strategy == 'window' and pagination.overlap is not None:
-      lower = self.identifier(pagination.bound.start)
-      upper = self.identifier(pagination.bound.end)
-      descending = pagination.order == 'descending'
-      direction = 'backwards' if descending else 'forwards'
-      far = lower if descending else upper
-      field = last_row_field(pagination.overlap.field)
-      walk = (
-        f'Moves the `{lower}`–`{upper}` window {direction} in chunks, narrowing and '
-        f'retrying a chunk that comes back full instead of stopping'
-      )
-      ends = f'stops once advancing would move past the caller\'s own `{far}`, or sooner on an empty window'
-      note = (
-        f'Raises `LogicError` if the API\'s row order is not stable across requests, '
-        f'or if a full chunk shares one `{field}` value, since the rest of it would then '
-        f'be unreachable. Never fetches outside the caller\'s own `{lower}`–`{upper}` '
-        f'range.'
-      )
-    elif pagination.strategy == 'window':
-      lower = self.identifier(pagination.bound.start)
-      upper = self.identifier(pagination.bound.end)
-      descending = pagination.order == 'descending'
-      direction = 'backwards' if descending else 'forwards'
-      far = lower if descending else upper
-      walk = f'Moves the `{lower}`–`{upper}` window {direction} by its own width'
-      ends = f'stops once advancing would move past the caller\'s own `{far}`, or sooner on an empty window'
-      if not truncation:
-        note = (
-          f'Every request spans the width the caller\'s own `{lower}` and `{upper}` state, '
-          f'so choose a window the API answers in one response: it caps a wider one, and '
-          f'the walk moves past the rows that were left out.'
-        )
-      else:
-        note = (
-          f'Every request spans the width the caller\'s own `{lower}` and `{upper}` state, '
-          f'so choose a window the API answers in one response — at most `{size}` rows. A '
-          f'full page is evidence the window was capped, and raises `LogicError` rather '
-          f'than walking past the rows that were left out; pass '
-          f'`{PAGED_TRUNCATION_PARAM}=True` to accept the loss and keep going.'
-        )
-    else:
-      if pagination.strategy == 'page':
-        walk = f'Requests `{pagination.index.parameter}` from {pagination.index.start} upwards'
-      else:
-        walk = f'Advances `{pagination.offset.parameter}` by `{step}`'
-      done = pagination.done
-      if done.kind == 'total':
-        unit = 'pages' if done.counts == 'pages' else 'items'
-        ends = f'stops once it has covered the `{done.path}` {unit} the response reports'
-        note = (
-          f'Raises `LogicError` if a page omits `{done.path}`, or reports a value that '
-          f'disagrees with an earlier page of the same walk -- retry the whole walk '
-          f'from the start rather than trust a spliced result.'
-        )
-      elif done.kind == 'short_page':
-        ends = f'stops on the first page shorter than `{size}`'
-      else:
-        ends = 'stops on the first empty page'
-    return self.paged_summary(
-      method_name, walk=walk, ends=ends, note=note,
-      docstring=docstring, outer=outer, extra_params=extra_params,
-    )
-
   def paged_summary(
     self, method_name: str, *, walk: str | None = None, ends: str | None = None,
     note: str | None = None, body: str | None = None,
@@ -2178,28 +1770,28 @@ class Generator:
     variant never repeated any of it. `Args:` is filtered to exactly `outer`'s own real
     parameter names, so a parameter the walk manages internally (a dropped pagination
     driver — `last_id`, `cursor`, ...) never appears for a variant that does not accept
-    it; `extra_params` (`max_pages`, `allow_truncation`) are appended for what the paged
-    variant adds that the sibling never had. Falls back to the original bare text when
+    it; `extra_params` (a `span`) are appended for what the paged variant adds that the
+    sibling never had. Falls back to the original bare text when
     either is omitted — a caller that has not threaded the sibling's `Docstring` through
-    yet (a not-yet-updated per-project backend) keeps exactly today's rendering.
+    yet (a not-yet-updated per-client backend) keeps exactly today's rendering.
 
     Args:
       method_name: Name of the single-request method the iterator drives.
       walk: Prose naming the parameter the loop advances. Required unless `body` is given.
       ends: Prose naming what ends the loop. Required unless `body` is given.
-      note: Prose stating what the caller has to get right, when the walk asks anything
-        of them — a window walk covers the width they chose, and no other.
+      note: Prose stating what the walk guarantees or raises on, when there is anything
+        beyond the terminator worth a caller's attention.
       body: A complete summary paragraph, verbatim, replacing the `walk`/`ends`-built one
         — the `PaginatedResponse`-shaped wrappers' own "awaitable or async-iterable" fact,
         which isn't a walk/terminator statement at all.
       docstring: The single-request sibling's own `Docstring`, when available.
       outer: The page wrapper's own real, rendered signature, when available.
       extra_params: `Args:` entries the paged variant adds beyond the sibling's own
-        parameters (`max_pages`, `allow_truncation`).
+        parameters (a `span`).
     """
     if body is None:
       assert walk is not None and ends is not None
-      body = f'{walk} and {ends}, or after `max_pages` pages when one is given.'
+      body = f'{walk} and {ends}. Awaitable (flattens every page) or async-iterable (one page at a time).'
     # An endpoint reached by calling its attribute has no name to quote at the reader:
     # `__call__` is how the method is spelled in the class, never how it is invoked.
     subject = 'this endpoint' if method_name == '__call__' else f'`{method_name}`'
@@ -2227,18 +1819,21 @@ class Generator:
       f'"""Yield successive pages of {subject}.',
       '',
       *textwrap.wrap(body, width=PAGED_DOC_WIDTH),
-      *(['', *textwrap.wrap(note, width=PAGED_DOC_WIDTH)] if note else []),
+      *(
+        line for paragraph in (note or '').split('\n\n') if paragraph
+        for line in ('', *textwrap.wrap(paragraph, width=PAGED_DOC_WIDTH))
+      ),
       '"""',
     ])
 
   _NESTED_DRIVER_FIELD: Mapping[str, str] = {
-    'page': 'index', 'offset': 'offset', 'token': 'cursor', 'seek': 'cursor',
+    'page': 'index', 'offset': 'offset', 'token': 'cursor',
   }
   """Pagination-model attribute holding the request-parameter-carrying sub-model
   (`PageIndex`/`PaginationParameter`/`Cursor`), per strategy -- every strategy but `page`
-  names it the same as the strategy itself; `page`'s is `index`. `window` has no entry: it
-  advances two independent top-level bounds, not one driver parameter, so there is nothing
-  here for a nested-message shape to name in the first place."""
+  names it the same as the strategy itself; `page`'s is `index`. `seek` has no entry: it
+  moves one of two declared bounds, not one driver parameter, and no real endpoint nests
+  its bounds inside a message, so there is nothing here for a nested shape to name."""
 
   def flatten_nested_pagination(
     self, pagination: Pagination, header: Function,
@@ -2247,9 +1842,9 @@ class Generator:
     Pagination, Function,
     tuple[str, str, str, str | None, Mapping[str, str]] | None,
   ]:
-    """Rewrite a `page`/`offset`/`token`/`seek` pagination whose cursor/size are dotted
-    paths into one nested request-message parameter into an equivalent flat declaration +
-    synthetic header, so the rest of `paged_method`'s flat-parameter-name logic runs
+    """Rewrite a `page`/`offset`/`token` pagination whose cursor/size are dotted paths
+    into one nested request-message parameter into an equivalent flat declaration +
+    synthetic header, so the rest of the page renderers' flat-parameter-name logic runs
     completely unchanged.
 
     A gRPC unary request that wraps Cosmos-SDK-style pagination in one message field
@@ -2257,9 +1852,9 @@ class Generator:
     motivating case: `pagination.cursor.parameter` is declared `"pagination.key"`, which
     names no flat parameter of the single-request method at all -- `"pagination"` does,
     but `"pagination.key"` doesn't, and never can, since a message field is not a
-    parameter. A REST API whose page-driven listing endpoints bundle `pageNo`/`pageSize`
+    parameter. A REST venue whose page-driven listing endpoints bundle `pageNo`/`pageSize`
     inside one POST body object rather than exposing them as flat query-role parameters
-    hits the identical shape one level down
+    (bitget's `classic.broker.agent_customer_*`) hits the identical shape one level down
     -- a JSON object field instead of a protobuf message field, same "the driver isn't a
     flat parameter" problem. Scoped to one level of nesting: nothing in this codebase's
     pagination declarations needs more, and a generalized nested-path grammar is exactly
@@ -2279,7 +1874,7 @@ class Generator:
     Returns:
       `(pagination, header)`, rewritten if flattening applied, and either `None` or
       `(outer_parameter, outer_type, inner_cursor, inner_size, fields)` recording what
-      to reconstruct at call time -- `paged_method` reads this after building the call
+      to reconstruct at call time -- `paged_call` reads this after building the call
       to the single-request method, merging the flat driver/size entries back into one
       constructed message argument, coercing one that isn't itself declared optional
       (a betterproto2 field's constructor never accepts `None` -- see
@@ -2341,9 +1936,9 @@ class Generator:
           continue
         # `required=False`: a nested cursor field is never required on the first call --
         # proto3's own zero-value semantics mean omitting it starts from the beginning,
-        # the same convention `token` walks already assume for a flat cursor. An API
-        # that genuinely requires a starting value on every call (an `end_timestamp` with
-        # no server-side default) has no nested-message shape to be declaring here at all.
+        # the same convention `token` walks already assume for a flat cursor. A venue
+        # that genuinely requires a starting value on every call (deribit's
+        # `end_timestamp`) has no nested-message shape to be declaring here at all.
         # `.removesuffix(' | None')`: `Param(required=False)` already appends its own
         # ` | None`, so a field the message itself already declares optional would
         # otherwise double up.
@@ -2378,800 +1973,1023 @@ class Generator:
       ),
     )
 
-  def _seek_cursor_base_type(self, endpoint: Endpoint, *, header: Function) -> str | None:
-    """Return a `seek`+`overlap` cursor parameter's rendered type, `| None` stripped, or
-    `None` when this isn't a `seek`+`overlap` endpoint or its cursor parameter can't be
-    found on `header`.
+  def pagination_rows_path(self, pagination: Pagination) -> str:
+    """Return the declared response path of a paginated endpoint's row collection, `''`
+    when the payload is itself the collection.
+
+    Args:
+      pagination: Declaration carried by the endpoint.
+    """
+    rows = pagination.rows if pagination.strategy == 'seek' else pagination.done.rows
+    return rows or ''
+
+  def seek_key_kind(
+    self, param: 'Function.Param', *, cursor_format: str | None = None,
+  ) -> tuple[str, str | None]:
+    """Classify how a `seek` walk normalizes and orders its cursor keys, from the moving
+    bound parameter's own rendered type.
+
+    A timestamp-typed bound (`TimestampMillis`, ...) compares `datetime`s. A response field
+    is only a real `datetime` when validation is on (S8), and a raw `int`/numeral `str`
+    otherwise, so the walk parses a raw value through the *row field's* own converter:
+    `cursor_format` when the row declares an instant format other than the bound's
+    (lighter's `epoch-seconds` fundings under an `epoch-millis` bound, TRU-197), else the
+    bound's, which is the same format. Only the request encodes the next value in the
+    bound's format. A row field with no timestamp format under a timestamp bound would
+    leave the unit to a guess; `truewire check` refuses it. An `int`/`float` bound
+    casts the row value, so a venue that serializes a numeric id as a string (kucoin's
+    ledger `id`, dYdX's block heights) still compares numerically. Anything else -- a
+    plain string id (bitget's `idLessThan`, mexc's `fromId`) -- is compared by equality
+    only, and the walk takes the *last* row's key in wire order as its extreme rather
+    than `max`/`min`, which `check_seek` only permits for a `unique` cursor.
+
+    Args:
+      param: The moving bound's header parameter.
+      cursor_format: `seek_cursor_format` of the endpoint's plan: the row field's own
+        instant format when it differs from the bound's, else `None`.
+
+    Returns:
+      `('timestamp', <converter helper name>)`, `('int', None)`, `('float', None)` or
+      `('str', None)`.
+    """
+    base = (param.type or 'str').removesuffix(' | None')
+    helper = HttpRequest.TIMESTAMP_HELPERS.get(base)
+    if helper is not None:
+      if cursor_format is not None:
+        helper = HttpRequest.TIMESTAMP_HELPERS[TIMESTAMP_ALIASES[cursor_format]]
+      return 'timestamp', helper
+    if base in ('int', 'float'):
+      return base, None
+    return 'str', None
+
+  def paged_imports(
+    self, endpoint: Endpoint, *, header: Function, cursor_format: str | None = None,
+  ) -> Mapping[str, set[str]]:
+    """Return the imports the `PaginatedResponse`-shaped page method this endpoint
+    generates needs, beyond the row type's own (which the caller resolves).
+
+    Every strategy needs `PaginatedResponse`. A `seek` walk also raises `LogicError` (a
+    full page sharing one key, or a carried-over row vanishing), parses timestamp keys
+    through the row field's converter (`datetime`, `cast`, and the runtime's helper; see
+    `seek_key_kind`), and an exclusive far bound's own converter, and steps a `datetime`
+    bound by a `timedelta` when a `span` is declared.
 
     Args:
       endpoint: The endpoint whose module is being generated.
       header: Rendered header of the single-request method the walk drives.
+      cursor_format: See `seek_key_kind`.
     """
     pagination = endpoint.pagination
-    if pagination is None or pagination.strategy != 'seek' or pagination.overlap is None:
-      return None
-    driver = self.identifier(pagination.cursor.parameter)
-    parameters = [*header.args, *header.kwargs]
-    driver_param = next((param for param in parameters if param.name == driver), None)
-    if driver_param is None or driver_param.type is None:
-      return None
-    return driver_param.type.removesuffix(' | None')
+    if pagination is None:
+      return {}
+    if pagination.strategy != 'seek':
+      return PAGED_IMPORTS
+    imports: Mapping[str, set[str]] = {**PAGED_IMPORTS, **PAGED_LOGIC_ERROR_IMPORTS}
+    moving = self.identifier(pagination.moving)
+    param = next((p for p in (*header.args, *header.kwargs) if p.name == moving), None)
+    if param is None:
+      return imports
+    helpers = [self.seek_key_kind(param, cursor_format=cursor_format)]
+    exclusive = pagination.exclusive
+    if exclusive is not None and exclusive.far is not None:
+      far = self.identifier(exclusive.far.parameter)
+      far_param = next((p for p in (*header.args, *header.kwargs) if p.name == far), None)
+      if far_param is not None:
+        helpers.append(self.seek_key_kind(far_param))
+    timestamps = {helper for kind, helper in helpers if kind == 'timestamp' and helper}
+    if not timestamps:
+      return imports
+    imports = merge_imports([
+      imports, {'datetime': {'datetime'}}, {'typing_extensions': {'cast'}},
+      {TYPES_PACKAGE: timestamps},
+    ])
+    if pagination.span is not None and self.seek_key_kind(param)[0] == 'timestamp':
+      imports = merge_imports([imports, {'datetime': {'timedelta'}}])
+    return imports
 
-  def paged_overlap_seek(
-    self, endpoint: Endpoint, *,
-    method_name: str, header: Function, response_type: str,
-    docstring: 'Docstring | None' = None,
-  ) -> str:
-    """Generate the page iterator for a `seek` walk declaring `pagination.overlap`.
-
-    Structurally mirrors the hand-written `paginate()` helper this generalizes: rows
-    already yielded for the cursor value
-    in play are dropped from the next page *by position*, verified as an exact-order prefix
-    rather than assumed (a mismatch means the API's own stable-order guarantee broke
-    mid-walk, and the walk raises instead of silently dropping or duplicating rows). The
-    cursor advances to the *largest* field value collected off the page, not simply its last
-    row's, since nothing guarantees the trailing row of a page is the largest one. A page
-    that fills to `pagination.overlap.cap` while every row still shares the cursor value in
-    play is the one case the walk cannot resolve -- the rest of that value may be
-    unreachable -- and it raises there too, rather than guessing.
-
-    The fallback cursor advance (`cursor += 1`) assumes an arithmetic cursor -- not true for
-    a cursor declared with a timestamp `format` (rule 3/S7), where the generated cursor is a
-    `datetime` and `+= 1` is not arithmetic. `TIMESTAMP_TICKS` covers that case (`cursor +=
-    timedelta({unit}=1)`); see `row_field_expression`'s matching normalization, needed so a
-    response-read value (only actually a `datetime` when validation is on, S8) compares
-    correctly against the cursor regardless. This was originally a project-local backend
-    override, hoisted here once that project migrated onto the universal `Generator`.
-
-    This does not share `paged_method`'s single loop template below: that template always
-    yields the raw response and only decides *whether to keep walking* afterwards, but an
-    overlap walk has to compute the deduplicated slice *before* it can even decide whether
-    there is anything fresh to yield. It is its own small template instead, built the same
-    way `paged_window`/`paged_truncation` supply the pieces `paged_method` assembles for
-    `window` -- only here the divergence from that assembly runs too deep to stay a set of
-    pluggable pieces.
-
-    `pagination.done.rows` is unwrapped via `paged_rows` (the same helper `paged_method`'s
-    own plain generator and `paged_response_seek` already call) right after the
-    single-request call returns, so every prefix-check/dedup/cap/value-extraction step
-    below reads the row collection itself, not a wrapper the API put around it
-    (`{category, symbol, list}`, `{dataList, hasMore}`) -- a pure no-op when
-    `done.rows` is unset, since `paged_rows` then returns the response unchanged.
+  def paged_exclusive_note(self, exclusive: SeekExclusive, moving: str) -> str:
+    """The docstring paragraph for a `seek.exclusive` walk (ADR 0013): the far bound kept
+    on the rows, the parameters sent on the first request only, and what a caller may
+    pass beside the moving bound.
 
     Args:
-      endpoint: The endpoint whose module is being generated.
-      method_name: Name of the single-request method the iterator drives.
-      header: Rendered header of that method, after any project-specific renaming.
-      response_type: Return type of that method, which the iterator yields -- the caller
-        (`paged_method`) already resolves this to the flattened `list[T]` row type when
-        `done.rows` is declared, not the enveloped type.
-      docstring: See `paged_method`.
-
-    Raises:
-      ValueError: When the declared cursor parameter is not one the method takes.
+      exclusive: The declaration.
+      moving: The moving bound's identifier.
     """
-    pagination = endpoint.pagination
-    assert pagination is not None and pagination.strategy == 'seek' and pagination.overlap is not None
-    parameters = [*header.args, *header.kwargs]
-    driver = self.identifier(pagination.cursor.parameter)
-    driver_param = next((param for param in parameters if param.name == driver), None)
-    if driver_param is None:
-      raise ValueError(
-        f'the seek cursor `{driver}` is not a parameter of `{method_name}`, so the walk has '
-        f'nothing to advance'
+    return ' '.join(exclusive_sentences(
+      [self.identifier(name) for name in exclusive.parameters], moving=moving,
+      first=self.identifier(exclusive.first) if exclusive.first is not None else None,
+      far_parameter=self.identifier(exclusive.far.parameter) if exclusive.far is not None else None,
+      far_field=last_row_field_prose(exclusive.far.field) if exclusive.far is not None else None,
+    ))
+
+  def paged_docstring(
+    self, pagination: Pagination, *,
+    method_name: str, size: str | None, step: str | None, cap: bool | str = True,
+    ordered: bool = True,
+    docstring: 'Docstring | None' = None, outer: 'Function | None' = None,
+    extra_params: 'list[Docstring.Param] | None' = None, size_rule: str | None = None,
+  ) -> str:
+    """Describe the walk a generated page method performs, and how it ends.
+
+    The terminator is named rather than implied: a caller who has to know whether a walk
+    trusts a total, a short page or an absent token is reading the venue's docs, which is
+    the reading the declaration exists to have done once.
+
+    Args:
+      pagination: Declaration carried by the endpoint.
+      method_name: Name of the single-request method the walk drives.
+      size: Name of the page-size parameter, when one is declared.
+      step: Expression an `offset` walk advances by, as `paged_step` chose it.
+      cap: `seek` only -- whether a row cap resolves, so a short page ends the walk: `True`,
+        `False`, or the size parameter it resolves from only while the caller sets it.
+      ordered: `seek` only -- whether keys compare by order (`False`: a plain string id,
+        taken from the last row).
+      size_rule: `seek` only -- the sentence stating the page sizes the walk requests
+        (`paged_seek_size_rule`), when it clamps one.
+      docstring: See `paged_summary`.
+      outer: See `paged_summary`.
+      extra_params: See `paged_summary`.
+    """
+    note: str | None = None
+    if pagination.strategy == 'token':
+      walk = f"Passes each page's token back as `{pagination.cursor.parameter}`"
+      ends = (
+        f'stops when a response carries no `{pagination.cursor.from_}`'
+        if pagination.done.kind == 'absent_cursor'
+        else 'stops on the first empty page'
       )
-    field = last_row_field(pagination.cursor.from_)
-    positional = list(header.args)
-    keyword = [param for param in header.kwargs if param.name != 'validate']
-    validate = next((param for param in header.kwargs if param.name == 'validate'), None)
-    taken = {
-      'self', 'max_pages',
-      *(param.name for param in positional),
-      *(param.name for param in keyword),
-      *({validate.name} if validate is not None else set()),
-    }
-    cursor = self.paged_local('cursor', taken)
-    overlap = self.paged_local('overlap', taken)
-    response = self.paged_local('response', taken)
-    counter = self.paged_local('pages', taken)
-    fresh = self.paged_local('fresh', taken)
-    values = self.paged_local('values', taken)
-    value = self.paged_local('value', taken)
-    last = self.paged_local('last', taken)
-    item = self.paged_local('item', taken)
-    # Unwrap `pagination.done.rows` (`{category, symbol, list}`, `{dataList, hasMore}`)
-    # into its own local -- `paged_rows` is a pure no-op (returns `response` unchanged,
-    # no lines emitted) when `done.rows` is unset, which is the bare-array shape.
-    taken = {*taken, cursor, overlap, response, counter, fresh, values, value, last, item}
-    rows_read: list[str] = []
-    rows = self.paged_rows(
-      pagination.done.rows, response=response, taken=taken, lines=rows_read,
-    )
-
-    base = (driver_param.type or 'str').removesuffix(' | None')
-    unit = TIMESTAMP_TICKS.get(base)
-    call_parts = [cursor if param.name == driver else param.name for param in positional]
-    call_parts += [
-      f'{param.name}={cursor if param.name == driver else param.name}' for param in keyword
-    ]
-    if validate is not None:
-      call_parts.append(f'{validate.name}={validate.name}')
-    call = ', '.join(call_parts)
-
-    paged = Function(
-      name=self.paged_name(method_name), asyn=True, method=True,
-      args=list(positional),
-      kwargs=[*keyword, Function.Param(name='max_pages', type='int | None', default='None')],
-      return_type=f'AsyncIterator[{response_type}]',
-    )
-    if validate is not None:
-      paged.kwargs.append(validate)
-
-    extra_params = [
-      Docstring.Param(
-        name='max_pages', required=False,
-        docstring='Stop after this many pages, even if the walk is not done.',
-      ),
-    ]
-    docstring_code = self.paged_docstring(
-      pagination, method_name=method_name, size=None, step=None,
-      docstring=docstring, outer=paged, extra_params=extra_params,
-    )
-    self._cursor_render_id = base if unit is not None else None
-    try:
-      item_expr = self.row_field_expression(item, field)
-    finally:
-      self._cursor_render_id = None
-    cap = pagination.overlap.cap
-    prefix_mismatch = (
-      f'`{self.paged_name(method_name)}` requested from {{{cursor}}} and the API returned '
-      f'a different prefix than the previous page ended with; row order was expected to be '
-      f'stable across requests, so the walk stopped instead of dropping or duplicating rows.'
-    )
-    full_page = (
-      f'`{self.paged_name(method_name)}` requested from {{{cursor}}} and the API returned '
-      f'a full page of {{len({rows})}} rows, all sharing `{field}` {{{cursor}}}; the '
-      f'rest of that value is unreachable and advancing would drop it.'
-    )
-    advance = f'{cursor} += 1' if unit is None else f'{cursor} += timedelta({unit}=1)'
-    paged.overloads = validate_overloads(
-      paged, raw_return_type='AsyncIterator[Any]', generator=True,
-    )
-    lines = [
-      paged.code(),
-      *(f'  {line}' if line else '' for line in docstring_code.splitlines()),
-      f'  {cursor}: {base} = {driver}',
-      f'  {overlap}: {response_type} = []',
-      f'  {counter} = 0',
-      '  while True:',
-      f'    {response} = await self.{method_name}({call})',
-      *(f'    {line}' for line in rows_read),
-      f'    {counter} += 1',
-      f'    if not {rows}:',
-      '      break',
-      f'    if {rows}[:len({overlap})] != {overlap}:',
-      f'      raise LogicError(f{prefix_mismatch!r})',
-      f'    {fresh} = {rows}[len({overlap}):]',
-      f'    if {fresh}:',
-      f'      yield {fresh}',
-      f'    if max_pages is not None and {counter} >= max_pages:',
-      '      break',
-      f'    {values} = ['
-      f'{value} for {item} in {rows} if ({value} := {item_expr}) is not None]',
-      f'    {last} = max({values}) if {values} else None',
-      f'    if {last} is not None and {last} > {cursor}:',
-      f'      {cursor} = {last}',
-      f'      {overlap} = [{item} for {item} in {rows} if {item_expr} == {last}]',
-      f'    elif len({rows}) >= {cap}:',
-      f'      raise LogicError(f{full_page!r})',
-      '    else:',
-      f'      {advance}',
-      f'      {overlap} = []',
-    ]
-    return '\n'.join(lines)
-
-  def paged_window_overlap_cap(
-    self, endpoint: Endpoint, overlap: WindowOverlap, size: 'Function.Param | None',
-  ) -> str:
-    """Return the expression a full `window`+`overlap` chunk is measured against.
-
-    `overlap.cap` wins when declared; otherwise this falls back to exactly the same
-    resolution a plain `window` walk's own truncation guard already uses (`paged_cap`) --
-    a caller-always-set `size`, or one with a declared default.
-
-    Args:
-      endpoint: The endpoint whose module is being generated.
-      overlap: `pagination.overlap`.
-      size: Header parameter carrying the page size, when one is declared.
-
-    Raises:
-      ValueError: Neither `overlap.cap` nor `size` resolves one -- `check_pagination`'s
-        own mutual-exclusion validator normally catches this before generation is ever
-        attempted, so reaching this is a sign the spec bypassed that check somehow.
-    """
-    if overlap.cap is not None:
-      return str(overlap.cap)
-    resolved = self.paged_cap(endpoint, size)
-    if resolved is None:
-      raise ValueError(
-        f'{endpoint.function}: window+overlap declares no `size` default and no '
-        f'`overlap.cap` -- nothing resolves the row cap a full chunk is measured against'
+    elif pagination.strategy == 'seek':
+      field = last_row_field_prose(pagination.cursor.field)
+      key = last_row_field_prose(pagination.cursor.field, value=True)
+      moving = self.identifier(pagination.moving)
+      far = self.identifier(pagination.far) if pagination.far is not None else None
+      direction = 'backwards' if pagination.descending else 'forwards'
+      move = seek_move_prose(
+        pagination.cursor.field, descending=pagination.descending, ordered=ordered, cap=cap,
+        span=pagination.span is not None,
       )
-    return resolved
-
-  def paged_window_overlap(
-    self, endpoint: Endpoint, *,
-    method_name: str, header: Function, response_type: str,
-    docstring: 'Docstring | None' = None,
-  ) -> str:
-    """Generate the page iterator for a `window` walk declaring `pagination.overlap`.
-
-    `docs/pagination.md` §5's redesigned window walk: a real declared step (`Δt`,
-    `pagination.overlap.chunk`) turns a wide caller range into genuine multi-request
-    coverage instead of one all-or-nothing call, and a chunk that comes back full narrows
-    and retries instead of raising unconditionally -- the same mechanism
-    `paged_overlap_seek` already uses for `seek`, applied to a window's own per-chunk
-    paging instead of a per-request cursor.
-
-    Not directly reusable from either sibling: a window walk needs both a persistent
-    "next chunk" transition (`paged_window`'s own bound-advance, but stepping by the
-    declared `Δt` instead of the caller's whole range) *and* a narrow-and-retry decision
-    per request (`paged_overlap_seek`'s own, but choosing the extreme value *toward* the
-    walk's direction of travel rather than always the largest), neither of which either
-    sibling needs alone -- so this is its own small template, reusing the pieces that do
-    carry over verbatim: `paged_window_bound`/`paged_step_expression`'s own bound
-    normalization and step rendering, `row_field_expression`'s §3-grammar row reader, and
-    the max-value/prefix-mismatch idioms `paged_overlap_seek` established.
-
-    `pagination.done.rows` is unwrapped via `paged_rows` (the same helper `paged_method`'s
-    own plain generator and `paged_response_seek` already call) right after the
-    single-request call returns, so the prefix-check/dedup/cap/value-extraction steps below
-    read the row collection itself, not a wrapper the API put around it
-    (`{category, symbol, list}`, `{dataList, hasMore}`, `{candles: [...]}`) -- a pure
-    no-op when `done.rows` is unset (a bare-array shape),
-    since `paged_rows` then returns the response unchanged.
-
-    `Δt` (`pagination.overlap.chunk`) is optional: undeclared, it defaults to the
-    caller's own `t1 - t0` (one chunk covering the whole requested range), degrading to a
-    single chunk with narrow-and-retry instead of the unconditional raise a plain
-    (non-`overlap`) `window` walk's `paged_truncation` still generates. Declared, it
-    becomes a real, caller-overridable keyword on the generated method.
-
-    Args:
-      endpoint: The endpoint whose module is being generated.
-      method_name: Name of the single-request method the iterator drives.
-      header: Rendered header of that method, after any project-specific renaming.
-      response_type: Return type of that method, which the iterator yields -- the caller
-        (`paged_method`) already resolves this to the flattened `list[T]` row type when
-        `done.rows` is declared, not the enveloped type.
-      docstring: See `paged_method`.
-
-    Raises:
-      ValueError: When a declared bound is not a parameter of the generated method, or
-        `paged_window_overlap_cap` cannot resolve a row cap.
-    """
-    pagination = endpoint.pagination
-    assert (
-      pagination is not None and pagination.strategy == 'window'
-      and pagination.overlap is not None
-    )
-    overlap = pagination.overlap
-    parameters = [*header.args, *header.kwargs]
-    names = {
-      'start': self.identifier(pagination.bound.start),
-      'end': self.identifier(pagination.bound.end),
-    }
-    bounds: dict[str, Function.Param] = {}
-    for role, name in names.items():
-      param = next((item for item in parameters if item.name == name), None)
-      if param is None:
-        raise ValueError(
-          f'the window bound `{name}` is not a parameter of `{method_name}`, so the walk '
-          f'has nothing to advance'
+      walk = (
+        f'Walks {direction} by moving `{moving}` {move}'
+        + (f', never past the caller\'s own `{far}`' if far is not None else '')
+      )
+      exclusive = pagination.exclusive
+      if pagination.span is not None:
+        ends = (
+          f'covers the range in `{self.identifier(pagination.span.parameter)}`-wide requests, '
+          f'stopping at `{far}`'
         )
-      bounds[role] = param
-    size = self.paged_size(pagination, parameters)
-    cap = self.paged_window_overlap_cap(endpoint, overlap, size)
-    descending = pagination.order == 'descending'
-
-    positional = list(header.args)
-    keyword = [param for param in header.kwargs if param.name != 'validate']
-    validate = next((param for param in header.kwargs if param.name == 'validate'), None)
-    taken = {
-      'self', 'max_pages',
-      *(param.name for param in positional),
-      *(param.name for param in keyword),
-      *({validate.name} if validate is not None else set()),
-    }
-
-    chunk_param: Function.Param | None = None
-    if overlap.chunk is not None:
-      chunk_name = self.identifier(overlap.chunk.parameter)
-      chunk_param = Function.Param(name=chunk_name, type='int', default=str(overlap.chunk.default))
-      keyword = [*keyword, chunk_param]
-      taken = {*taken, chunk_name}
-
-    lower = self.paged_local('lower', taken)
-    upper = self.paged_local('upper', taken)
-    pos = self.paged_local('pos', taken)
-    edge = self.paged_local('edge', taken)
-    width = self.paged_local('width', taken)
-    limit = self.paged_local('limit', taken)
-    overlap_local = self.paged_local('overlap', taken)
-    response = self.paged_local('response', taken)
-    counter = self.paged_local('pages', taken)
-    fresh = self.paged_local('fresh', taken)
-    values = self.paged_local('values', taken)
-    value = self.paged_local('value', taken)
-    item = self.paged_local('item', taken)
-    largest = self.paged_local('largest', taken)
-    # Unwrap `pagination.done.rows` (see this method's own docstring above) -- a pure
-    # no-op when `done.rows` is unset, since `paged_rows` then returns `response` unchanged.
-    taken = {
-      *taken, lower, upper, pos, edge, width, limit, overlap_local, response, counter,
-      fresh, values, value, item, largest,
-    }
-    rows_read: list[str] = []
-    rows = self.paged_rows(
-      pagination.done.rows, response=response, taken=taken, lines=rows_read,
-    )
-
-    unit = pagination.step.unit
-    lower_expr, lower_is_datetime = self.paged_window_bound(
-      names['start'], unit=unit, param=bounds['start'],
-    )
-    upper_expr, _ = self.paged_window_bound(names['end'], unit=unit, param=bounds['end'])
-    optional = [name for role, name in names.items() if not self.paged_always_set(bounds[role])]
-
-    step = pagination.step.size
-    step_code = (
-      self.paged_step_expression(step, unit=unit, is_datetime=lower_is_datetime) if step else None
-    )
-    if chunk_param is not None:
-      width_expr = (
-        f'timedelta({self._TIMEDELTA_UNITS[unit]}={chunk_param.name})' if lower_is_datetime
-        else chunk_param.name
-      )
+      elif cap is True:
+        ends = 'stops on the first page shorter than the venue\'s row cap'
+      elif cap is False:
+        ends = 'stops on the first page that brings nothing new'
+      else:
+        ends = (
+          f'stops on the first page shorter than `{cap}`, or, while it is unset, on the first '
+          f'page that brings nothing new'
+        )
+      if pagination.cursor.unique:
+        note = (
+          f'The boundary row a venue re-serves is dropped by its {key}, so no '
+          f'row is duplicated or skipped whichever way the venue bounds its ranges.'
+        )
+      else:
+        note = (
+          f'Rows sharing the boundary {key} are re-fetched and dropped by '
+          f'content, so a value shared by more than one row is never duplicated or '
+          f'skipped. Raises `LogicError` if a row already yielded is genuinely missing '
+          f'from the next page (not merely reordered), or if a full page shares one '
+          f'{key}, since the rest of it would then be unreachable.'
+        )
+      if size_rule is not None:
+        note += ' ' + size_rule
+      if exclusive is not None:
+        note += '\n\n' + self.paged_exclusive_note(exclusive, moving)
     else:
-      width_expr = f'{upper} - {lower}'
-
-    setup: list[str] = []
-    if optional:
-      message = (
-        f'`{self.paged_name(method_name)}` walks a time window: pass both '
-        f'`{names["start"]}` and `{names["end"]}`'
-      )
-      setup.append(f'if {" or ".join(f"{name} is None" for name in optional)}:')
-      setup.append(f'  raise ValueError({message!r})')
-    setup.append(f'{lower} = {lower_expr}')
-    setup.append(f'{upper} = {upper_expr}')
-    setup.append(f'{width} = {width_expr}')
-    if descending:
-      setup.append(f'{pos} = {upper}')
-      setup.append(f'{limit} = {lower}')
-      setup.append(f'{edge} = max({pos} - {width}, {limit})')
-    else:
-      setup.append(f'{pos} = {lower}')
-      setup.append(f'{limit} = {upper}')
-      setup.append(f'{edge} = min({pos} + {width}, {limit})')
-
-    field = last_row_field(overlap.field)
-    self._cursor_render_id = (
-      (bounds['start'].type or 'str').removesuffix(' | None') if lower_is_datetime else None
-    )
-    try:
-      item_expr = self.row_field_expression(item, field)
-    finally:
-      self._cursor_render_id = None
-
-    req_start, req_end = (edge, pos) if descending else (pos, edge)
-    call_bounds = {names['start']: req_start, names['end']: req_end}
-    call_parts = [call_bounds.get(param.name, param.name) for param in positional]
-    call_parts += [
-      f'{param.name}={call_bounds.get(param.name, param.name)}'
-      for param in keyword if chunk_param is None or param.name != chunk_param.name
-    ]
-    if validate is not None:
-      call_parts.append(f'{validate.name}={validate.name}')
-    call = ', '.join(call_parts)
-
-    paged = Function(
-      name=self.paged_name(method_name), asyn=True, method=True,
-      args=list(positional),
-      kwargs=[*keyword, Function.Param(name='max_pages', type='int | None', default='None')],
-      return_type=f'AsyncIterator[{response_type}]',
-    )
-    if validate is not None:
-      paged.kwargs.append(validate)
-
-    extra_params = [
-      Docstring.Param(
-        name='max_pages', required=False,
-        docstring='Stop after this many pages, even if the walk is not done.',
-      ),
-    ]
-    if chunk_param is not None:
-      extra_params.append(Docstring.Param(
-        name=chunk_param.name, required=False,
-        docstring=(
-          f'Width of one chunk, in `{unit}` ticks. Defaults to `{overlap.chunk.default}`, '
-          f'the API\'s own documented density.'
-        ),
-      ))
-    docstring_code = self.paged_docstring(
-      pagination, method_name=method_name, size=size.name if size is not None else None,
-      step=None, docstring=docstring, outer=paged, extra_params=extra_params,
+      if pagination.strategy == 'page':
+        walk = f'Requests `{pagination.index.parameter}` from {pagination.index.start} upwards'
+      else:
+        walk = f'Advances `{pagination.offset.parameter}` by `{step}`'
+      done = pagination.done
+      if done.kind == 'total':
+        unit = 'pages' if done.counts == 'pages' else 'items'
+        ends = (
+          f'stops once it has covered the `{done.path}` {unit} the response reports, or on '
+          f'an empty page'
+        )
+      elif done.kind == 'short_page':
+        ends = f'stops on the first page shorter than `{size}`'
+      else:
+        ends = 'stops on the first empty page'
+    return self.paged_summary(
+      method_name, walk=walk, ends=ends, note=note,
+      docstring=docstring, outer=outer, extra_params=extra_params,
     )
 
-    prefix_mismatch = (
-      f'`{self.paged_name(method_name)}` requested {{{req_start}}}..{{{req_end}}} and the '
-      f'API returned a different prefix than the previous chunk ended with; row order '
-      f'was expected to be stable across requests, so the walk stopped instead of '
-      f'dropping or duplicating rows.'
-    )
-    full_chunk = (
-      f'`{self.paged_name(method_name)}` requested {{{req_start}}}..{{{req_end}}} and the '
-      f'API returned a full chunk of {{len({rows})}} rows, all sharing one '
-      f'`{field}` value; the rest of that value is unreachable and advancing would drop it.'
-    )
-    if descending:
-      transition = [
-        f'if {edge} <= {limit}:',
-        '  break',
-        f'{pos} = {edge}{f" - {step_code}" if step_code else ""}',
-        f'{edge} = max({pos} - {width}, {limit})',
-      ]
-    else:
-      transition = [
-        f'if {edge} >= {limit}:',
-        '  break',
-        f'{pos} = {edge}{f" + {step_code}" if step_code else ""}',
-        f'{edge} = min({pos} + {width}, {limit})',
-      ]
-    narrower = f'{largest} < {pos}' if descending else f'{largest} > {pos}'
-    extremum = 'min' if descending else 'max'
-
-    paged.overloads = validate_overloads(
-      paged, raw_return_type='AsyncIterator[Any]', generator=True,
-    )
-    lines = [
-      paged.code(),
-      *(f'  {line}' if line else '' for line in docstring_code.splitlines()),
-      *(f'  {line}' for line in setup),
-      f'  {overlap_local}: {response_type} = []',
-      f'  {counter} = 0',
-      '  while True:',
-      f'    {response} = await self.{method_name}({call})',
-      *(f'    {line}' for line in rows_read),
-      f'    {counter} += 1',
-      f'    if {rows}[:len({overlap_local})] != {overlap_local}:',
-      f'      raise LogicError(f{prefix_mismatch!r})',
-      f'    {fresh} = {rows}[len({overlap_local}):]',
-      f'    if {fresh}:',
-      f'      yield {fresh}',
-      f'    if max_pages is not None and {counter} >= max_pages:',
-      '      break',
-      f'    if len({rows}) < {cap}:',
-      *(f'      {line}' for line in transition),
-      f'      {overlap_local} = []',
-      '    else:',
-      f'      {values} = ['
-      f'{value} for {item} in {rows} if ({value} := {item_expr}) is not None]',
-      f'      {largest} = {extremum}({values}) if {values} else None',
-      f'      if {largest} is not None and {narrower}:',
-      f'        {pos} = {largest}',
-      f'        {overlap_local} = [{item} for {item} in {rows} if {item_expr} == {largest}]',
-      '      else:',
-      f'        raise LogicError(f{full_chunk!r})',
-    ]
-    return '\n'.join(lines)
-
-  def paged_method(
-    self, endpoint: Endpoint, *,
-    method_name: str, header: Function, response_type: str,
-    nested_fields: Mapping[str, Mapping[str, str]] | None = None,
-    response_accessor: Literal['dict', 'attr'] = 'dict',
-    overlap_rows_type: str | None = None,
-    docstring: 'Docstring | None' = None,
-  ) -> str | None:
-    """Generate the page iterator an endpoint's `pagination` declaration describes.
-
-    The declaration is a spec fact and the loop it implies is a convention, so the loop is
-    written once here rather than per project — a project can paginate eleven endpoints
-    and generate no iterator at all. A backend passes the header it has already built, since
-    parameter names, types and renames are its business; this reads only the declaration,
-    and an endpoint that declares nothing gets nothing.
-
-    `nested_fields` lets a backend whose pagination cursor/size are dotted paths into one
-    nested request-message parameter reuse this same convention instead of inventing its
-    own -- see `flatten_nested_pagination`, which this calls first.
+  def paged_signature(
+    self, header: Function, *, drop: set[str], extra: 'list[Function.Param] | None' = None,
+  ) -> tuple[list['Function.Param'], list['Function.Param'], 'Function.Param | None']:
+    """Split the single-request header into the page method's own positional/keyword
+    parameters and its `validate` keyword, dropping the parameters the walk manages.
 
     Args:
-      endpoint: The endpoint whose module is being generated.
-      method_name: Name of the single-request method the iterator drives.
-      header: Rendered header of that method, after any project-specific renaming.
-      response_type: Return type of that method, which the iterator yields.
-      response_accessor: How the response payload's fields are read when the walk reads
-        a cursor/total/rows path off it -- `'dict'` (`.get(key)`) for every JSON-shaped
-        HTTP/WS response, the default every existing client relies on; `'attr'`
-        (`getattr(x, key, None)`) for a real typed object, which is what a gRPC response
-        actually is (a betterproto2 dataclass, never a dict).
-      overlap_rows_type: Rendered element type of `pagination.done.rows`'s own field, for
-        a `seek`/`window` walk that also declares `overlap` -- resolved by the caller the
-        same way `paged_response_rows_type` resolves it for a `PaginatedResponse`-shaped
-        wrapper (this method has no schema/`RenderedTypes` access of its own to do it).
-        `paged_overlap_seek`/`paged_window_overlap` yield a flattened `list[T]` of rows,
-        not the envelope `response_type` echoes -- when this is given, the dispatch below
-        renders `AsyncIterator[list[{overlap_rows_type}]]` instead of blindly forwarding
-        `response_type`. `None` (every caller before this parameter existed, and every
-        endpoint whose payload already *is* its own row collection, `done.rows` unset) is
-        a pure no-op: the dispatch falls back to echoing `response_type` exactly as before.
-
-      docstring: The single-request sibling's own `Docstring` (built once in
-        `rpc_endpoint`), reused for the `_paged` variant's own description/`Args:`/
-        `References:` instead of the bare structural text — see `paged_summary`.
+      header: Rendered header of the single-request method.
+      drop: Parameter names the walk supplies itself (a page index, a token cursor).
+      extra: Keywords the page method adds beyond the sibling's own (a `span`).
 
     Returns:
-      Source for the `<method_name>_paged` method, or None when nothing is declared, or
-      when the declared shape can't be rendered at all (see the `paged_step` call below).
+      `(positional, keyword, validate)`; `validate` is `None` when the sibling has none.
+    """
+    positional = [param for param in header.args if param.name not in drop]
+    keyword = [
+      param for param in header.kwargs if param.name not in drop and param.name != 'validate'
+    ]
+    validate = next((param for param in header.kwargs if param.name == 'validate'), None)
+    return positional, [*keyword, *(extra or [])], validate
+
+  def paged_call(
+    self, positional: list['Function.Param'], keyword: list['Function.Param'],
+    validate: 'Function.Param | None', *, overrides: Mapping[str, str],
+    supplied: Mapping[str, str], nested: 'tuple[str, str, str, str | None, Mapping[str, str]] | None',
+  ) -> str:
+    """Render the argument list of one call to the single-request method from inside the
+    page method's `next`.
+
+    Args:
+      positional: The page method's own positional parameters.
+      keyword: Its keyword parameters (excluding `validate` and any page-method-only
+        keyword such as a `span`, which `supplied`/`overrides` never name).
+      validate: Its `validate` keyword, when the sibling has one.
+      overrides: Parameter name -> expression to pass instead of the parameter itself
+        (a `seek` bound replaced by the walk's own position).
+      supplied: Parameter name -> expression, for parameters the page method does not
+        take at all and the walk supplies (a page index, a token cursor).
+      nested: `flatten_nested_pagination`'s reconstruction record, or `None` for the flat
+        case -- the flattened driver/size entries are merged back into one constructed
+        message argument, coercing a non-optional field's `None` to its zero value.
+    """
+    call = [overrides.get(param.name, param.name) for param in positional]
+    call.extend(f'{param.name}={overrides.get(param.name, param.name)}' for param in keyword)
+    call.extend(f'{name}={expr}' for name, expr in supplied.items())
+    if validate is not None:
+      call.append(f'{validate.name}={validate.name}')
+    if nested is None:
+      return ', '.join(call)
+    outer_name, outer_type, inner_cursor, inner_size, fields = nested
+
+    def merged_arg(inner: str, *, coerce: bool) -> str | None:
+      """`inner=<expr>` for the constructed message, read straight off `call`."""
+      flat = self.identifier(inner)
+      entry = next((c for c in call if c == flat or c.startswith(f'{flat}=')), None)
+      if entry is None:
+        return None
+      expr = entry.split('=', 1)[1] if '=' in entry else entry
+      field_type = fields[inner]
+      if not coerce or field_type.endswith(' | None'):
+        return f'{inner}={expr}'
+      bare = field_type.removesuffix(' | None')
+      if bare not in _SCALAR_ZERO_VALUES:
+        raise ValueError(
+          f'nested pagination field {inner!r} of {outer_name!r} has type {field_type!r}, '
+          f'which is not one of {sorted(_SCALAR_ZERO_VALUES)} -- no zero value to '
+          f'substitute for the loop-local when it is None on the first call'
+        )
+      return f'{inner}=({expr} if {expr} is not None else {_SCALAR_ZERO_VALUES[bare]})'
+
+    construct_args = [
+      arg for inner, coerce in ((inner_cursor, False), (inner_size, True))
+      if inner is not None and (arg := merged_arg(inner, coerce=coerce)) is not None
+    ]
+    flat_names = {self.identifier(inner) for inner in (inner_cursor, inner_size) if inner}
+    call = [
+      c for c in call
+      if c not in flat_names and not any(c.startswith(f'{flat}=') for flat in flat_names)
+    ]
+    call.append(f'{outer_name}={outer_type}({", ".join(construct_args)})')
+    return ', '.join(call)
+
+  def paged_response_method(
+    self, endpoint: Endpoint, *,
+    method_name: str, header: Function, rows_type: str, state_type: str | None = None,
+    zero_value_is_wire_absent: bool = True,
+    nested_fields: Mapping[str, Mapping[str, str]] | None = None,
+    response_accessor: Literal['dict', 'attr'] = 'dict',
+    response_optional: bool = False,
+    docstring: 'Docstring | None' = None,
+    cursor_format: str | None = None,
+  ) -> str | None:
+    """Generate the `truewire_core.util.paging.PaginatedResponse`-shaped page method an
+    endpoint's `pagination` declaration describes -- awaitable (flattens every page) and
+    async-iterable (one page at a time), with every page one pure `next(state)` call so a
+    caller can retry or resume a single page (ADR 0021).
+
+    Dispatches on strategy: `page`/`offset` to `paged_response_indexed`, `token` to
+    `paged_response_token`, `seek` to `paged_response_seek`. Each renderer keeps the whole
+    of the walk's state in `PaginatedResponse`'s own `S` -- never in a closure -- which is
+    the purity `truewire_core.util.paging`'s contract requires.
+
+    Args:
+      endpoint: The endpoint whose module is being generated.
+      method_name: Name of the single-request method the wrapper drives.
+      header: Rendered header of that method, after any client-specific renaming.
+      rows_type: Rendered type of one row (`PaginatedResponse`'s own `T`) -- the element
+        type of the declared row collection, or of the response itself when the payload
+        is the collection.
+      state_type: `token` only -- rendered (bare, no ` | None`) type of the cursor. Must be
+        one of `_SCALAR_ZERO_VALUES` unless the cursor parameter is required on the
+        single-request method, since the seed is that type's zero value (`None` means
+        "done" to `PaginatedResponse`, so it can't be the seed).
+      zero_value_is_wire_absent: `token` only -- whether the seed is itself a valid,
+        wire-correct way to say "no cursor" (`True` for a proto3 field, whose zero value
+        is indistinguishable from absence; `False` for a REST/JSON-RPC parameter, where
+        the seed is coerced back to `None` so the first call omits it).
+      nested_fields: See `flatten_nested_pagination`.
+      response_accessor: How the response payload's fields are read -- `'dict'`
+        (`.get(key)`) for every JSON-shaped response, `'attr'` for a gRPC dataclass.
+      response_optional: Whether the single-request method's own declared return type is
+        itself nullable (an `anyOf`-wrapped response whose non-null branch carries the
+        rows) -- kucoin's `spot.orders_hf.get_closed_orders` is the real case.
+      docstring: The single-request sibling's own `Docstring`, reused for the page
+        method's description/`Args:`/`References:` -- see `paged_summary`.
+      cursor_format: `seek` only -- see `seek_key_kind`.
+
+    Returns:
+      Source for the `<method_name>_paged` method, or `None` when nothing is declared.
     """
     pagination = endpoint.pagination
     if pagination is None:
       return None
-    # A `seek`/`window`+`overlap` walk yields a flattened `list[T]` of rows, never the
-    # enveloped `response_type` itself, once `pagination.done.rows` is declared -- see
-    # `overlap_rows_type`'s own docstring above. Falls back to a blind echo of
-    # `response_type` when the caller resolved nothing (unset, or the endpoint's payload
-    # already *is* the row collection), which is every currently-shipped case.
-    overlap_response_type = (
-      f'list[{overlap_rows_type}]' if overlap_rows_type is not None else response_type
+    if pagination.strategy == 'seek':
+      return self.paged_response_seek(
+        endpoint, method_name=method_name, header=header, rows_type=rows_type,
+        response_accessor=response_accessor, response_optional=response_optional,
+        docstring=docstring, cursor_format=cursor_format,
+      )
+    if pagination.strategy == 'token':
+      return self.paged_response_token(
+        endpoint, method_name=method_name, header=header, rows_type=rows_type,
+        state_type=state_type, zero_value_is_wire_absent=zero_value_is_wire_absent,
+        nested_fields=nested_fields, response_accessor=response_accessor,
+        response_optional=response_optional, docstring=docstring,
+      )
+    return self.paged_response_indexed(
+      endpoint, method_name=method_name, header=header, rows_type=rows_type,
+      nested_fields=nested_fields, response_accessor=response_accessor,
+      response_optional=response_optional, docstring=docstring,
     )
-    if pagination.strategy == 'seek' and pagination.overlap is not None:
-      return self.paged_overlap_seek(
-        endpoint, method_name=method_name, header=header,
-        response_type=overlap_response_type, docstring=docstring,
+
+  def paged_rows_read(
+    self, rows_path: str, *, response: str, rows: str, response_accessor: Literal['dict', 'attr'],
+    response_optional: bool,
+  ) -> list[str]:
+    """Emit the statements binding `rows` to the page's row collection, never `None`.
+
+    `read_path`'s emitted `.get(key)` always types a `TypedDict` field as `X | None`
+    regardless of whether it is declared `Required` (typeshed's `TypedDict.get` never
+    narrows on Required-ness), so the read is coerced to `[]` on a structurally-impossible
+    `None`. When `rows_path` is `''` the payload is the collection and `rows` is bound to
+    the response itself.
+
+    Args:
+      rows_path: Declared response path of the row collection, `''` for the payload.
+      response: Name holding the single-request method's return value.
+      rows: Name to bind the rows to.
+      response_accessor: See `paged_response_method`.
+      response_optional: See `paged_response_method`.
+    """
+    if not rows_path:
+      if response_optional:
+        return [f'{rows} = {response} if {response} is not None else []']
+      return [f'{rows} = {response}']
+    return [
+      *self.read_path(
+        rows_path, subject=response, name=rows, accessor=response_accessor,
+        subject_optional=response_optional,
+      ),
+      f'{rows} = {rows} if {rows} is not None else []',
+    ]
+
+  def paged_response_indexed(
+    self, endpoint: Endpoint, *,
+    method_name: str, header: Function, rows_type: str,
+    nested_fields: Mapping[str, Mapping[str, str]] | None = None,
+    response_accessor: Literal['dict', 'attr'] = 'dict',
+    response_optional: bool = False,
+    docstring: 'Docstring | None' = None,
+  ) -> str:
+    """Generate the `PaginatedResponse`-shaped page method for `page`/`offset` pagination
+    -- `paged_response_method`'s dispatch target, not meant to be called directly.
+
+    The state is the index itself: a page number seeded from `index.start` and stepped by
+    one, or a row offset seeded from `0` and stepped by the rows the previous page held
+    (`paged_step`). An empty page always ends the walk; a declared `total` or a short page
+    ends it earlier when the declaration can decide that (`docs/pagination.md` §2.1). A
+    missing or moving `total` is not an error (ADR 0021): the walk simply keeps going
+    until the venue's own rows run out.
+
+    Args:
+      endpoint: The endpoint whose module is being generated.
+      method_name: Name of the single-request method the wrapper drives.
+      header: Rendered header of that method, after any client-specific renaming.
+      rows_type: Rendered type of one row.
+      nested_fields: See `flatten_nested_pagination`.
+      response_accessor: See `paged_response_method`.
+      response_optional: See `paged_response_method`.
+      docstring: See `paged_response_method`.
+    """
+    pagination = endpoint.pagination
+    assert pagination is not None and pagination.strategy in ('page', 'offset')
+    done = pagination.done
+    rows_path = self.pagination_rows_path(pagination)
+    total_path = done.path if done.kind == 'total' else None
+    pagination, header, nested = self.flatten_nested_pagination(
+      pagination, header, nested_fields,
+    )
+    assert pagination.strategy in ('page', 'offset')
+    parameters = [*header.args, *header.kwargs]
+    driver = self.identifier(self.pagination_driver(pagination))
+    size = self.paged_size(pagination, parameters)
+    size_default = self.paged_size_default(endpoint)
+    start = pagination.index.start if pagination.strategy == 'page' else 0
+
+    positional, keyword, validate = self.paged_signature(header, drop={driver})
+    taken = {
+      'self', 'next', driver,
+      *(param.name for param in positional), *(param.name for param in keyword),
+      *({validate.name} if validate is not None else set()),
+    }
+    response = self.paged_local('response', taken)
+    rows = self.paged_local('rows', taken)
+    total = self.paged_local('total', taken)
+    call = self.paged_call(
+      positional, keyword, validate, overrides={}, supplied={driver: driver}, nested=nested,
+    )
+
+    size_expr: str | None = None
+    if size is not None and (self.paged_always_set(size) or size_default is not None):
+      size_expr = self.paged_page_size(
+        endpoint, size, fallback=str(size_default) if size_default is not None else None,
       )
-    if pagination.strategy == 'window' and pagination.overlap is not None:
-      return self.paged_window_overlap(
-        endpoint, method_name=method_name, header=header,
-        response_type=overlap_response_type, docstring=docstring,
+    # What the walk has covered once this page is in: a page count for `page`, a row
+    # count for `offset` -- compared against the declared total in its own unit, so an
+    # `offset` walk never multiplies a row count by a page size, and a `page` walk only
+    # does when the total counts items.
+    if pagination.strategy == 'page':
+      pages_covered = f'({driver} - {start} + 1)'
+      items_covered = f'{pages_covered} * {size_expr}' if size_expr is not None else None
+    else:
+      items_covered = f'({driver} + len({rows}))'
+      # Use the page's start: rounding its ending offset up can lose rows on resume.
+      pages_covered = f'{driver} // {size_expr} + 1' if size_expr is not None else None
+    body: list[str] = [
+      f'{response} = await self.{method_name}({call})',
+      *self.paged_rows_read(
+        rows_path, response=response, rows=rows, response_accessor=response_accessor,
+        response_optional=response_optional,
+      ),
+    ]
+    done_terms = [f'not {rows}']
+    if done.kind == 'total':
+      assert total_path is not None
+      body.extend(self.read_path(
+        total_path, subject=response, name=total, accessor=response_accessor,
+        subject_optional=response_optional,
+      ))
+      # A venue can serialize a total as a numeral string (binance's `bfusd`/`rwusd`
+      # rate_history: `total: NotRequired[str]`) -- coerced once here.
+      body.append(f'{total} = int({total}) if {total} is not None else None')
+      covered = pages_covered if done.counts == 'pages' else items_covered
+      if covered is not None:
+        done_terms.append(f'({total} is not None and {covered} >= {total})')
+      elif size is not None:
+        # Optional size, no documented default: only decide by the arithmetic when the
+        # caller actually supplied a size; otherwise the empty page is the terminator.
+        given = self.paged_size_given(endpoint, size)
+        unit_covered = (
+          f'({driver} - {start} + 1) * {given}' if pagination.strategy == 'page'
+          else f'{driver} // {given} + 1'
+        )
+        done_terms.append(
+          f'({total} is not None and {size.name} is not None and {unit_covered} >= {total})'
+        )
+    elif done.kind == 'short_page':
+      if size_expr is not None:
+        done_terms.append(f'len({rows}) < {size_expr}')
+      elif size is not None:
+        given = self.paged_size_given(endpoint, size)
+        done_terms.append(f'({size.name} is not None and len({rows}) < {given})')
+    if pagination.strategy == 'page':
+      step = '1'
+      advance = f'{driver} + 1'
+    else:
+      step = self.paged_step(size, rows=rows, default=size_default)
+      advance = f'{driver} + {step}'
+    body.extend([
+      f'if {" or ".join(done_terms)}:',
+      f'  return {rows}, None',
+      f'return {rows}, {advance}',
+    ])
+    inner = Function(
+      name='next', asyn=True, method=False,
+      args=[Function.Param(name=driver, type='int')],
+      return_type=f'tuple[Sequence[{rows_type}], int | None]',
+    )
+    outer = Function(
+      name=self.paged_name(method_name), asyn=False, method=True,
+      args=list(positional), kwargs=list(keyword),
+      return_type=f'PaginatedResponse[{rows_type}, int]',
+    )
+    if validate is not None:
+      outer.kwargs.append(validate)
+    outer_doc = self.paged_docstring(
+      pagination, method_name=method_name, size=size.name if size is not None else None,
+      step=step, docstring=docstring, outer=outer,
+    )
+    inner_code = inner.code() + '\n' + indent('\n'.join(body))
+    outer_body = '\n'.join([outer_doc, inner_code, f'return PaginatedResponse({start}, {inner.name})'])
+    outer.overloads = validate_overloads(
+      outer, raw_return_type=raw_paged_return_type(outer.return_type or ''),
+    )
+    return outer.code() + '\n' + indent(outer_body)
+
+  def paged_response_token(
+    self, endpoint: Endpoint, *,
+    method_name: str, header: Function, rows_type: str, state_type: str | None,
+    zero_value_is_wire_absent: bool,
+    nested_fields: Mapping[str, Mapping[str, str]] | None = None,
+    response_accessor: Literal['dict', 'attr'] = 'dict',
+    response_optional: bool = False,
+    docstring: 'Docstring | None' = None,
+  ) -> str:
+    """Generate the `PaginatedResponse`-shaped page method for `token` pagination --
+    `paged_response_method`'s dispatch target, not meant to be called directly.
+
+    The state is the cursor. `PaginatedResponse`'s contract (`next: state -> (rows,
+    next_state | None)`) maps directly onto a token walk: the next cursor is read off a
+    declared response path and relayed unchanged; an absent one (or, for `empty`
+    termination, an empty page) ends the walk. The first call has no cursor yet, and
+    `None` would mean "done", so the seed is the cursor type's zero value (`''`, `0`,
+    `b''`), coerced back to `None` before it reaches the wire unless a zero-value field is
+    itself wire-absent (proto3) -- or the caller's own real argument when the venue
+    requires a cursor on every call (deribit's `get_volatility_index_data`).
+
+    Args:
+      endpoint: The endpoint whose module is being generated.
+      method_name: Name of the single-request method the wrapper drives.
+      header: Rendered header of that method, after any client-specific renaming.
+      rows_type: Rendered type of one row.
+      state_type: See `paged_response_method`.
+      zero_value_is_wire_absent: See `paged_response_method`.
+      nested_fields: See `flatten_nested_pagination`.
+      response_accessor: See `paged_response_method`.
+      response_optional: See `paged_response_method`.
+      docstring: See `paged_response_method`.
+
+    Raises:
+      ValueError: No `state_type`, no declared `done.rows`, or a cursor type with no zero
+        value to seed from while the cursor is optional on the single-request method.
+    """
+    pagination = endpoint.pagination
+    assert pagination is not None and pagination.strategy == 'token'
+    if state_type is None:
+      raise ValueError(
+        f'{endpoint.function}: paged_response_method needs state_type for token-strategy '
+        f'pagination'
       )
+    if pagination.done.rows is None:
+      raise ValueError(
+        f'{endpoint.function}: token pagination needs `done.rows` declared -- a token comes '
+        f'off a response field, so the payload is never itself the row collection'
+      )
+    rows_path: str = pagination.done.rows
+    cursor_from: str = pagination.cursor.from_
+    empty_ends = pagination.done.kind == 'empty'
+
     pagination, header, nested = self.flatten_nested_pagination(
       pagination, header, nested_fields,
     )
     parameters = [*header.args, *header.kwargs]
-    size = self.paged_size(pagination, parameters)
+    driver = self.identifier(self.pagination_driver(pagination))
+    driver_param = next((param for param in parameters if param.name == driver), None)
+    driver_required = driver_param is not None and driver_param.required
+    if driver_required:
+      seed = driver
+    else:
+      if state_type not in _SCALAR_ZERO_VALUES:
+        raise ValueError(
+          f'{endpoint.function}: cursor type {state_type!r} is not one of '
+          f'{sorted(_SCALAR_ZERO_VALUES)} -- no zero value to seed PaginatedResponse with'
+        )
+      seed = _SCALAR_ZERO_VALUES[state_type]
 
-    driver = ''
-    driver_param: Function.Param | None = None
-    if pagination.strategy != 'window':
-      driver = self.identifier(self.pagination_driver(pagination))
-      driver_param = next((param for param in parameters if param.name == driver), None)
-
-    # A `token`/`seek` cursor is usually optional -- the first call omits it and the walk
-    # seeds it from `None`. Some APIs require it on every call, including the first
-    # (an `end_timestamp` with no server-side default),
-    # and there the caller's own starting value has to survive onto the iterator's
-    # signature instead of being discarded in favor of a hardcoded `None` the underlying
-    # method would reject.
-    driver_required = (
-      (pagination.strategy == 'token' or pagination.strategy == 'seek')
-      and driver_param is not None
-      and driver_param.required
+    positional, keyword, validate = self.paged_signature(
+      header, drop=set() if driver_required else {driver},
     )
-
-    positional = [
-      param for param in header.args if param.name != driver or driver_required
-    ]
-    keyword = [
-      param
-      for param in header.kwargs
-      if (param.name != driver or driver_required) and param.name != 'validate'
-    ]
-    validate = next((param for param in header.kwargs if param.name == 'validate'), None)
-    cap = self.paged_cap(endpoint, size) if pagination.strategy == 'window' else None
-    guards_truncation = cap is not None
     taken = {
-      'self', 'max_pages',
-      *({PAGED_TRUNCATION_PARAM} if guards_truncation else set()),
-      *(param.name for param in positional),
-      *(param.name for param in keyword),
+      'self', 'next', driver,
+      *(param.name for param in positional), *(param.name for param in keyword),
       *({validate.name} if validate is not None else set()),
     }
     response = self.paged_local('response', taken)
-    counter = self.paged_local('pages', taken)
+    rows_local = self.paged_local('rows', taken)
+    state_local = self.paged_local('state', taken)
+    driver_arg = driver if zero_value_is_wire_absent else f'({driver} or None)'
+    call = self.paged_call(
+      positional, keyword, validate,
+      overrides={driver: driver_arg} if driver_required else {},
+      supplied={} if driver_required else {driver: driver_arg}, nested=nested,
+    )
+    rows_read = self.paged_rows_read(
+      rows_path, response=response, rows=rows_local, response_accessor=response_accessor,
+      response_optional=response_optional,
+    )
+    state_read = self.read_path(
+      cursor_from, subject=response, name=state_local, accessor=response_accessor,
+      subject_optional=response_optional,
+    )
+    inner = Function(
+      name='next', asyn=True, method=False,
+      args=[Function.Param(name=driver, type=state_type)],
+      return_type=f'tuple[Sequence[{rows_type}], {state_type} | None]',
+    )
+    following = f'({state_local} or None) if {rows_local} else None' if empty_ends else f'{state_local} or None'
+    inner_body = '\n'.join([
+      f'{response} = await self.{method_name}({call})',
+      *rows_read,
+      *state_read,
+      f'return {rows_local}, {following}',
+    ])
+    inner_code = inner.code() + '\n' + indent(inner_body)
+    outer = Function(
+      name=self.paged_name(method_name), asyn=False, method=True,
+      args=list(positional), kwargs=list(keyword),
+      return_type=f'PaginatedResponse[{rows_type}, {state_type}]',
+    )
+    if validate is not None:
+      outer.kwargs.append(validate)
+    outer_doc = self.paged_docstring(
+      pagination, method_name=method_name, size=None, step=None,
+      docstring=docstring, outer=outer,
+    )
+    outer_body = '\n'.join([outer_doc, inner_code, f'return PaginatedResponse({seed}, {inner.name})'])
+    outer.overloads = validate_overloads(
+      outer, raw_return_type=raw_paged_return_type(outer.return_type or ''),
+    )
+    return outer.code() + '\n' + indent(outer_body)
 
-    done = pagination.done
-    rows: str | None = None
-    rows_read: list[str] = []
-    if done.kind == 'short_page' or done.kind == 'empty' or done.kind == 'unchanged':
-      rows = self.paged_rows(
-        done.rows, response=response, taken=taken, lines=rows_read,
-        response_accessor=response_accessor,
+  def paged_response_seek(
+    self, endpoint: Endpoint, *,
+    method_name: str, header: Function, rows_type: str,
+    response_accessor: Literal['dict', 'attr'] = 'dict',
+    response_optional: bool = False,
+    docstring: 'Docstring | None' = None,
+    cursor_format: str | None = None,
+  ) -> str:
+    """Generate the `PaginatedResponse`-shaped page method for `seek` pagination --
+    `paged_response_method`'s dispatch target, not meant to be called directly.
+
+    ADR 0021's one cursor-from-rows walk, `docs/pagination.md` §2.4. The state is
+    `(pos, carried)`: the value the moving bound is sent as (the caller's own bound at
+    first, then the extreme cursor key of each full page), and the rows already yielded
+    that share that key, so the venue re-serving them on the next page costs nothing. A
+    request always spans from `pos` to the caller's far bound (or the span edge), so
+    nothing is ever fetched outside the caller's own range. A full page moves `pos`; a
+    short page (when a cap resolves) or a page with nothing fresh (when none does) ends
+    the walk, or advances to the next span-wide chunk when a `span` is declared.
+
+    Dedup is by key for a `unique` cursor and by content otherwise, per
+    `SeekCursor.unique`. Keys are normalized per `seek_key_kind`; a plain-string key is
+    compared by equality only and the page's last row in wire order stands in for its
+    extreme.
+
+    Args:
+      endpoint: The endpoint whose module is being generated.
+      method_name: Name of the single-request method the wrapper drives.
+      header: Rendered header of that method, after any client-specific renaming.
+      rows_type: Rendered type of one row.
+      response_accessor: See `paged_response_method`.
+      response_optional: See `paged_response_method`.
+      docstring: See `paged_response_method`.
+      cursor_format: See `seek_key_kind`.
+
+    Raises:
+      ValueError: A declared bound is not a parameter of the generated method.
+    """
+    pagination = endpoint.pagination
+    assert pagination is not None and pagination.strategy == 'seek'
+    parameters = [*header.args, *header.kwargs]
+    moving = self.identifier(pagination.moving)
+    far = self.identifier(pagination.far) if pagination.far is not None else None
+    moving_param = next((param for param in parameters if param.name == moving), None)
+    if moving_param is None:
+      raise ValueError(
+        f'the seek bound `{moving}` is not a parameter of `{method_name}`, so the walk has '
+        f'nothing to move'
       )
-    # `docs/pagination.md` §4: a `page`/`offset` walk terminated by `total` now raises
-    # rather than silently stopping when a page omits it, or reports one that disagrees
-    # with an earlier page of the same walk -- `total_seen` is the loop-local carrying
-    # what an earlier turn saw, declared once here (before the loop starts), not inside
-    # `paged_termination`'s own returned lines, which re-execute every turn.
-    total_seen = (
-      self.paged_local('total_seen', taken)
-      if pagination.strategy in ('page', 'offset') and done.kind == 'total'
-      else None
+    if far is not None and not any(param.name == far for param in parameters):
+      raise ValueError(
+        f'the seek bound `{far}` is not a parameter of `{method_name}`, so the walk has '
+        f'nothing to stop at'
+      )
+    exclusive = pagination.exclusive
+    exclusives = [self.identifier(name) for name in exclusive.parameters] if exclusive is not None else []
+    for name in exclusives:
+      if not any(param.name == name for param in parameters):
+        raise ValueError(
+          f'the exclusive parameter `{name}` is not a parameter of `{method_name}`, so the '
+          f'walk has nothing to send on its first request'
+        )
+    descending = pagination.descending
+    size = self.paged_size(pagination, parameters)
+    # The cap a full page is measured against: the caller's own `size` whenever one is
+    # given (a caller asking for 2 rows gets pages of 2, whatever the venue's own cap),
+    # else the venue's declared default or fixed `cap`, else unknown (`None`).
+    fallback = str(pagination.cap) if pagination.cap is not None else None
+    if fallback is None and size is not None:
+      default = self.paged_size_default(endpoint)
+      fallback = str(default) if default is not None else None
+    # A given size is clamped once, before the walk, and the clamped value is both what
+    # every request sends and the cap: at most the schema's `maximum`, and at least 2,
+    # since a page must hold one new row beside the boundary row it re-reads.
+    size_clamp = self.paged_seek_size(endpoint, size)
+    if size_clamp is None:
+      # A size `paged_seek_size` leaves alone (not `int`) still measures a full page
+      # against the venue's `maximum`.
+      cap_expr = self.paged_page_size(endpoint, size, fallback=fallback)
+    else:
+      assert size is not None
+      cap_expr = (
+        size.name if self.paged_always_set(size) or fallback is None
+        else f'({size.name} if {size.name} is not None else {fallback})'
+      )
+    # What the docstring says of the cap: always known, never, or only while the caller
+    # sets an optional size nothing else defaults.
+    cap_known: bool | str = (
+      False if cap_expr is None
+      else size.name if size is not None and not self.paged_always_set(size) and fallback is None
+      else True
+    )
+    kind, helper = self.seek_key_kind(moving_param, cursor_format=cursor_format)
+    bound_type = (moving_param.type or 'str').removesuffix(' | None')
+    field = last_row_field(pagination.cursor.field)
+    rows_path = self.pagination_rows_path(pagination)
+    span = pagination.span
+
+    span_param: Function.Param | None = None
+    if span is not None:
+      span_param = Function.Param(
+        name=self.identifier(span.parameter), type='int', default=str(span.default),
+      )
+    positional, keyword, validate = self.paged_signature(
+      header, drop=set(), extra=[span_param] if span_param is not None else None,
+    )
+    taken = {
+      'self', 'next',
+      *(param.name for param in positional), *(param.name for param in keyword),
+      *({validate.name} if validate is not None else set()),
+    }
+    response = self.paged_local('response', taken)
+    rows = self.paged_local('rows', taken)
+    state = self.paged_local('state', taken)
+    pos = self.paged_local('pos', taken)
+    carried = self.paged_local('carried', taken)
+    keys = self.paged_local('keys', taken)
+    key = self.paged_local('key', taken)
+    item = self.paged_local('item', taken)
+    fresh = self.paged_local('fresh', taken)
+    values = self.paged_local('values', taken)
+    extreme = self.paged_local('extreme', taken)
+    cap = self.paged_local('cap', taken)
+    edge = self.paged_local('edge', taken)
+    carried_keys = self.paged_local('carried_keys', taken)
+    remaining = self.paged_local('remaining', taken)
+
+    # `key(item)` reads one row's cursor field, normalized to compare against `pos`: a
+    # nested function rather than an inline expression, so the raw read is bound once and
+    # pyright narrows it past `is not None` before the cast (a repeated expression never
+    # narrows), and so one normalization serves both the page and the carried rows.
+    key_fn = self.paged_local('key_of', taken)
+    raw = self.paged_local('raw', taken)
+
+    def normalized(kind: str, helper: str | None) -> str:
+      """`raw` (a row value already narrowed past `None`) as the parameter it is compared
+      with takes it."""
+      if kind == 'timestamp':
+        assert helper is not None
+        # `cast(...)` only steers pyright: the converter accepts the raw wire value, an
+        # epoch number (or numeral string) for the epoch helpers, an ISO string otherwise.
+        wire = 'str' if helper in ('timestamp_iso', 'date_iso') else 'int'
+        return f'{helper}.parse(cast({wire}, {raw})) if not isinstance({raw}, datetime) else {raw}'
+      return f'{kind}({raw})'
+
+    key_doc = (
+      f"row's {last_row_field_prose(pagination.cursor.field)}" if field else 'row, as a key'
+    )
+    key_def = [
+      f'def {key_fn}({item}: {rows_type}):',
+      f'  """One {key_doc}, normalized to compare against the moving bound."""',
+      *(f'  {line}' for line in self.row_field_read(item, field, raw)),
+      f'  return None if {raw} is None else {normalized(kind, helper)}',
+    ]
+    key_expr = f'{key_fn}({item})'
+    # An exclusive far bound (`exclusive.far`) is sent on the first request at most, so the
+    # walk enforces it on the rows: the caller's value is normalized once up front the way
+    # the row values are, `past(item)` says whether one row lies beyond it, and a page
+    # holding such a row yields the rest and ends the walk.
+    far_setup: list[str] = []
+    past_def: list[str] = []
+    ended: list[str] = []
+    if exclusive is not None and exclusive.far is not None:
+      far_limit = self.identifier(exclusive.far.parameter)
+      far_param = next(param for param in parameters if param.name == far_limit)
+      far_kind, far_helper = self.seek_key_kind(far_param)
+      far_field = last_row_field(exclusive.far.field)
+      far_key = self.paged_local('far_key', taken)
+      past_fn = self.paged_local('past', taken)
+      far_value = (
+        f'{far_helper}.parse({far_helper}.dump({far_limit}))' if far_kind == 'timestamp'
+        else f'{far_kind}({far_limit})'
+      )
+      far_setup = [f'{far_key} = None if {far_limit} is None else {far_value}']
+      past_def = [
+        f'def {past_fn}({item}: {rows_type}) -> bool:',
+        f'  """Whether one row\'s {last_row_field_prose(exclusive.far.field)} lies past the caller\'s own '
+        f'`{far_limit}`."""',
+        *(f'  {line}' for line in self.row_field_read(item, far_field, raw)),
+        f'  return {far_key} is not None and {raw} is not None and '
+        f'({normalized(far_kind, far_helper)}) {"<" if descending else ">"} {far_key}',
+      ]
+      ended = [
+        f'if any({past_fn}({item}) for {item} in {rows}):',
+        f'  return [{item} for {item} in {fresh} if not {past_fn}({item})], None',
+      ]
+
+    # `pos` starts as the caller's own moving bound: `None`-able only when the caller may
+    # omit it (the venue then starts from its own default) and no `span` forces both
+    # bounds to be given -- a required bound (hyperliquid's `start_time`, coinbase's
+    # `start`/`end`) is never `None`, and typing it so would fail the call it feeds.
+    pos_optional = span is None and not moving_param.required
+    pos_type = f'{bound_type} | None' if pos_optional else bound_type
+    state_type = f'tuple[{pos_type}, list[{rows_type}]]'
+    call_keyword = [param for param in keyword if span_param is None or param.name != span_param.name]
+    overrides = {moving: pos}
+    if span is not None:
+      overrides[far or ''] = edge
+    for name in exclusives:
+      overrides[name] = f'{name} if {pos} is None else None'
+    call = self.paged_call(
+      positional, call_keyword, validate, overrides=overrides, supplied={}, nested=None,
     )
 
     setup: list[str] = []
-    advance: list[str] = []
-    overrides: dict[str, str] = {}
-    truncation: list[str] = []
-    step = None
-    driver_runtime = driver
-    """The name actually read/written turn to turn -- `driver` itself, except a required
-    `token` cursor's own freshly-typed local (see the `token` branch below)."""
-    driver_cast: str | None = 'str'
-    """`seek` only -- the constructor `read_last_row` casts the collected row-field value
-    through, so the walk's own local variable never disagrees with the destination cursor
-    parameter's declared type. Stays the wire-safe `str` default unless that parameter is
-    itself declared `int`/`float` below, and becomes `None` (no cast at all) for anything
-    else -- a rendered format type (`TimestampIso`, say) is what the row field already
-    comes back as once read off an already-response-validated row, so casting through
-    `str(...)`/`int(...)` would corrupt a real value rather than normalize an untyped
-    one (a `get_candles`, cursor `toISO` read from `startedAt`, is the confirmed
-    motivating case -- see `read_last_row`'s own `cast` docstring)."""
-    if pagination.strategy == 'window':
-      setup, advance, overrides = self.paged_window(
-        pagination, method_name=method_name, parameters=parameters, taken=taken,
+    if span is not None:
+      assert far is not None and span_param is not None
+      setup.append(f'if {moving} is None or {far} is None:')
+      setup.append(
+        f'  raise ValueError('
+        f'{self.paged_name(method_name) + " walks a bounded range in spans: pass both `" + moving + "` and `" + far + "`"!r})'
       )
-      if cap is not None:
-        assert rows is not None, 'a window walk ends on `empty`, which always reads rows'
-        truncation = self.paged_truncation(
-          method_name=method_name, cap=cap, rows=rows,
-          lower=overrides[self.identifier(pagination.bound.start)],
-          upper=overrides[self.identifier(pagination.bound.end)],
-        )
-    elif pagination.strategy == 'page':
-      setup.append(f'{driver} = {pagination.index.start}')
-      advance.append(f'{driver} += 1')
-      if total_seen is not None:
-        setup.append(f'{total_seen} = None')
-    elif pagination.strategy == 'token' or pagination.strategy == 'seek':
-      annotation = (driver_param.type or 'str') if driver_param is not None else 'str'
-      base = annotation.removesuffix(' | None')
-      if pagination.strategy == 'seek':
-        driver_cast = base if base in ('str', 'int', 'float') else None
-      if driver_required:
-        # `driver` stays a required parameter above (see `driver_required`), typed to
-        # match it exactly (bare `int`, say) -- reassigning it a nullable `continuation`
-        # on every later turn would conflict with that narrower declared type
-        # (`reportRedeclaration`), so the loop tracks its own, freshly-typed local
-        # instead, seeded from the caller's starting value and threaded back into the
-        # call via `overrides` exactly like a `window` walk's renamed bounds.
-        driver_runtime = self.paged_local(f'{driver}_cursor', taken)
-        setup.append(f'{driver_runtime}: {base} | None = {driver}')
-        overrides[driver] = driver_runtime
-      else:
-        setup.append(f'{driver}: {base} | None = None')
+      _, is_datetime = self.paged_window_bound(moving, unit=span.unit, param=moving_param)
+      span_expr = (
+        f'timedelta({self._TIMEDELTA_UNITS[span.unit]}={span_param.name})' if is_datetime
+        else span_param.name
+      )
+      edge_expr = (
+        f'max({pos} - {span_expr}, {far})' if descending else f'min({pos} + {span_expr}, {far})'
+      )
     else:
-      # `paged_step` raises `ValueError` for a real, structural pagination-shape
-      # limitation -- an `offset` walk terminated by an item-counted `total` with no
-      # rows to count and no size (declared or defaulted) to convert the count into a
-      # step (`docs/spec/authoring.md` rule 8). Not a bug in this endpoint's own
-      # otherwise-valid `pagination` declaration; every legacy hand-rolled backend
-      # already had to swallow this identically (a `trades_history` endpoint is the
-      # real, motivating case). Caught narrowly, around only this one call -- not the whole method
-      # body below it -- so a real bug anywhere else in `paged_method` still surfaces as
-      # a real exception instead of being silently swallowed into "no `_paged` variant".
-      try:
-        step = self.paged_step(size, rows=rows, default=self.paged_size_default(endpoint))
-      except ValueError:
-        return None
-      setup.append(f'{driver} = 0')
-      advance.append(f'{driver} += {step}')
-      if total_seen is not None:
-        setup.append(f'{total_seen} = None')
-    termination = self.paged_termination(
-      pagination,
-      response=response, counter=counter, driver=driver_runtime, size=size,
-      rows=rows, rows_read=rows_read, taken=taken, response_accessor=response_accessor,
-      driver_cast=driver_cast, size_default=self.paged_size_default(endpoint),
-      method_name=method_name, total_seen=total_seen,
-    )
+      edge_expr = None
+    if exclusive is not None:
+      # Beside a caller's moving bound only the non-far parameters are refused: the far one
+      # is then never sent, and kept on the rows all the same.
+      far_name = self.identifier(exclusive.far.parameter) if exclusive.far is not None else None
+      refused = [name for name in exclusives if name != far_name]
+      if refused:
+        given = ' or '.join(f'{name} is not None' for name in refused)
+        given = f'({given})' if len(refused) > 1 else given
+        listed = '/'.join(f'`{name}`' for name in refused)
+        setup.append(f'if {moving} is not None and {given}:')
+        setup.append(
+          f'  raise ValueError('
+          f'{self.paged_name(method_name) + " walks by `" + moving + "`, which the venue refuses alongside " + listed + ": pass one or the other"!r})'
+        )
+      if exclusive.first is not None and pos_optional:
+        first = self.identifier(exclusive.first)
+        setup.append(f'if {moving} is None and {first} is None:')
+        setup.append(
+          f'  raise ValueError('
+          f'{self.paged_name(method_name) + " needs `" + moving + "` or `" + first + "` to start from: without either the venue answers from the wrong end of the range"!r})'
+        )
+    setup.extend(far_setup)
+    if size_clamp is not None:
+      setup.append(size_clamp)
+    if cap_expr is not None:
+      setup.append(f'{cap}: int | None = {cap_expr}')
+    else:
+      setup.append(f'{cap}: int | None = None')
 
-    paged = Function(
-      name=self.paged_name(method_name), asyn=True, method=True,
-      args=list(positional),
-      kwargs=[*keyword, Function.Param(name='max_pages', type='int | None', default='None')],
-      return_type=f'AsyncIterator[{response_type}]',
-    )
-    if guards_truncation:
-      paged.kwargs.append(
-        Function.Param(name=PAGED_TRUNCATION_PARAM, type='bool', default='False')
-      )
-    if validate is not None:
-      paged.kwargs.append(validate)
-    call = [overrides.get(param.name, param.name) for param in positional]
-    call.extend(f'{param.name}={overrides.get(param.name, param.name)}' for param in keyword)
-    if driver and not driver_required:
-      call.append(f'{driver}={driver}')
-    if validate is not None:
-      call.append(f'{validate.name}={validate.name}')
-    if nested is not None:
-      # Merge the flattened driver/size call entries `flatten_nested_pagination` split
-      # apart back into one constructed message argument -- whichever expression each
-      # ended up as (a bare loop-local normally, `overrides.get(...)` for a required
-      # `token` cursor's own renamed local), read straight off `call` rather than
-      # re-derived, so the two can't disagree.
-      outer_name, outer_type, inner_cursor, inner_size, fields = nested
-
-      def merged_arg(inner: str) -> str | None:
-        """Return `inner=<expr>` for the constructed message, coercing a loop-local
-        that can be `None` to the field's own zero value when its real constructor
-        does not accept `None` -- see `_SCALAR_ZERO_VALUES`."""
-        flat = self.identifier(inner)
-        entry = next((c for c in call if c.startswith(f'{flat}=')), None)
-        if entry is None:
-          return None
-        expr = entry.split('=', 1)[1]
-        field_type = fields[inner]
-        if field_type.endswith(' | None'):
-          return f'{inner}={expr}'
-        bare = field_type.removesuffix(' | None')
-        if bare not in _SCALAR_ZERO_VALUES:
-          raise ValueError(
-            f'nested pagination field {inner!r} of {outer_name!r} has type {field_type!r}, '
-            f'which is not one of {sorted(_SCALAR_ZERO_VALUES)} -- no zero value to '
-            f'substitute for the loop-local when it is None on the first call'
-          )
-        zero = _SCALAR_ZERO_VALUES[bare]
-        return f'{inner}=({expr} if {expr} is not None else {zero})'
-
-      inner_names = [inner_cursor, *([inner_size] if inner_size is not None else [])]
-      construct_args = [arg for inner in inner_names if (arg := merged_arg(inner)) is not None]
-      call = [
-        c for c in call
-        if not c.startswith(f'{self.identifier(inner_cursor)}=')
-        and (inner_size is None or not c.startswith(f'{self.identifier(inner_size)}='))
+    # The cursor field as messages print it: relative to one row, "row" for the row itself.
+    named = f'`{field}`' if field else 'row'
+    at = lambda value: f'[{item} for {item}, {key} in zip({rows}, {keys}) if {key} == {value}]'  # noqa: E731
+    if pagination.cursor.unique:
+      dedup = [
+        f'{carried_keys} = [{key_expr} for {item} in {carried}]',
+        f'{fresh} = [{item} for {item}, {key} in zip({rows}, {keys}) if {key} not in {carried_keys}]',
       ]
-      call.append(f'{outer_name}={outer_type}({", ".join(construct_args)})')
-
-    extra_params = [
-      Docstring.Param(
-        name='max_pages', required=False,
-        docstring='Stop after this many pages, even if the walk is not done.',
+    else:
+      missing = (
+        f'`{self.paged_name(method_name)}` requested from {{{pos}}} and the venue no longer '
+        f'returned one or more rows it had already returned for that {named}; row content '
+        f'was expected to stay available across requests, so the walk stopped instead of '
+        f'silently dropping or duplicating rows.'
+      )
+      dedup = [
+        f'{remaining} = list({carried})',
+        f'{fresh} = []',
+        f'for {item} in {rows}:',
+        f'  if {item} in {remaining}:',
+        f'    {remaining}.remove({item})',
+        '  else:',
+        f'    {fresh}.append({item})',
+        f'if {remaining}:',
+        f'  raise LogicError(f{missing!r})',
+      ]
+    stuck = (
+      f'`{self.paged_name(method_name)}` requested from {{{pos}}} and the venue returned a '
+      f'full page of {{len({rows})}} rows all sharing one {named} value; the rest of that '
+      f'value is unreachable and advancing would drop it.'
+    )
+    if kind == 'str':
+      extreme_expr = f'{values}[-1] if {values} else None'
+    else:
+      extreme_expr = f'{"min" if descending else "max"}({values}) if {values} else None'
+    body: list[str] = [
+      *key_def,
+      *past_def,
+      f'{pos}, {carried} = {state}',
+      *([f'{edge} = {edge_expr}'] if edge_expr is not None else []),
+      f'{response} = await self.{method_name}({call})',
+      *self.paged_rows_read(
+        rows_path, response=response, rows=rows, response_accessor=response_accessor,
+        response_optional=response_optional,
       ),
+      f'{keys} = [{key_expr} for {item} in {rows}]',
+      *dedup,
+      *ended,
+      f'{values} = [{key} for {key} in {keys} if {key} is not None]',
+      f'{extreme} = {extreme_expr}',
+      f'if {cap} is not None and len({rows}) >= {cap}:',
+      f'  if {extreme} is None or {extreme} == {pos}:',
+      f'    raise LogicError(f{stuck!r})',
+      f'  return {fresh}, ({extreme}, {at(extreme)})',
+      f'if {cap} is None and {extreme} is not None and {extreme} != {pos}:',
+      f'  return {fresh}, ({extreme}, {at(extreme)})',
     ]
-    if guards_truncation:
+    if edge_expr is not None:
+      body.extend([
+        f'if {edge} {"<=" if descending else ">="} {far}:',
+        f'  return {fresh}, None',
+        f'return {fresh}, ({edge}, {at(edge)})',
+      ])
+    else:
+      body.append(f'return {fresh}, None')
+
+    inner = Function(
+      name='next', asyn=True, method=False,
+      args=[Function.Param(name=state, type=state_type)],
+      return_type=f'tuple[Sequence[{rows_type}], {state_type} | None]',
+    )
+    outer = Function(
+      name=self.paged_name(method_name), asyn=False, method=True,
+      args=list(positional), kwargs=list(keyword),
+      return_type=f'PaginatedResponse[{rows_type}, {state_type}]',
+    )
+    if validate is not None:
+      outer.kwargs.append(validate)
+    extra_params: list[Docstring.Param] = []
+    if span is not None and span_param is not None:
       extra_params.append(Docstring.Param(
-        name=PAGED_TRUNCATION_PARAM, required=False,
+        name=span_param.name, required=False,
         docstring=(
-          'Accept a truncated page instead of raising `LogicError` when one is detected.'
+          f'Widest range one request covers, in `{span.unit}`. Defaults to `{span.default}`, '
+          f'the venue\'s own documented maximum.'
         ),
       ))
-    docstring_code = self.paged_docstring(
-      pagination,
-      method_name=method_name, size=size.name if size is not None else None, step=step,
-      truncation=guards_truncation,
-      docstring=docstring, outer=paged, extra_params=extra_params,
+    outer_doc = self.paged_docstring(
+      pagination, method_name=method_name, size=size.name if size is not None else None,
+      step=None, cap=cap_known, ordered=kind != 'str', docstring=docstring, outer=outer,
+      extra_params=extra_params,
+      size_rule=self.paged_seek_size_rule(endpoint) if size_clamp is not None else None,
     )
-    paged.overloads = validate_overloads(
-      paged, raw_return_type='AsyncIterator[Any]', generator=True,
+    inner_code = inner.code() + '\n' + indent('\n'.join(body))
+    outer_body = '\n'.join([
+      outer_doc, *setup, inner_code,
+      f'return PaginatedResponse(({moving}, []), {inner.name})',
+    ])
+    outer.overloads = validate_overloads(
+      outer, raw_return_type=raw_paged_return_type(outer.return_type or ''),
     )
-    lines = [
-      paged.code(),
-      *(f'  {line}' if line else '' for line in docstring_code.splitlines()),
-      *(f'  {line}' for line in setup),
-      f'  {counter} = 0',
-      '  while True:',
-      f'    {response} = await self.{method_name}({", ".join(call)})',
-      f'    yield {response}',
-      f'    {counter} += 1',
-      f'    if max_pages is not None and {counter} >= max_pages:',
-      '      break',
-      *(f'    {line}' for line in termination),
-      *(f'    {line}' for line in truncation),
-      *(f'    {line}' for line in advance),
-    ]
-    return '\n'.join(lines)
+    return outer.code() + '\n' + indent(outer_body)
 
   def paged_response_rows_type(
     self, types: RenderedTypes, rows_path: str, *,
@@ -3179,9 +2997,10 @@ class Generator:
     imports: dict[str, set[str]] | None = None,
   ) -> str | None:
     """Resolve the rendered element type of a declared `pagination.done.rows` field, for
-    a `PaginatedResponse`-shaped `_paged` wrapper's own `T` (ported from the equivalent
-    per-project helper every hand-rolled backend needing this used to carry its own copy
-    of).
+    a `PaginatedResponse`-shaped `_paged` wrapper's own `T` (design's request/response
+    shape; ported from the equivalent per-client helper every hand-rolled backend needing
+    this used to carry its own copy of -- alchemy's own pre-migration `codegen/python.py`
+    named it `_paged_rows_type`).
 
     `Unnest` gives every titled-record schema nested inside `$response` a stable
     identifier keyed by its own path plus a trailing `item` step for an array's element
@@ -3191,7 +3010,7 @@ class Generator:
 
     Not every row schema is a titled record, though: a bare `additionalProperties: true`
     map (rule 1: "a map, not a record, needs no title") or a plain scalar array
-    (`owners: list[str]`) gets no identifier from
+    (alchemy's own `nft.get_owners_for_nft`, `owners: list[str]`) gets no identifier from
     `Unnest` at all. For either, the type is read straight off the parent record's own
     rendered field instead -- regex-extracted from `types.definitions`, stripping the
     enclosing `NotRequired[...]`/`| None`/`list[...]` -- rather than left unresolved,
@@ -3206,8 +3025,8 @@ class Generator:
     `references` exist so this method has a third path for exactly that shape, reading
     the referenced schema directly out of `self.shared_schemas` (`spec/schemas.json`'s
     raw, parsed schemas) and resolving its own row-items `$ref` against `references` the
-    same way an ordinary flat request property already does. Found live on one project's
-    `streams.*` endpoints: each response is a bare
+    same way an ordinary flat request property already does. Found live on moralis's
+    `streams.evm.all_streams` (and 6 more `streams.*` endpoints): each response is a bare
     `$ref` to a shared `*StreamsResponse`/`*History`/... schema whose own `result` (or
     equivalent) property's items are themselves `$ref`'d into `spec/schemas.json` --
     exactly the shape a `PaginatedResponse`-shaped `_paged` method needs to resolve a row
@@ -3224,8 +3043,8 @@ class Generator:
     branch is never extracted at all -- `Unnest.unnest` only fires for an object schema
     with `properties`, so only a real record variant ever gets its own path -- there is
     nothing to try a resolution against for the `null` branch, and no false match to
-    filter out). A `get_closed_orders` pair is the real, motivating case: both declare
-    `pagination.done.rows:
+    filter out). kucoin's `spot.orders_hf.get_closed_orders`/`margin.orders_hf.
+    get_closed_orders` are the real, motivating case: both declare `pagination.done.rows:
     "items"`, `"token"`/`"absent_cursor"` (an S24-eligible strategy/terminator), and a
     response shaped `anyOf: [HfClosedOrdersPage, {"type": "null"}]` -- identical to their
     sibling `get_trade_history` endpoints' own `pagination` declaration, which render
@@ -3272,8 +3091,9 @@ class Generator:
       # `rows_path` is empty when the response *is* the row collection -- a bare
       # top-level array, no wrapper object at all (`docs/spec/authoring.md` rule 8:
       # "short_page and empty also name the collection they measure... omit it only when
-      # the payload is itself the collection"). An `hf_ledgers` pair (`seek` strategy,
-      # no declared `done.rows`) is the real, motivating case -- `Unnest` keys a bare top-level array's own item type
+      # the payload is itself the collection"). kucoin's `account.hf_ledgers`/`account.
+      # margin_hf_ledgers` (`seek` strategy, no declared `done.rows`) are the real,
+      # motivating case -- `Unnest` keys a bare top-level array's own item type
       # `$response/item` (no extra path segment to insert), confirmed empirically
       # against that schema directly.
       if not rows_path:
@@ -3304,8 +3124,14 @@ class Generator:
             field_type = field_type[len('NotRequired[') : -1]
           if field_type.endswith(' | None'):
             field_type = field_type[: -len(' | None')]
-          if field_type.startswith('list[') and field_type.endswith(']'):
-            return field_type[len('list[') : -1]
+          match = re.fullmatch(r'(?:builtins\.)?list\[(.+)\]', field_type)
+          if match:
+            return match.group(1)
+          # A row collection the schema leaves untyped (etherscan's generic
+          # `EtherscanResponse.result: Any`, shared by every endpoint of that shape):
+          # the rows are `Any` too, which is honest, not a resolution failure.
+          if field_type == 'Any':
+            return 'Any'
       return None
 
     direct = resolve_from('$response')
@@ -3314,25 +3140,33 @@ class Generator:
 
     # `$response` itself resolved nothing -- retry against every `$response/anyOf/{i}`
     # branch `Unnest` extracted its own record for (see this method's own docstring, the
-    # `get_closed_orders` case). A plain scalar/`null` branch is never extracted
+    # kucoin `get_closed_orders` case). A plain scalar/`null` branch is never extracted
     # at all (`Unnest.unnest` requires an object schema with `properties`), so this never
     # tries, or wrongly matches against, a branch with no row field to find -- `sorted`
     # by branch index keeps resolution order deterministic and matching declaration order
     # for the (currently hypothetical) case of more than one real record branch.
+    # Every branch's own row type, joined into one union: bybit's `market.instruments` is
+    # one `anyOf` per product category, each with its own `list` element type, and a
+    # `PaginatedResponse[SpotInstrument, str]` would be a lie for a linear category. An
+    # array branch (kucoin's `affiliate.commission`: `anyOf: [[...], null]`, no wrapper
+    # record at all) has no `$response/anyOf/{i}` definition, only an
+    # `$response/anyOf/{i}/item` identifier -- both spellings are gathered here.
     branch_root = re.compile(r'^\$response/anyOf/(\d+)$')
-    branch_roots = sorted(
-      (key for key in types.definitions if branch_root.match(key)),
-      key=lambda key: int(branch_root.match(key).group(1)),  # type: ignore[union-attr]
-    )
-    for root in branch_roots:
+    item_root = re.compile(r'^\$response/anyOf/(\d+)/item$')
+    roots = {key for key in types.definitions if branch_root.match(key)}
+    roots |= {key[: -len('/item')] for key in types.identifiers if item_root.match(key)}
+    branch_types: list[str] = []
+    for root in sorted(roots, key=lambda key: int(branch_root.match(key).group(1))):  # type: ignore[union-attr]
       branched = resolve_from(root)
-      if branched is not None:
-        return branched
+      if branched is not None and branched not in branch_types:
+        branch_types.append(branched)
+    if branch_types:
+      return ' | '.join(branch_types)
 
     # The bare-top-level-array shape (`not rows_path`) has no `segments` to walk against
     # `self.shared_schemas` below -- `resolve_from`'s own empty-`rows_path` branch is the
     # only resolution that shape gets, same as before this method grew a second root to
-    # try. `response_ref` (the bare-`$ref`-response shape, this method's own
+    # try. `response_ref` (moralis's bare-`$ref`-response shape, this method's own
     # docstring) is never itself the empty-`rows_path` case in practice -- `done.rows`
     # unset only ever pairs with a bare top-level array response, and a bare `$ref`
     # response is a record, not an array -- so this is not a real loss of coverage.
@@ -3361,814 +3195,6 @@ class Generator:
     if isinstance(item, Schema) and item.title:
       return item.title
     return None
-
-  def paged_response_method(
-    self, endpoint: Endpoint, *,
-    method_name: str, header: Function, rows_type: str, state_type: str | None = None,
-    zero_value_is_wire_absent: bool = True,
-    nested_fields: Mapping[str, Mapping[str, str]] | None = None,
-    response_accessor: Literal['dict', 'attr'] = 'dict',
-    response_optional: bool = False,
-    docstring: 'Docstring | None' = None,
-  ) -> str | None:
-    """Generate a `truewire_core.util.paging.PaginatedResponse`-shaped page wrapper --
-    awaitable (flattens every page into one list) *and* async-iterable (one page at a
-    time) -- for a project whose own pre-existing pagination convention is this
-    shape rather than the ordinary async-generator one `paged_method` produces.
-
-    A project whose hand-written pagination already returns `PaginatedResponse`
-    everywhere has callers that treat every `_paged` method as awaitable-or-iterable --
-    generating the plain-async-generator shape instead would be a real, visible break to
-    that existing public API. Scoped to `token` strategy with `absent_cursor`
-    termination, `page` strategy with a `total` terminator, and plain `seek` strategy (no
-    declared `overlap`) -- `offset`/`window`, and `seek` with `overlap`, still generate
-    nothing here: `PaginatedResponse`'s own contract (`next: state -> (rows, next_state |
-    None)`) maps directly onto a token walk's own state (the cursor) and terminator (an
-    absent next cursor), onto a page walk's own state (the page index) and terminator (the
-    declared total reached) -- see `paged_response_page_total`, this method's own dispatch
-    target for `page` strategy -- and onto a seek walk's own state (the cursor, read off
-    the previous page's last row rather than a declared response field) and terminator (a
-    short or empty page) -- see `paged_response_seek`, the dispatch target for `seek`.
-
-    Args:
-      endpoint: The endpoint whose module is being generated.
-      method_name: Name of the single-request method the wrapper drives.
-      header: Rendered header of that method, after any project-specific renaming.
-      rows_type: Rendered type of one row (`PaginatedResponse`'s own `T`) -- the element
-        type of `pagination.done.rows`'s own field, not the collection type.
-      state_type: Rendered (bare, no ` | None`) type of the cursor (`PaginatedResponse`'s
-        own `S`) -- must be one of `_SCALAR_ZERO_VALUES`, since the wrapper's own seed
-        value is that type's zero value, never `None` (a `None` state means "done" to
-        `PaginatedResponse.__aiter__`, so seeding it would mean "no pages at all") --
-        *unless* the cursor parameter itself is required on the single-request method
-        (an `end_timestamp` with no server-side default), in which case there is no
-        ambiguity to avoid seeding around
-        in the first place, and the seed is the caller's own real argument instead (see
-        `driver_required` below, mirroring `paged_method`'s identical case). Required for
-        `token` strategy; ignored for `page` strategy, whose state is always the page
-        index (`int`), seeded from `pagination.index.start` -- never ambiguous with "done"
-        the way an absent cursor is, so it needs none of this zero-value machinery.
-      zero_value_is_wire_absent: Whether the cursor's zero value (the seed
-        `PaginatedResponse` starts the walk with) is itself a valid, wire-correct way to
-        say "no cursor". `True` for a proto3/betterproto2 message field, where a
-        zero-value field is indistinguishable on the wire from an absent one -- passing
-        the seed straight through as `<driver>=<driver>` on the first call is correct
-        there, and is exactly what the hand-written `page_request()` helper this
-        replaces already did. `False` for an ordinary optional REST/JSON-RPC parameter,
-        where the single-request method only sends the parameter when given a real,
-        non-`None` value -- the seed is coerced back to `None` before being passed
-        through, so the first call omits the parameter instead of sending the API a
-        literal (and wrong) zero-value cursor. Defaults `True` -- the behavior every
-        caller before this parameter existed already got -- for backward compatibility
-        with real proto3 usage; a REST/JSON-RPC caller should pass
-        `False` explicitly rather than lean on this default. Ignored for `page` strategy.
-      nested_fields: See `paged_method`. Ignored for `page` strategy.
-      response_accessor: See `paged_method`.
-      response_optional: Whether the single-request method's own declared return type is
-        itself nullable (`Response = HfClosedOrdersPage | None`, an `anyOf`-wrapped
-        response whose non-null branch is what actually carries `rows_path`/`cursor_from`
-        -- a `get_closed_orders` pair is the first real, motivating case). `False` (the
-        default,
-        and every already-migrated caller's prior, hardcoded behavior) when the response
-        is known non-`None` by construction, the same case `read_path`'s own
-        `subject_optional=False` already exists for -- passing `True` here is what makes
-        this method thread that same `subject_optional` value through instead of
-        hardcoding the assumption away.
-      docstring: See `paged_method`.
-
-    Returns:
-      Source for the `<method_name>_paged` method, or None when nothing is declared.
-
-    Raises:
-      ValueError: `pagination` is `token` strategy without `absent_cursor` termination and
-        a declared `done.rows`, or has no `state_type` to seed with; is `page` strategy
-        without a `total` terminator and a declared `done.rows` (see
-        `paged_response_page_total`); is `seek` strategy with `overlap` declared, is
-        terminated by `unchanged`, or whose cursor parameter has no zero-value-seedable
-        type (see `paged_response_seek`); or is any other strategy.
-    """
-    pagination = endpoint.pagination
-    if pagination is None:
-      return None
-    if pagination.strategy == 'page':
-      if pagination.done.kind == 'total':
-        return self.paged_response_page_total(
-          endpoint, method_name=method_name, header=header, rows_type=rows_type,
-          response_accessor=response_accessor, response_optional=response_optional,
-          docstring=docstring,
-        )
-      return self.paged_response_page_exhausted(
-        endpoint, method_name=method_name, header=header, rows_type=rows_type,
-        response_accessor=response_accessor, response_optional=response_optional,
-        docstring=docstring,
-      )
-    if pagination.strategy == 'seek':
-      # No `response_optional` to thread here -- `paged_response_seek`'s own row read
-      # (`paged_rows`, for its declared-`done.rows` case) already defaults `read_path`'s
-      # `subject_optional` to `True` unconditionally, so it's already safe regardless.
-      return self.paged_response_seek(
-        endpoint, method_name=method_name, header=header, rows_type=rows_type,
-        response_accessor=response_accessor, docstring=docstring,
-      )
-    if pagination.strategy != 'token':
-      raise ValueError(
-        f'{endpoint.function}: paged_response_method only supports token-strategy, '
-        f'page-strategy, or plain seek-strategy pagination'
-      )
-    if state_type is None:
-      raise ValueError(
-        f'{endpoint.function}: paged_response_method needs state_type for token-strategy '
-        f'pagination'
-      )
-    if pagination.done.kind != 'absent_cursor':
-      raise ValueError(
-        f'{endpoint.function}: paged_response_method only supports absent-cursor termination'
-      )
-    if pagination.done.rows is None:
-      raise ValueError(
-        f'{endpoint.function}: paged_response_method needs pagination.done.rows declared '
-        f'-- unlike the async-generator shape, which yields the whole response, this one '
-        f'has to know exactly which response field the rows are'
-      )
-    # Captured before `flatten_nested_pagination` reassigns `pagination` to its own
-    # (widely-typed) return value, which would otherwise lose the narrowing the guards
-    # above just established -- these two are response-side paths flattening never
-    # rewrites anyway (only the request-side `.parameter` fields change).
-    rows_path: str = pagination.done.rows
-    cursor_from: str = pagination.cursor.from_
-
-    pagination, header, nested = self.flatten_nested_pagination(
-      pagination, header, nested_fields,
-    )
-    parameters = [*header.args, *header.kwargs]
-    driver = self.identifier(self.pagination_driver(pagination))
-    driver_param = next((param for param in parameters if param.name == driver), None)
-    # Mirrors `paged_method`'s own `driver_required` check: a cursor with no server-side
-    # default has to survive onto the outer
-    # signature and seed `PaginatedResponse.init` from the caller's own real argument --
-    # there is no zero value to seed from, and none is needed, since a real value is
-    # always given.
-    driver_required = driver_param is not None and driver_param.required
-    if driver_required:
-      seed = driver
-    else:
-      if state_type not in _SCALAR_ZERO_VALUES:
-        raise ValueError(
-          f'{endpoint.function}: cursor type {state_type!r} is not one of '
-          f'{sorted(_SCALAR_ZERO_VALUES)} -- no zero value to seed PaginatedResponse with'
-        )
-      seed = _SCALAR_ZERO_VALUES[state_type]
-
-    positional = [param for param in header.args if param.name != driver or driver_required]
-    keyword = [
-      param for param in header.kwargs
-      if (param.name != driver or driver_required) and param.name != 'validate'
-    ]
-    validate = next((param for param in header.kwargs if param.name == 'validate'), None)
-
-    # `'response'`/`'rows'`/`'state'` are deliberately *not* pre-seeded here -- they are
-    # exactly the bare names `paged_local` below is meant to hand out, and pre-adding them
-    # would make it think its own candidates were already taken, appending pointless
-    # trailing underscores (`response_`, `rows_`) to every one of them.
-    taken = {
-      'self', 'next', driver,
-      *(param.name for param in positional), *(param.name for param in keyword),
-      *({validate.name} if validate is not None else set()),
-    }
-    response = self.paged_local('response', taken)
-
-    # `driver` is the loop-local cursor, seeded from `seed` (the state type's own zero
-    # value) on the walk's first call. A proto3/betterproto2 field can't tell a zero-value
-    # cursor from an absent one on the wire, so passing it straight through is correct
-    # there (`zero_value_is_wire_absent=True`); an ordinary optional REST/JSON-RPC
-    # parameter can, and only omits itself when given a real `None` -- so the zero-value
-    # seed is coerced back to `None` before being passed through, and every real
-    # (non-zero-value) cursor still passes unchanged. A required cursor needs none of this
-    # coercion (no falsy-zero-value ambiguity -- a real value is always passed), and is
-    # already carried through by the generic positional/keyword loops below (kept on the
-    # outer signature when `driver_required`), so appending it again here would pass it
-    # twice.
-    driver_arg = driver if zero_value_is_wire_absent else f'({driver} or None)'
-    call = [param.name for param in positional]
-    call.extend(f'{param.name}={param.name}' for param in keyword)
-    if not driver_required:
-      call.append(f'{driver}={driver_arg}')
-    if validate is not None:
-      call.append(f'{validate.name}={validate.name}')
-    if nested is not None:
-      outer_name, outer_type, inner_cursor, inner_size, fields = nested
-      flat_cursor = self.identifier(inner_cursor)
-      flat_size = self.identifier(inner_size) if inner_size is not None else None
-      construct_args = [f'{inner_cursor}={flat_cursor}']
-      if inner_size is not None and flat_size is not None:
-        # The flattened size param lands in `call` as a bare `flat_size` entry when
-        # `flatten()` put it in `header.args` (positional -- e.g. the outer nested
-        # pagination field was a request's *sole* parameter, so it took the "first
-        # unique type stays positional" slot per the same-type-forces-kwargs house
-        # rule, inverted), or as `f'{flat_size}={flat_size}'` when it
-        # landed in `header.kwargs` (keyword). Both forms have to be recognized here --
-        # missing the positional one leaves it both merged into the constructed message
-        # below *and* passed through unchanged, colliding with the message keyword arg.
-        size_entry = next(
-          (c for c in call if c == flat_size or c.startswith(f'{flat_size}=')), None,
-        )
-        if size_entry is not None:
-          field_type = fields[inner_size]
-          size_expr = size_entry.split('=', 1)[1] if '=' in size_entry else size_entry
-          if not field_type.endswith(' | None'):
-            bare = field_type.removesuffix(' | None')
-            if bare not in _SCALAR_ZERO_VALUES:
-              raise ValueError(
-                f'nested pagination field {inner_size!r} of {outer_name!r} has type '
-                f'{field_type!r}, which is not one of {sorted(_SCALAR_ZERO_VALUES)}'
-              )
-            size_expr = f'({size_expr} if {size_expr} is not None else {_SCALAR_ZERO_VALUES[bare]})'
-          construct_args.append(f'{inner_size}={size_expr}')
-      call = [
-        c for c in call
-        if c != flat_cursor and not c.startswith(f'{flat_cursor}=')
-        and (flat_size is None or (c != flat_size and not c.startswith(f'{flat_size}=')))
-      ]
-      call.append(f'{outer_name}={outer_type}({", ".join(construct_args)})')
-
-    # `response` is `await self.{method_name}(...)`'s own return value -- never `None` by
-    # construction regardless of accessor when the single-request method's own declared
-    # return type isn't itself nullable (the single-request method either returns a real
-    # value or raises, the same way every generated method does), so `subject_optional`
-    # only ever needs to track `response_optional` (an `anyOf`-wrapped response whose
-    # non-null branch carries `rows_path`/`cursor_from` -- a `get_closed_orders` is
-    # the real, motivating case) rather than hardcoding the non-nullable case away. See
-    # `read_path`'s own `subject_optional` docstring, and this method's `response_optional`
-    # one.
-    rows_local = self.paged_local('rows', taken)
-    rows_read = self.read_path(
-      rows_path, subject=response, name=rows_local, accessor=response_accessor,
-      subject_optional=response_optional,
-    )
-    state_local = self.paged_local('state', taken)
-    state_read = self.read_path(
-      cursor_from, subject=response, name=state_local, accessor=response_accessor,
-      subject_optional=response_optional,
-    )
-
-    inner = Function(
-      name='next', asyn=True, method=False,
-      args=[Function.Param(name=driver, type=state_type)],
-      return_type=f'tuple[list[{rows_type}], {state_type} | None]',
-    )
-    # `{rows_local} or []`, not the bare name: `read_path`'s emitted `.get(key)` always
-    # types a `TypedDict`'s field as `X | None` regardless of `subject_optional` or
-    # whether the field itself is declared `Required` -- typeshed's own `TypedDict.get`
-    # stub never narrows on Required-ness, only `__getitem__`/`[key]` does -- so
-    # `rows_local` disagrees with this method's own declared non-optional `list[...]`
-    # return type even though the field is genuinely required on the wire. `rows_path`
-    # (`pagination.done.rows`) is documented as always present when `done.kind ==
-    # 'absent_cursor'`, so coercing a structurally-impossible `None` to `[]` here changes
-    # nothing at runtime -- confirmed via the original per-project workaround this
-    # generalizes, which patched this exact line with a regex for the identical reason
-    # on every one of its 15 `token`/`absent_cursor` endpoints.
-    inner_body = '\n'.join([
-      f'{response} = await self.{method_name}({", ".join(call)})',
-      *rows_read,
-      *state_read,
-      f'return {rows_local} or [], {state_local} or None',
-    ])
-    inner_code = inner.code() + '\n' + indent(inner_body)
-
-    outer = Function(
-      name=self.paged_name(method_name), asyn=False, method=True,
-      args=list(positional), kwargs=list(keyword),
-      return_type=f'PaginatedResponse[{rows_type}, {state_type}]',
-    )
-    if validate is not None:
-      outer.kwargs.append(validate)
-    outer.overloads = validate_overloads(
-      outer, raw_return_type=f'PaginatedResponse[Any, {state_type}]',
-    )
-    outer_doc = self.paged_summary(
-      method_name,
-      body='Awaitable (flattens every page) or async-iterable (one page at a time).',
-      docstring=docstring, outer=outer,
-    )
-    outer_body = '\n'.join([outer_doc, inner_code, f'return PaginatedResponse({seed}, {inner.name})'])
-    return outer.code() + '\n' + indent(outer_body)
-
-  def paged_response_page_total(
-    self, endpoint: Endpoint, *,
-    method_name: str, header: Function, rows_type: str,
-    response_accessor: Literal['dict', 'attr'] = 'dict',
-    response_optional: bool = False,
-    docstring: 'Docstring | None' = None,
-  ) -> str | None:
-    """Generate a `PaginatedResponse`-shaped page wrapper for `page`-strategy pagination
-    terminated by a published total -- `paged_response_method`'s own dispatch target for
-    `pagination.strategy == 'page'`, not meant to be called directly.
-
-    Unlike a `token`/`seek` cursor, a page index's own starting value
-    (`pagination.index.start`) is never ambiguous with "the walk is done" the way an
-    absent cursor is, so this needs none of `paged_response_method`'s zero-value-seeding
-    machinery: the state is simply the page index itself, seeded from `index.start` and
-    incremented by one each turn until the declared total is reached -- the same
-    arithmetic `paged_termination`'s own `total` branch already does for `paged_method`,
-    restructured into the `next: state -> (rows, next_state | None)` expression
-    `PaginatedResponse` requires instead of an imperative loop-with-`break`.
-
-    Args:
-      endpoint: The endpoint whose module is being generated.
-      method_name: Name of the single-request method the wrapper drives.
-      header: Rendered header of that method, after any project-specific renaming.
-      rows_type: Rendered type of one row (`PaginatedResponse`'s own `T`) -- the element
-        type of `pagination.done.rows`'s own field, not the collection type.
-      response_accessor: See `paged_method`.
-      response_optional: See `paged_response_method`.
-      docstring: See `paged_method`.
-
-    Returns:
-      Source for the `<method_name>_paged` method, or None when nothing is declared.
-
-    Raises:
-      ValueError: `pagination.done` isn't a `total` terminator or declares no `rows`, or
-        an items-counted total has no page size on the method to convert it.
-    """
-    pagination = endpoint.pagination
-    assert pagination is not None and pagination.strategy == 'page'
-    done = pagination.done
-    if done.kind != 'total':
-      raise ValueError(
-        f'{endpoint.function}: paged_response_method only supports page-strategy '
-        f'pagination terminated by a total'
-      )
-    if done.rows is None:
-      raise ValueError(
-        f'{endpoint.function}: paged_response_method needs pagination.done.rows declared '
-        f'-- unlike the async-generator shape, which yields the whole response, this one '
-        f'has to know exactly which response field the rows are'
-      )
-    rows_path: str = done.rows
-    total_path: str = done.path
-    start = pagination.index.start
-
-    parameters = [*header.args, *header.kwargs]
-    driver = self.identifier(pagination.index.parameter)
-    size = self.paged_size(pagination, parameters)
-    if done.counts == 'items' and size is None:
-      raise ValueError(
-        f'{endpoint.function}: a total counting items needs a page size on the method to '
-        f'convert it'
-      )
-
-    positional = [param for param in header.args if param.name != driver]
-    keyword = [
-      param for param in header.kwargs if param.name != driver and param.name != 'validate'
-    ]
-    validate = next((param for param in header.kwargs if param.name == 'validate'), None)
-
-    taken = {
-      'self', 'next', driver,
-      *(param.name for param in positional), *(param.name for param in keyword),
-      *({validate.name} if validate is not None else set()),
-    }
-    response = self.paged_local('response', taken)
-
-    call = [param.name for param in positional]
-    call.extend(f'{param.name}={param.name}' for param in keyword)
-    call.append(f'{driver}={driver}')
-    if validate is not None:
-      call.append(f'{validate.name}={validate.name}')
-
-    rows_local = self.paged_local('rows', taken)
-    rows_read = self.read_path(
-      rows_path, subject=response, name=rows_local, accessor=response_accessor,
-      subject_optional=response_optional,
-    )
-    total_local = self.paged_local('total', taken)
-    total_read = self.read_path(
-      total_path, subject=response, name=total_local, accessor=response_accessor,
-      subject_optional=response_optional,
-    )
-    # `docs/pagination.md` §4: same stricter `total` as `paged_termination`'s own `total`
-    # branch, restructured for `next`'s `nonlocal`-captured state instead of a loop-local
-    # -- `next` is a fresh Python call every turn, so what an earlier turn saw has to live
-    # in the *enclosing* (`outer`) function's scope to survive between calls, the same
-    # way `PaginatedResponse`'s own state argument does.
-    #
-    # The disagreement has to be raised on the *next* call, not this one: `next`'s own
-    # contract is to return this turn's rows and a next state in the same call, with no
-    # way to both return real rows *and* raise from that same return -- unlike the plain
-    # async-generator shape's `yield`, which commits to handing a page back before its own
-    # termination check ever runs. Rather than drop the page that exposed the
-    # disagreement (real data, valid on its own, the same reasoning the `yield`-first
-    # order exists for), this "poisons" the walk instead: the page is returned normally,
-    # with a next state forcing exactly one more call regardless of whether `done_expr`
-    # would otherwise have ended the walk cleanly here -- ending it cleanly is exactly the
-    # silent case this guards against -- and that forced call raises immediately, before
-    # fetching anything else.
-    total_seen_local = self.paged_local('total_seen', taken)
-    total_poisoned_local = self.paged_local('total_poisoned', taken)
-    total_poison_message_local = self.paged_local('total_poison_message', taken)
-
-    if done.counts == 'pages':
-      done_expr = f'({driver} - {start} + 1) >= {total_local}'
-    else:
-      assert size is not None, 'checked above'
-      if self.paged_always_set(size):
-        done_expr = f'({driver} - {start} + 1) * {size.name} >= {total_local}'
-      else:
-        default = self.paged_size_default(endpoint)
-        if default is not None:
-          resolved = f'({size.name} if {size.name} is not None else {default})'
-          done_expr = f'({driver} - {start} + 1) * {resolved} >= {total_local}'
-        else:
-          # `size` is optional and the API documents no default -- an omitted
-          # `size` can't be multiplied against a page count to test against the
-          # total, and treating the omission itself as "done" (the bug this
-          # replaces) silently truncated every such call to page 1. Decide by the
-          # arithmetic when the caller actually supplied a real size; otherwise
-          # fall back to the one signal that's always safe regardless of `size` --
-          # an empty page really is the end.
-          done_expr = (
-            f'({size.name} is not None and ({driver} - {start} + 1) * {size.name} '
-            f'>= {total_local}) or not {rows_local}'
-          )
-
-    total_message = (
-      f'`{self.paged_name(method_name)}` needs a `total` on every page. The API omitted '
-      f'it here, or reported a value ({{{total_local}}}) that disagrees with an earlier '
-      f'page of this same walk ({{{total_seen_local}}}); retry the whole walk from the '
-      f'start.'
-    )
-    inner = Function(
-      name='next', asyn=True, method=False,
-      args=[Function.Param(name=driver, type='int')],
-      return_type=f'tuple[list[{rows_type}], int | None]',
-    )
-    inner_body = '\n'.join([
-      f'nonlocal {total_seen_local}, {total_poisoned_local}, {total_poison_message_local}',
-      f'if {total_poisoned_local}:',
-      f'  raise LogicError({total_poison_message_local})',
-      f'{response} = await self.{method_name}({", ".join(call)})',
-      *rows_read,
-      f'{rows_local} = {rows_local} if {rows_local} is not None else []',
-      *total_read,
-      f'{total_local} = int({total_local}) if {total_local} is not None else None',
-      f'if {total_local} is None or ('
-      f'{total_seen_local} is not None and {total_local} != {total_seen_local}):',
-      f'  {total_poisoned_local} = True',
-      f'  {total_poison_message_local} = f{total_message!r}',
-      f'  return {rows_local}, {driver} + 1',
-      f'{total_seen_local} = {total_local}',
-      f'if {done_expr}:',
-      f'  return {rows_local}, None',
-      f'return {rows_local}, {driver} + 1',
-    ])
-    inner_code = inner.code() + '\n' + indent(inner_body)
-
-    outer = Function(
-      name=self.paged_name(method_name), asyn=False, method=True,
-      args=list(positional), kwargs=list(keyword),
-      return_type=f'PaginatedResponse[{rows_type}, int]',
-    )
-    if validate is not None:
-      outer.kwargs.append(validate)
-    outer.overloads = validate_overloads(
-      outer, raw_return_type='PaginatedResponse[Any, int]',
-    )
-    outer_doc = self.paged_summary(
-      method_name,
-      body='Awaitable (flattens every page) or async-iterable (one page at a time).',
-      docstring=docstring, outer=outer,
-    )
-    outer_body = '\n'.join([
-      outer_doc,
-      f'{total_seen_local} = None',
-      f'{total_poisoned_local} = False',
-      f'{total_poison_message_local} = \'\'',
-      inner_code,
-      f'return PaginatedResponse({start}, {inner.name})',
-    ])
-    return outer.code() + '\n' + indent(outer_body)
-
-  def paged_response_page_exhausted(
-    self, endpoint: Endpoint, *,
-    method_name: str, header: Function, rows_type: str,
-    response_accessor: Literal['dict', 'attr'] = 'dict',
-    response_optional: bool = False,
-    docstring: 'Docstring | None' = None,
-  ) -> str | None:
-    """Generate a `PaginatedResponse`-shaped page wrapper for `page`-strategy pagination
-    terminated by a short or empty page -- `paged_response_method`'s own dispatch target
-    for `pagination.strategy == 'page'` when `done.kind` is not `total`, not meant to be
-    called directly.
-
-    The most common REST shape there is (`page`/`per_page`, no count anywhere, the walk
-    ends when a page comes back short): GitHub's list endpoints are the motivating case.
-    The state is the page index, seeded from `index.start` and incremented by one each
-    turn; `paged_rows_exhausted` supplies the same termination test `paged_method`'s
-    plain async-generator shape already uses, restructured into the
-    `next: state -> (rows, next_state | None)` expression `PaginatedResponse` requires.
-    Unlike `paged_response_page_total`, `done.rows` need not be declared: the response
-    itself is the row collection when it is not (`paged_rows`).
-
-    Args:
-      endpoint: The endpoint whose module is being generated.
-      method_name: Name of the single-request method the wrapper drives.
-      header: Rendered header of that method, after any project-specific renaming.
-      rows_type: Rendered type of one row (`PaginatedResponse`'s own `T`) -- the element
-        type of `pagination.done.rows`'s own field, or of the response itself when
-        `done.rows` is undeclared.
-      response_accessor: See `paged_method`.
-      response_optional: See `paged_response_method`.
-      docstring: See `paged_method`.
-
-    Returns:
-      Source for the `<method_name>_paged` method, or None when nothing is declared.
-
-    Raises:
-      ValueError: `pagination.done` is not a `short_page` or `empty` terminator, or a
-        `short_page` terminator has no page size on the method to measure against.
-    """
-    pagination = endpoint.pagination
-    assert pagination is not None and pagination.strategy == 'page'
-    done = pagination.done
-    if done.kind not in ('short_page', 'empty'):
-      raise ValueError(
-        f'{endpoint.function}: paged_response_page_exhausted only supports page-strategy '
-        f'pagination terminated by a short or empty page'
-      )
-    start = pagination.index.start
-    parameters = [*header.args, *header.kwargs]
-    driver = self.identifier(pagination.index.parameter)
-    size = self.paged_size(pagination, parameters)
-    if done.kind == 'short_page' and size is None:
-      raise ValueError(
-        f'{endpoint.function}: a short page is only short relative to a page size on the '
-        f'method'
-      )
-
-    positional = [param for param in header.args if param.name != driver]
-    keyword = [
-      param for param in header.kwargs if param.name != driver and param.name != 'validate'
-    ]
-    validate = next((param for param in header.kwargs if param.name == 'validate'), None)
-
-    taken = {
-      'self', 'next', driver,
-      *(param.name for param in positional), *(param.name for param in keyword),
-      *({validate.name} if validate is not None else set()),
-    }
-    response = self.paged_local('response', taken)
-
-    call = [param.name for param in positional]
-    call.extend(f'{param.name}={param.name}' for param in keyword)
-    call.append(f'{driver}={driver}')
-    if validate is not None:
-      call.append(f'{validate.name}={validate.name}')
-
-    rows_read: list[str] = []
-    rows_local = self.paged_rows(
-      done.rows, response=response, taken=taken, lines=rows_read,
-      response_accessor=response_accessor,
-    )
-    if done.rows is None:
-      # The payload is the collection; give the walk its own local so the `None`
-      # normalisation below never rebinds `response`.
-      rows_local = self.paged_local('rows', {*taken, response})
-      rows_read = [f'{rows_local} = {response}']
-    exhausted = self.paged_rows_exhausted(rows=rows_local, size=size, done_kind=done.kind)
-    # A `short_page` walk whose caller omitted the size still knows when a page is short
-    # once the API documents its default page size (`default` on the size parameter,
-    # authoring rule 8): measure against that instead of waiting for an empty page.
-    default = self.paged_size_default(endpoint) if done.kind == 'short_page' else None
-    if size is not None and default is not None and not self.paged_always_set(size):
-      exhausted = (
-        f'if not {rows_local} or len({rows_local}) < '
-        f'({size.name} if {size.name} is not None else {default}):'
-      )
-
-    inner = Function(
-      name='next', asyn=True, method=False,
-      args=[Function.Param(name=driver, type='int')],
-      return_type=f'tuple[list[{rows_type}], int | None]',
-    )
-    inner_body = '\n'.join([
-      f'{response} = await self.{method_name}({", ".join(call)})',
-      *rows_read,
-      f'{rows_local} = list({rows_local}) if {rows_local} is not None else []',
-      exhausted,
-      f'  return {rows_local}, None',
-      f'return {rows_local}, {driver} + 1',
-    ])
-    inner_code = inner.code() + '\n' + indent(inner_body)
-
-    outer = Function(
-      name=self.paged_name(method_name), asyn=False, method=True,
-      args=list(positional), kwargs=list(keyword),
-      return_type=f'PaginatedResponse[{rows_type}, int]',
-    )
-    if validate is not None:
-      outer.kwargs.append(validate)
-    outer.overloads = validate_overloads(
-      outer, raw_return_type='PaginatedResponse[Any, int]',
-    )
-    outer_doc = self.paged_summary(
-      method_name,
-      body='Awaitable (flattens every page) or async-iterable (one page at a time).',
-      docstring=docstring, outer=outer,
-    )
-    outer_body = '\n'.join([
-      outer_doc,
-      inner_code,
-      f'return PaginatedResponse({start}, {inner.name})',
-    ])
-    return outer.code() + '\n' + indent(outer_body)
-
-  def paged_response_seek(
-    self, endpoint: Endpoint, *,
-    method_name: str, header: Function, rows_type: str,
-    response_accessor: Literal['dict', 'attr'] = 'dict',
-    docstring: 'Docstring | None' = None,
-  ) -> str:
-    """Generate a `PaginatedResponse`-shaped page wrapper for plain `seek`-strategy
-    pagination -- `paged_response_method`'s own dispatch target for
-    `pagination.strategy == 'seek'` with no declared `overlap`, not meant to be called
-    directly.
-
-    Closely mirrors `token`'s own branch in `paged_response_method`:
-    the cursor comes from `read_last_row` -- the previous page's own last row -- instead of
-    a declared top-level response field, but both are just a local bound off the response
-    threaded into the same `next: state -> (rows, next_state | None)` shape. Unlike
-    `token`, `pagination.done.rows` need not be declared here: a seek walk's own
-    termination (`paged_rows_exhausted`) already tolerates the payload itself being the
-    row collection (`paged_rows`), and `PaginatedResponse`'s row type is exactly that
-    collection's own element type either way -- an `hf_ledgers` endpoint is this shape
-    (a bare array response, no wrapper).
-
-    Args:
-      endpoint: The endpoint whose module is being generated.
-      method_name: Name of the single-request method the wrapper drives.
-      header: Rendered header of that method, after any project-specific renaming.
-      rows_type: Rendered type of one row (`PaginatedResponse`'s own `T`) -- the element
-        type of `pagination.done.rows`'s own field, or of the response itself when
-        `done.rows` is undeclared.
-      response_accessor: See `paged_method`.
-      docstring: See `paged_method`.
-
-    Returns:
-      Source for the `<method_name>_paged` method.
-
-    Raises:
-      ValueError: `pagination` declares `overlap` (see `paged_overlap_seek` instead), is
-        terminated by `unchanged` (not yet supported here -- see `Generator.paged_method`
-        instead), its cursor parameter isn't on the method, its type has no zero value to
-        seed `PaginatedResponse` with (unless the cursor is required -- see
-        `driver_required` below, which needs no zero value at all), or a `short_page`
-        terminator has no page size on the method to measure against.
-    """
-    pagination = endpoint.pagination
-    assert pagination is not None and pagination.strategy == 'seek'
-    if pagination.overlap is not None:
-      raise ValueError(
-        f'{endpoint.function}: paged_response_method does not support seek pagination '
-        f'with overlap declared -- see paged_overlap_seek'
-      )
-    if pagination.done.kind == 'unchanged':
-      # `paged_rows_exhausted` below has no `unchanged` case -- it only ever measures a
-      # page as short or empty -- so a `PaginatedResponse`-shaped wrapper for this
-      # terminator isn't built yet (S24's own scope note: plain `paged_method`, the
-      # ordinary async-generator shape, is the only one that supports it so far). Raising
-      # here rather than silently generating a wrapper that never terminates the way its
-      # own declaration promises.
-      raise ValueError(
-        f'{endpoint.function}: paged_response_method does not yet support seek pagination '
-        f'terminated by `unchanged` -- see Generator.paged_method for the plain '
-        f'async-generator shape instead'
-      )
-    parameters = [*header.args, *header.kwargs]
-    size = self.paged_size(pagination, parameters)
-    driver = self.identifier(self.pagination_driver(pagination))
-    driver_param = next((param for param in parameters if param.name == driver), None)
-    if driver_param is None:
-      raise ValueError(
-        f'{endpoint.function}: the seek cursor {driver!r} is not a parameter of '
-        f'{method_name!r}, so the walk has nothing to advance'
-      )
-    base = (driver_param.type or 'str').removesuffix(' | None')
-    # `driver_required` mirrors `paged_method`'s own identical check: a cursor with no
-    # server-side default (a `start_timestamp` with none) has to survive onto the
-    # outer signature and seed `PaginatedResponse.init` from the caller's own real
-    # argument -- there is no zero value to seed from, and none is needed, since a real
-    # value is always given.
-    driver_required = driver_param.required
-    if driver_required:
-      seed = driver
-    else:
-      if base not in _SCALAR_ZERO_VALUES:
-        raise ValueError(
-          f'{endpoint.function}: cursor type {base!r} is not one of '
-          f'{sorted(_SCALAR_ZERO_VALUES)} -- no zero value to seed PaginatedResponse with'
-        )
-      seed = _SCALAR_ZERO_VALUES[base]
-
-    positional = [param for param in header.args if param.name != driver or driver_required]
-    keyword = [
-      param for param in header.kwargs
-      if (param.name != driver or driver_required) and param.name != 'validate'
-    ]
-    validate = next((param for param in header.kwargs if param.name == 'validate'), None)
-
-    # `'response'`/`'rows'`/`'state'` deliberately left out of `taken` here, same reasoning
-    # as `paged_response_method`'s own token branch above.
-    taken = {
-      'self', 'next', driver,
-      *(param.name for param in positional), *(param.name for param in keyword),
-      *({validate.name} if validate is not None else set()),
-    }
-    response = self.paged_local('response', taken)
-
-    # `driver` is `next`'s own bare-typed (never `None`) parameter, seeded from `seed` --
-    # an ordinary optional REST/JSON-RPC cursor parameter only sends a real value, so the
-    # zero-value seed is coerced back to `None` on the first call, exactly like
-    # `paged_response_method`'s own `zero_value_is_wire_absent=False` token case. A
-    # required cursor needs no such coercion (no falsy-zero-value ambiguity to resolve --
-    # a real value is always passed), and is already carried through by the generic
-    # positional/keyword loops above (kept on the outer signature when `driver_required`),
-    # so appending it again here would pass it twice.
-    call = [param.name for param in positional]
-    call.extend(f'{param.name}={param.name}' for param in keyword)
-    if not driver_required:
-      call.append(f'{driver}=({driver} or None)')
-    if validate is not None:
-      call.append(f'{validate.name}={validate.name}')
-
-    rows_read: list[str] = []
-    rows = self.paged_rows(
-      pagination.done.rows, response=response, taken=taken, lines=rows_read,
-      response_accessor=response_accessor,
-    )
-    exhausted = self.paged_rows_exhausted(rows=rows, size=size, done_kind=pagination.done.kind)
-    # A fresh local, not `driver` itself: `driver` is declared as `next`'s own bare
-    # (non-`None`) parameter type, and `read_last_row` can bind `None` to what it reads --
-    # reusing `driver` here would disagree with its own declared type under pyright, the
-    # same class of bug the cursor-cast fix above this method exists to prevent.
-    state_local = self.paged_local('state', taken)
-    # `cast` is restricted to `str`/`int`/`float`, mirroring `paged_method`'s own
-    # `driver_cast` (`read_last_row`'s own docstring): a rendered format type
-    # (`TimestampMillis`, say -- only reachable here once a required, non-scalar cursor
-    # qualifies, Fix 3 above) is already what the row field comes back as once read off an
-    # already-response-validated row, so casting through it would call a type alias as a
-    # constructor (`TypeError: Annotated cannot be instantiated`) rather than normalize an
-    # untyped value. Passing `base` through unfiltered here was never reachable before Fix
-    # 3, since `base` was always one of `_SCALAR_ZERO_VALUES` until a required cursor
-    # could bypass that check.
-    row_cast = base if base in ('str', 'int', 'float') else None
-    cursor = self.read_last_row(
-      pagination.cursor.from_, rows=rows, name=state_local, taken=taken, cast=row_cast,
-    )
-
-    inner = Function(
-      name='next', asyn=True, method=False,
-      args=[Function.Param(name=driver, type=base)],
-      return_type=f'tuple[list[{rows_type}], {base} | None]',
-    )
-    inner_body = '\n'.join([
-      f'{response} = await self.{method_name}({", ".join(call)})',
-      *rows_read,
-      exhausted,
-      # `{rows} or []`, not a bare `{rows}` -- inside this branch `rows`'s own declared
-      # type is still `list[{rows_type}] | None` (a dict-accessor `paged_rows` read, or
-      # any read `response_optional` covers), so returning the variable itself fails
-      # pyright under the declared `tuple[list[{rows_type}], ...]` return type. A literal
-      # `[]` alone would be wrong here, not just a type workaround: `short_page` (a
-      # `historical_trades`, this method's own motivating S24 case) reaches this branch
-      # with `rows` genuinely non-empty -- fewer rows than the requested size, not zero
-      # -- and that page's real rows still belong in the walk's last yield. `or []`
-      # narrows the type correctly *and* only substitutes `[]` when `rows` truly is
-      # empty/`None` (confirmed against a real regression: an earlier version of this
-      # fix hardcoded `[]` unconditionally and silently dropped `historical_trades`'s
-      # own final short page).
-      f'  return {rows} or [], None',
-      *cursor,
-      f'return {rows}, {state_local} or None',
-    ])
-    inner_code = inner.code() + '\n' + indent(inner_body)
-
-    outer = Function(
-      name=self.paged_name(method_name), asyn=False, method=True,
-      args=list(positional), kwargs=list(keyword),
-      return_type=f'PaginatedResponse[{rows_type}, {base}]',
-    )
-    if validate is not None:
-      outer.kwargs.append(validate)
-    outer.overloads = validate_overloads(
-      outer, raw_return_type=f'PaginatedResponse[Any, {base}]',
-    )
-    outer_doc = self.paged_summary(
-      method_name,
-      body='Awaitable (flattens every page) or async-iterable (one page at a time).',
-      docstring=docstring, outer=outer,
-    )
-    outer_body = '\n'.join([outer_doc, inner_code, f'return PaginatedResponse({seed}, {inner.name})'])
-    return outer.code() + '\n' + indent(outer_body)
 
   def endpoint(
     self,
@@ -4211,7 +3237,16 @@ class Generator:
     kwargs = {'class_name': class_name, 'method_name': method_name}
     if 'endpoint_dir' in inspect.signature(target).parameters:
       kwargs['endpoint_dir'] = endpoint_dir
-    return target(endpoint, references, **kwargs)
+    refused = self.project.policy.refuse if self.project is not None else ()
+    function = (
+      endpoint.resolved_function(endpoint_dir / 'endpoint.json', self.project.spec_dir)
+      if refused and endpoint_dir is not None and self.project is not None else None
+    )
+    self.refusing = function if function in refused else None
+    try:
+      return target(endpoint, references, **kwargs)
+    finally:
+      self.refusing = None
 
   def _flat_request_kwargs(
     self, field_params: list['Function.Param'],
@@ -4860,16 +3895,19 @@ class Generator:
     # where a `type[T] | UnionType | None` is expected -- the plan decides it from the
     # type tree (`RequestPlan.needs_cast`); a `$ref`-resolved external type is always a
     # real class and never needs it.
+    # A parameter named `type` shadows the builtin inside the method body, so the cast
+    # names it through `builtins` there.
     needs_cast = False
+    cast_type = 'builtins.type' if any(param.name == 'type' for param in [*positional, *keyword]) else 'type'
     if request_type is not None:
       if endpoint_plan.request.needs_cast:
-        call_args.append(f'request_type=cast(type, {request_type})')
+        call_args.append(f'request_type=cast({cast_type}, {request_type})')
         needs_cast = True
       else:
         call_args.append(f'request_type={request_type}')
     if response_type is not None:
       if endpoint_plan.response.needs_cast:
-        call_args.append(f'response_type=cast(type, {response_type})')
+        call_args.append(f'response_type=cast({cast_type}, {response_type})')
         needs_cast = True
       else:
         call_args.append(f'response_type={response_type}')
@@ -4878,6 +3916,7 @@ class Generator:
     body = '\n'.join([*request_decl_lines, return_line])
 
     header.overloads = validate_overloads(header, raw_return_type='Any')
+    params_shadow_builtin = header.qualify_self_shadowed_params()
     method_lines = [header.code()]
     doc_code = docstring.code()
     if doc_code:
@@ -4885,25 +3924,13 @@ class Generator:
     method_lines.append(indent(body, '  '))
     method_code = '\n'.join(method_lines)
 
-    # The request/response shape is silent on pagination -- `endpoint.pagination` is a
-    # sibling of `spec`
-    # (docs/spec/authoring.md rule 8), untouched by the request/response collapse, so
-    # rendering it reuses the exact same shared `paged_method`/`paged_response_method`
-    # primitives every already-migrated (legacy `openapi`-shaped) backend already calls,
-    # just supplied with this method's own new-shape `header`/`response_type` instead of
-    # the old ones. `rows_type` (S24's `PaginatedResponse`-shaped wrapper) is resolved the
-    # identical way a nested request property already is, just off `$response` instead
-    # of `$request` (confirmed empirically: `Unnest` keys a `done.rows` array element
-    # `$response/{dotted path with '/' instead of '.'}/item`, no `response200`-shaped
-    # wrapper segment the way the legacy openapi branch's own equivalent helper needed --
-    # there is no per-status envelope left to name once `response` is one bare schema).
-    # A project whose declared-pagination endpoints are all `token`/`absent_cursor` with
-    # a declared `done.rows` renders every one `PaginatedResponse`-shaped rather than a
-    # plain async generator -- the exact shape its pre-migration hand-written core
-    # already published (S24's own citation), not a new behavior.
-    # `zero_value_is_wire_absent=False`: an ordinary optional REST/JSON-RPC parameter,
-    # never a proto3 message field (`paged_response_method`'s own default assumes the
-    # latter).
+    # `endpoint.pagination` is a sibling of `spec` (docs/spec/authoring.md rule 8). Every
+    # declared walk renders `PaginatedResponse`-shaped (ADR 0013), so the row type has to
+    # resolve: `paged_response_rows_type` reads it off `$response` -- the value the method
+    # returns, `envelope.payload` already selected (ADR 0010). Failing to resolve it is a
+    # spec gap (a wrapped payload with no `rows` declared) and raises rather than silently
+    # generating a lesser method. `zero_value_is_wire_absent=False`: an ordinary optional
+    # REST/JSON-RPC parameter, never a proto3 message field.
     pagination = endpoint.pagination
     paged_source: str | None = None
     if pagination is not None:
@@ -4913,155 +3940,38 @@ class Generator:
       # `type_generator`, so nothing else registers its import (see that method's own
       # `imports` parameter docstring).
       rows_type_imports: dict[str, set[str]] = {}
-      if (
-        pagination.strategy == 'token'
-        and pagination.done.kind == 'absent_cursor'
-        and pagination.done.rows is not None
-      ):
-        rows_type = self.paged_response_rows_type(
-          types, pagination.done.rows, response_ref=response_ref, references=references,
-          imports=rows_type_imports,
-        )
-      elif (
-        pagination.strategy == 'seek'
-        and pagination.overlap is None
-        and pagination.done.kind != 'unchanged'
-      ):
-        # S24's third `PaginatedResponse`-shaped shape: plain `seek` strategy, no
-        # declared `overlap` (`paged_response_method`'s own dispatch already handles this
-        # internally via `paged_response_seek` -- the gap was this call site never
-        # reaching it at all for `seek`). An `hf_ledgers` pair -- S24's own named
-        # first real endpoints for this shape --
-        # declare no `done.rows` at all (the response *is* the row collection), which
-        # `paged_response_rows_type` resolves via its own empty-`rows_path` branch.
-        # `done.kind != 'unchanged'` excludes the one seek terminator
-        # `paged_response_seek` deliberately doesn't support yet (it raises rather than
-        # mis-generate) -- confirmed as a real generation-blocking gap on a
-        # `get_historical_funding`: this branch matched (`unchanged` still
-        # has `overlap is None`), so `rows_type` got set and `paged_response_method` was
-        # attempted anyway, hitting `paged_response_seek`'s own guard as a fatal
-        # `ValueError` instead of ever reaching the plain-generator fallback below --
-        # exactly the same class of gap this branch's own comment already documents for
-        # `page`/`token` above (a dispatch site not reaching a strategy's real support),
-        # just for a terminator instead of a whole strategy.
-        rows_type = self.paged_response_rows_type(
-          types, pagination.done.rows or '', response_ref=response_ref, references=references,
-          imports=rows_type_imports,
-        )
-      elif pagination.strategy == 'page' and (
-        (pagination.done.kind == 'total' and pagination.done.rows is not None)
-        or pagination.done.kind == 'empty'
-        or (
-          pagination.done.kind == 'short_page'
-          and self.paged_size(pagination, [*header.args, *header.kwargs]) is not None
-        )
-      ):
-        # S24's second `PaginatedResponse`-shaped shape: `page` strategy terminated by a
-        # declared `total`, with `done.rows` also declared. `paged_response_method`'s own
-        # dispatch (`paged_response_page_total`, S24's own citation) has supported this
-        # for some time -- this call site simply never reached it for `page`
-        # strategy at all, the same class of gap `seek` had before the branch above:
-        # `rows_type` stayed `None` for every `page`+`total`+`rows` endpoint, so it fell
-        # straight through to the plain-generator `paged_method` fallback below,
-        # regardless of whether `paged_response_page_total` could have rendered it.
-        # A `history.rate_history` (`{rows: [...], total: "N"}`, rule 8's own
-        # `done.rows` worked example) is the real, motivating case -- a
-        # user-reported validation error traced to the response schema's `total` field
-        # led to inspecting the generated `_paged` method and finding it was a plain
-        # `AsyncIterator`, not `PaginatedResponse`-shaped, despite qualifying.
-        # `short_page`/`empty` (GitHub's `page`/`per_page` shape, the fourth
-        # `PaginatedResponse`-shaped shape): `done.rows` may be unset, the response then
-        # being the row collection itself, which `paged_response_rows_type` resolves via
-        # its empty-`rows_path` branch the same way plain `seek` above does. A
-        # `short_page` with no size parameter on the method stays on the plain generator
-        # path, which refuses it with the same `ValueError` it always has.
-        rows_type = self.paged_response_rows_type(
-          types, pagination.done.rows or '', response_ref=response_ref, references=references,
-          imports=rows_type_imports,
-        )
-      # The cursor's own type and whether a `PaginatedResponse` can be seeded with it are
-      # plan decisions (`PaginationPlan.state_type`/`seedable`): the driver parameter's
-      # type without its `null` (a cursor is not always a string -- an `int`
-      # `continuation_token`, a `TimestampIso` `toISO`), rendered here through the same
-      # type renderer its parameter annotation came from; seedable when the strategy
-      # never needs a zero value (`page`/`offset`/`window`), the cursor type has one
-      # (`''`/`0`/`False`), or the cursor is required and the caller's own argument
-      # seeds the walk. `token` and plain (no-`overlap`) `seek` both need the seed:
-      # `paged_response_seek`'s `PaginatedResponse(seed, next)` still wants a real
-      # initial value even though later cursors are read off a row.
-      pagination_plan = endpoint_plan.pagination
-      assert pagination_plan is not None and pagination_plan.state_type is not None
-      state_type = (
-        self.plan_type_code(pagination_plan.state_type) if rows_type is not None else None
+      rows_path = self.pagination_rows_path(pagination)
+      rows_type = self.paged_response_rows_type(
+        types, rows_path, response_ref=response_ref, references=references,
+        imports=rows_type_imports,
       )
-      seedable = pagination_plan.seedable
-      # Fix 1 (`docs/pagination.md`): a `window`/`seek`+`overlap` walk (`paged_method`'s
-      # own dispatch to `paged_window_overlap`/`paged_overlap_seek`) yields a flattened
-      # `list[T]` of rows once `done.rows` is declared, never the enveloped type --
-      # resolved independently of the `rows_type`/`seedable` gate above, since `window` is
-      # never `PaginatedResponse`-eligible (S24) and `seedable` is unconditionally `True`
-      # for it (`pagination.strategy not in ('token', 'seek')`) -- folding this into the
-      # same `rows_type` local would wrongly route a `window`+`overlap` endpoint into
-      # `paged_response_method` the moment `rows_type` resolved to anything at all.
-      overlap_rows_type: str | None = None
-      overlap_rows_type_imports: dict[str, set[str]] = {}
-      if (
-        pagination.strategy in ('window', 'seek')
-        and pagination.overlap is not None
-        and pagination.done.rows is not None
-      ):
-        overlap_rows_type = self.paged_response_rows_type(
-          types, pagination.done.rows, response_ref=response_ref, references=references,
-          imports=overlap_rows_type_imports,
+      if rows_type is None:
+        where = f'rows {rows_path!r}' if rows_path else 'no rows path, so the payload itself'
+        raise ValueError(
+          f'{endpoint.function or spec.path}: cannot resolve the row type of its `pagination` ({where}); '
+          f'every paged method is `PaginatedResponse`-shaped (ADR 0013) and has to know '
+          f'which field the rows are -- declare `rows` (`done.rows` for page/offset/token) '
+          f'naming the array field, or check that the response schema declares it'
         )
-      # Whether the single-request method's return type is nullable (`Response =
-      # HfClosedOrdersPage | None`, an `anyOf`-wrapped response whose real branch carries
-      # the rows) is the plan's `ResponsePlan.optional`, read off the type tree; the
-      # walker then guards every read on the response.
-      response_optional = endpoint_plan.response.optional
-      if rows_type is not None and seedable:
-        paged_source = self.paged_response_method(
-          endpoint, method_name=method_name, header=header,
-          rows_type=rows_type, state_type=state_type, zero_value_is_wire_absent=False,
-          response_optional=response_optional, docstring=docstring,
-        )
-      elif response_type is not None:
-        # `paged_method` itself returns `None` (rather than raising) for a real,
-        # structural pagination-shape limitation it can't render -- a
-        # `trades_history` (an `offset` walk terminated by an
-        # item-counted `total` with no rows to count and no size to convert the count
-        # into a step) is the real, motivating case. See `paged_method`'s own
-        # `paged_step` call for the narrowly-scoped `try/except ValueError` this relies
-        # on -- catching there, not here, means a genuine bug anywhere else in
-        # `paged_method`'s body still surfaces as a real exception instead of being
-        # silently swallowed into "no `_paged` variant".
-        paged_source = self.paged_method(
-          endpoint, method_name=method_name, header=header, response_type=response_type,
-          overlap_rows_type=overlap_rows_type, docstring=docstring,
-        )
-      # `self.paged_imports(...)` -- not a hardcoded guess -- is what actually knows what
-      # a rendered page iterator needs: `AsyncIterator`/`PaginatedResponse` always, plus
-      # `LogicError` for a window-truncation or seek-overlap raise, `timedelta` for a
-      # window step or a timestamp-typed seek cursor's advance, and that cursor's own
-      # converter import (`TIMESTAMP_TICKS`). A hardcoded `{'typing_extensions':
-      # {'AsyncIterator'}}`/`{'truewire_core': {'PaginatedResponse'}}` here (this method's own
-      # bug until now) happened to be enough while every migrated endpoint was
-      # `token`/`absent_cursor` with a declared `done.rows` (the `rows_type is not None`
-      # branch, which needs nothing extra) -- `seek`+`overlap`, timestamp-cursored
-      # endpoints are the first real case needing the rest.
-      if rows_type is not None and seedable:
-        paged_imports = merge_imports([{'truewire_core': {'PaginatedResponse'}}, rows_type_imports])
-        # `paged_response_page_total` (`pagination.strategy == 'page'`) always needs
-        # `LogicError` now too -- `docs/pagination.md` §4's stricter `total`, raised from
-        # the very same `page`+`total` dispatch this branch renders.
-        if pagination.strategy == 'page' and pagination.done.kind == 'total':
-          paged_imports = merge_imports([paged_imports, PAGED_TRUNCATION_IMPORTS])
-      else:
-        paged_imports = self.paged_imports(endpoint, header=header)
-        if overlap_rows_type_imports:
-          paged_imports = merge_imports([paged_imports, overlap_rows_type_imports])
-    else:
-      paged_imports = {}
+      state_type = (
+        self.paged_state_type(header, pagination) if pagination.strategy == 'token' else None
+      )
+      # Whether the single-request method's return type is nullable (an `anyOf`-wrapped
+      # response whose real branch carries the rows) is the plan's
+      # `ResponsePlan.optional`, read off the type tree; the walker guards every read.
+      planned = endpoint_plan.pagination
+      cursor_format = (
+        seek_cursor_format(planned.cursor_type, planned.state_type) if planned is not None else None
+      )
+      paged_source = self.paged_response_method(
+        endpoint, method_name=method_name, header=header,
+        rows_type=rows_type, state_type=state_type, zero_value_is_wire_absent=False,
+        response_optional=endpoint_plan.response.optional, docstring=docstring,
+        cursor_format=cursor_format,
+      )
+      paged_imports = merge_imports([
+        self.paged_imports(endpoint, header=header, cursor_format=cursor_format), rows_type_imports,
+      ])
 
     # `paged_source` (when present) is emitted *before* `method_code`, not after -- a real
     # Python landmine, not a style choice: when `method_name` happens to shadow a builtin
@@ -5076,7 +3986,9 @@ class Generator:
     # `paged_source`'s own name always carries a `_paged` suffix, so it can never itself be
     # a builtin name -- ordering it first can only avoid this shadow, never introduce one.
     class_doc = spec.description or f'`{method_name}`.'
+    refusal, refusal_imports = self.refusal()
     class_lines = [
+      *refusal,
       f'class {class_name}({core_class}):',
       indent(f'"""{class_doc}"""', '  '),
     ]
@@ -5091,7 +4003,10 @@ class Generator:
       dict(types.imports), {core_module: {core_class}}, response_import,
       paged_imports if paged_source is not None else {}, deprecated_imports, transport_imports,
       {'typing_extensions': {'cast'}} if needs_cast else {},
+      {'builtins': set()} if needs_cast and cast_type != 'type' else {},
       VALIDATE_OVERLOAD_IMPORTS if header.overloads else {},
+      {'builtins': set()} if params_shadow_builtin else {},
+      refusal_imports,
     ])
     imports_code = ImportsRenderer(
       imports=merged_imports, pkg_name=core_module.split('.')[0],
@@ -5542,6 +4457,24 @@ class Generator:
       payload_ref_import = {external['package']: {external['name']}}
     elif spec.payload is not None:
       payload_schema = Schema.model_validate(spec.payload)
+    # `reply` (ADR 0014) resolves exactly like `payload` just above; absent, the generated
+    # call and return annotation are byte-for-byte what they were before the field existed.
+    reply_ref = (
+      spec.reply['$ref']
+      if isinstance(spec.reply, dict) and set(spec.reply) == {'$ref'}
+      else None
+    )
+    reply_schema: Schema | None = None
+    reply_ref_type: str | None = None
+    reply_ref_import: dict[str, set[str]] = {}
+    if reply_ref is not None:
+      external = references.get(reply_ref)
+      if external is None:
+        raise ResolutionError(reply_ref)
+      reply_ref_type = external['name']
+      reply_ref_import = {external['package']: {external['name']}}
+    elif spec.reply is not None:
+      reply_schema = Schema.model_validate(spec.reply)
     connect_param_name = self._connect_channel_param(endpoint, parameters_schema, spec.channel)
     # A direct-channel endpoint (`_channel_direct_params`) also skips the `Parameters`
     # TypedDict entirely, same as the connect-channel shape above it -- its call builds
@@ -5560,10 +4493,13 @@ class Generator:
       schemas['$parameters'] = parameters_schema.model_copy(update={'title': None})
     if payload_schema is not None:
       schemas['$payload'] = payload_schema
+    if reply_schema is not None:
+      schemas['$reply'] = reply_schema
     types = type_generator(schemas, inline=True)
 
     parameters_type = types.identifiers.get('$parameters')
     payload_type = payload_ref_type if payload_ref is not None else types.identifiers.get('$payload')
+    reply_type = reply_ref_type if reply_ref is not None else types.identifiers.get('$reply')
 
     channel_identifiers: dict[str, str] = {}
     direct_channel_imports: Imports = {}
@@ -5593,7 +4529,9 @@ class Generator:
     # implementation returns a `StreamManager` (confirmed against `market/ticker_stream`
     # in the end-to-end smoke test -- no unit test here constructs a real core, so this
     # mismatch was invisible to isolated tests).
-    subscribe_return_type = f'StreamManager[{payload_type or "Any"}, Any, Any]'
+    # The manager's second argument is the subscribe reply's own type (ADR 0014), and stays
+    # `Any` for a stream that declares no `reply`.
+    subscribe_return_type = f'StreamManager[{payload_type or "Any"}, {reply_type or "Any"}, Any]'
     header = Function(
       name=method_name, asyn=False, method=True,
       args=positional, kwargs=[*keyword, validate_param],
@@ -5670,9 +4608,10 @@ class Generator:
     # readable on its own. A `$ref`-resolved payload is always a real class and never
     # needs one.
     needs_cast = False
+    cast_type = 'builtins.type' if any(param.name == 'type' for param in [*positional, *keyword]) else 'type'
     if connect_param_name is None and not direct_channel and parameters_type is not None:
       if endpoint_plan.request.needs_cast:
-        call_args.append(f'request_type=cast(type, {parameters_type})')
+        call_args.append(f'request_type=cast({cast_type}, {parameters_type})')
         needs_cast = True
       else:
         call_args.append(f'request_type={parameters_type}')
@@ -5680,10 +4619,18 @@ class Generator:
       # `payload_ref is None and ...` -- never needed for a `$ref`-resolved external
       # type, which is always a real class (see `rpc_endpoint`'s identical guard).
       if endpoint_plan.response.needs_cast:
-        call_args.append(f'response_type=cast(type, {payload_type})')
+        call_args.append(f'response_type=cast({cast_type}, {payload_type})')
         needs_cast = True
       else:
         call_args.append(f'response_type={payload_type}')
+    if reply_type is not None:
+      # The resolved core validates the subscribe acknowledgement through this type before
+      # handing it back as `Stream.reply` (ADR 0014).
+      if reply_ref is None and needs_type_cast(types.definitions.get('$reply')):
+        call_args.append(f'reply_type=cast({cast_type}, {reply_type})')
+        needs_cast = True
+      else:
+        call_args.append(f'reply_type={reply_type}')
     call_lines = group_lines(call_args, tab='  ', width=88)
     return_line = 'return self.subscribe(\n' + '\n'.join(call_lines) + '\n)'
     body = '\n'.join([*parameters_decl_lines, return_line])
@@ -5696,7 +4643,9 @@ class Generator:
     method_code = '\n'.join(method_lines)
 
     class_doc = spec.description or f'`{method_name}`.'
+    refusal, refusal_imports = self.refusal()
     class_code = '\n'.join([
+      *refusal,
       f'class {class_name}({core_class}):',
       indent(f'"""{class_doc}"""', '  '),
       '',
@@ -5707,8 +4656,11 @@ class Generator:
       dict(types.imports),
       dict(direct_channel_imports),
       dict(payload_ref_import),
+      dict(reply_ref_import),
       {core_module: {core_class}, 'truewire_core.util': {'StreamManager'}, 'typing_extensions': {'Any'}},
       {'typing_extensions': {'cast'}} if needs_cast else {},
+      {'builtins': set()} if needs_cast and cast_type != 'type' else {},
+      refusal_imports,
     ])
     imports_code = ImportsRenderer(
       imports=merged_imports, pkg_name=core_module.split('.')[0],
@@ -6087,61 +5039,30 @@ class Generator:
         self._grpc_introspect_nested_fields(endpoint, request_class)
         or self.grpc_nested_fields(endpoint)
       )
+      rows_path = self.pagination_rows_path(pagination)
       rows_resolved = (
         self._grpc_pagination_rows_type(
-          getattr(response_module, response_class_name), rows=pagination.done.rows,
+          getattr(response_module, response_class_name), rows=rows_path,
         )
-        if pagination.done.rows is not None and pagination.done.kind != 'unchanged'
-        else None
+        if rows_path else None
       )
-      # `done.kind != 'unchanged'`: the same exclusion `rpc_endpoint`'s identical dispatch
-      # needs (see its own comment for the confirmed generation-blocking gap this guards
-      # against) -- `paged_response_method`/`paged_response_seek` doesn't support this
-      # terminator yet and raises rather than mis-generate, so attempting it here would
-      # crash a gRPC `unchanged`-terminated endpoint the same way an RPC one did, the
-      # moment one is ever declared. No real gRPC endpoint uses `unchanged` today, so this
-      # is preemptive, not yet triggered live -- but it's the identical shape of gap.
-      if rows_resolved is not None:
-        rows_type, rows_type_imports = rows_resolved
-        state_type = self.paged_state_type(header, pagination, nested_fields)
-        # `token` and plain `seek` both need a real zero value to seed
-        # `PaginatedResponse`'s very first call with -- see `rpc_endpoint`'s identical
-        # check and its own comment for the confirmed generation-failure case. Fix 3: a
-        # required cursor needs no zero value at all (see `rpc_endpoint`'s identical
-        # addition) -- no real gRPC endpoint declares one today, but the check costs
-        # nothing to carry here too.
-        seedable = (
-          pagination.strategy not in ('token', 'seek')
-          or state_type in _SCALAR_ZERO_VALUES
-          or self.pagination_driver_required(header, pagination)
+      if rows_resolved is None:
+        raise ValueError(
+          f'{endpoint.function}: cannot resolve the row type of its `pagination` '
+          f'(rows {rows_path!r}) on {response_class_name}; every paged method is '
+          f'`PaginatedResponse`-shaped (ADR 0013) and has to know which field the rows are'
         )
-        if seedable:
-          paged_source = self.paged_response_method(
-            endpoint, method_name=method_name, header=header,
-            rows_type=rows_type, state_type=state_type,
-            nested_fields=nested_fields, response_accessor='attr', docstring=docstring,
-          )
-          if paged_source is not None:
-            paged_imports = merge_imports([{'truewire_core': {'PaginatedResponse'}}, rows_type_imports])
-            # See the identical comment at `rpc_endpoint`'s own dispatch: `page`+`total`
-            # always needs `LogicError` now too (`docs/pagination.md` §4).
-            if pagination.strategy == 'page' and pagination.done.kind == 'total':
-              paged_imports = merge_imports([paged_imports, PAGED_TRUNCATION_IMPORTS])
-      if paged_source is None:
-        # Fix 1 (`docs/pagination.md`): reuse the same `rows_resolved` lookup above for a
-        # `window`/`seek`+`overlap` endpoint's flattened row type -- no real gRPC endpoint
-        # declares either today, so this is a no-op (`None`) in practice, same reasoning
-        # as `rpc_endpoint`'s identical addition.
-        overlap_rows_type = rows_resolved[0] if rows_resolved is not None else None
-        paged_source = self.paged_method(
-          endpoint, method_name=method_name, header=header,
-          response_type=response_class_name, nested_fields=nested_fields,
-          response_accessor='attr', overlap_rows_type=overlap_rows_type, docstring=docstring,
-        )
-        if paged_source is not None:
-          paged_imports = self.paged_imports(endpoint, header=header)
-          if rows_resolved is not None:
-            paged_imports = merge_imports([paged_imports, rows_resolved[1]])
+      rows_type, rows_type_imports = rows_resolved
+      state_type = (
+        self.paged_state_type(header, pagination, nested_fields)
+        if pagination.strategy == 'token' else None
+      )
+      paged_source = self.paged_response_method(
+        endpoint, method_name=method_name, header=header,
+        rows_type=rows_type, state_type=state_type,
+        nested_fields=nested_fields, response_accessor='attr', docstring=docstring,
+      )
+      paged_imports = merge_imports([self.paged_imports(endpoint, header=header), rows_type_imports])
 
     method_lines = [header.code()]
     doc_code = docstring.code()
@@ -6152,7 +5073,9 @@ class Generator:
 
     # `paged_source` before `method_code` -- see `rpc_endpoint`'s identical ordering and
     # its own comment for the real class-body name-shadowing bug this avoids.
+    refusal, refusal_imports = self.refusal()
     class_lines = [
+      *refusal,
       f'class {class_name}(GrpcEndpoint):',
       indent(f'"""{spec.description}"""', '  '),
     ]
@@ -6164,7 +5087,7 @@ class Generator:
     class_code = '\n'.join(class_lines)
 
     imports_code = ImportsRenderer(
-      imports=merge_imports([imports, paged_imports]), pkg_name=self.project.package_name,
+      imports=merge_imports([imports, paged_imports, refusal_imports]), pkg_name=self.project.package_name,
     ).code()
 
     parts: list[str] = []
@@ -6462,7 +5385,8 @@ class Generator:
     the client's `endpoints_root` itself, and a `[python]` section is configured), the
     class takes its name from `truewire.toml`'s `config.python.name` (unmechanizable --
     real API names like `KuCoin`/`dYdX` defeat PascalCase-of-slug) instead of
-    the derived `router_class_name(section)`, and a bare leaf endpoint directly under the
+    the derived `group_class_name` (the `class` a group's own `router.json` declares, else
+    the PascalCase of `section`), and a bare leaf endpoint directly under the
     root is refused for a related but distinct reason: `router()`'s own composite branch
     never calls `_router_base_class` at all when `leaves` is non-empty, so a root with a
     bare leaf would silently multiply-inherit that leaf's own resolved core (an ordinary
@@ -6578,11 +5502,17 @@ class Generator:
     if subdirectories:
       imports.setdefault('functools', set()).add('cached_property')
 
-    class_name = root_name if root_name is not None else router_class_name(section)
+    doc = self.router_doc(section)
+    class_name = root_name if root_name is not None else group_class_name(doc, section)
     class_lines = [
       f'class {class_name}({", ".join(base_names)}):',
-      indent(router_docstring(section, self.router_doc(section)), '  '),
+      indent(router_docstring(section, doc), '  '),
     ]
+    if root_name is not None and self.project is not None:
+      policy_lines = http_policy_lines(self.project)
+      if policy_lines:
+        imports.setdefault('typing_extensions', set()).add('ClassVar')
+        class_lines += ['', *(indent(line, '  ') for line in policy_lines)]
     if subdirectories:
       cached_properties = '\n\n'.join(
         self._router_cached_property(child, own_core=own_core, imports=imports)

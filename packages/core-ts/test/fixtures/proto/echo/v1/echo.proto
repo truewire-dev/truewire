@@ -1,0 +1,19 @@
+syntax = "proto3";
+package echo.v1;
+
+// Echo is the service the gRPC runtime tests call over an in-process server.
+service Echo {
+  rpc Say(SayRequest) returns (SayResponse);
+}
+
+message SayRequest {
+  string text = 1;
+  uint64 times = 2;
+  bytes tag = 3;
+}
+
+message SayResponse {
+  string text = 1;
+  string authority = 2;
+  bytes tag = 3;
+}

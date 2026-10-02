@@ -1,7 +1,9 @@
 from collections.abc import Callable, Iterable, Mapping
 import importlib.util
 import json
+import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -11,6 +13,7 @@ from typing_extensions import Annotated
 
 from .common import PROJECT_OPTION, resolve_project
 from truewire.project import Project
+from truewire.skeleton import BROAD_STATE_LINES
 
 
 class CodegenError(Exception):
@@ -190,27 +193,33 @@ def expected_generated_content(
 
 
 def check_generated_output(
-  root: Path, output_root: Path, manifest_path: Path, expected: Mapping[Path, str], *,
-  client: str,
+  root: Path, output_root: Path, manifest_path: Path, legacy_path: Path,
+  expected: Mapping[Path, str], *, client: str,
 ):
   """`--check`: compare the manifest and the tree against the plan, writing nothing.
 
   Reports a planned file the manifest does not record, an owned file the plan no longer
   emits, an owned file missing from the tree, and an owned file whose content is not what
-  the plan renders (`expected`, by relative path). Without a manifest -- a fresh clone,
-  `.truewire/` being gitignored -- the plan is the owned file list: it already names
-  every file `generate` would write, so the check is the same, less the one difference
-  only a manifest can show (a file an earlier plan owned and this one does not; the next
-  `generate` deletes it).
+  the plan renders (`expected`, by relative path). The manifest is read from
+  `manifest_path`, else from `legacy_path`, which is then reported stale: the next
+  `generate` moves it. Without either -- a clone of a project that never committed one --
+  the plan is the owned file list: it already names every file `generate` would write, so
+  the check is the same, less the one difference only a manifest can show (a file an
+  earlier plan owned and this one does not; the next `generate` deletes it).
 
   Raises:
     CodegenError: The manifest is malformed.
     typer.Exit: With code 1 and the list of differences on stderr.
   """
   planned = set(expected)
-  from_manifest = manifest_path.exists()
-  owned = load_generated_manifest(manifest_path) if from_manifest else planned
+  source = next((path for path in (manifest_path, legacy_path) if path.exists()), None)
+  owned = load_generated_manifest(source) if source is not None else planned
   issues = check_generated_manifest(output_root, owned, planned)
+  if legacy_path.exists():
+    action = 'removes it' if manifest_path.exists() else (
+      f'moves it to {manifest_path.relative_to(root)}'
+    )
+    issues.append(f'stale manifest: {legacy_path.relative_to(root)} (generate {action})')
   for relative in sorted(planned):
     destination = generated_destination(output_root, relative)
     if destination.is_file() and destination.read_text() != expected[relative]:
@@ -221,11 +230,97 @@ def check_generated_output(
       typer.echo(f'- {issue}', err=True)
     raise typer.Exit(code=1)
   typer.echo(f'Generated files match the plan for {client} ({len(planned)} files).')
-  if not from_manifest:
+  if source is None:
     typer.echo(
       f'No manifest at {manifest_path.relative_to(root)}; the plan stood in for it, so a '
       f'file an earlier plan owned could not be checked.'
     )
+
+
+def migrate_manifest(root: Path, manifest_path: Path, legacy_path: Path):
+  """Move a manifest from its pre-W16 path (`.truewire/<language>-files.json`, git-ignored)
+  to `manifest_path` (`.truewire/codegen/<language>.json`, committed), saying so.
+
+  When both exist the new one is the manifest and the old one is dropped.
+
+  Raises:
+    CodegenError: The old manifest is malformed; it is left where it is.
+  """
+  if not legacy_path.is_file():
+    return
+  old, new = legacy_path.relative_to(root), manifest_path.relative_to(root)
+  if manifest_path.exists():
+    legacy_path.unlink()
+    typer.echo(f'Removed stale manifest {old}; {new} is the manifest.')
+    return
+  owned = load_generated_manifest(legacy_path)
+  manifest_path.parent.mkdir(parents=True, exist_ok=True)
+  write_generated_manifest(manifest_path, owned)
+  legacy_path.unlink()
+  if (rule := git_ignore_rule(root, manifest_path)) is None:
+    typer.echo(f'Moved manifest {old} to {new}.')
+  else:
+    source, line, pattern = rule
+    own_ignore = source == '.gitignore' or Path(source) == root.resolve() / '.gitignore'
+    advice = (
+      'run `truewire init .` to narrow a `.truewire/` line in .gitignore to `.truewire/cache/`.'
+      if own_ignore and pattern in BROAD_STATE_LINES else
+      f'change the rule in {source} at line {line} to allow the codegen manifest.'
+    )
+    typer.echo(
+      f'Moved manifest {old} to {new}, but git still ignores it ({source}:{line}:{pattern}), '
+      f'so it will not be committed: {advice}'
+    )
+
+
+def git_ignore_rule(root: Path, path: Path) -> tuple[str, str, str] | None:
+  """The source, line and pattern ignoring `path`, with the source relative to `root`
+  (absolute sources stay absolute); None
+  when git is not installed, `root` is in no repository, or `path` is not ignored."""
+  git = shutil.which('git')
+  if git is None:
+    return None
+  checked = subprocess.run(
+    [git, 'check-ignore', '--verbose', '-z', '--stdin'], cwd=root,
+    input=str(path) + '\0', capture_output=True, text=True, encoding='utf-8', errors='surrogateescape',
+  )
+  if checked.returncode != 0:
+    return None
+  source, line, pattern, _ = checked.stdout.split('\0', 3)
+  if not Path(source).is_absolute():
+    repository = subprocess.run(
+      [git, 'rev-parse', '--show-toplevel'], cwd=root, capture_output=True, text=True,
+      encoding='utf-8', errors='surrogateescape',
+    )
+    if repository.returncode != 0:
+      return None
+    source = os.path.relpath(Path(repository.stdout.rstrip('\n')) / source, root)
+  return source, line, pattern
+
+
+def delete_generated_output(
+  root: Path, output_root: Path, manifest_path: Path, legacy_path: Path, *, client: str,
+):
+  """`--delete`: remove every file the manifest owns, then the manifest. The manifest is read
+  from `manifest_path`, else from its pre-W16 `legacy_path`; both are removed.
+
+  Raises:
+    CodegenError: Neither manifest exists, or the one read is malformed.
+  """
+  source = next((path for path in (manifest_path, legacy_path) if path.exists()), None)
+  if source is None:
+    raise CodegenError(
+      f'Cannot delete generated files: missing manifest {manifest_path.relative_to(root)}'
+    )
+  owned = load_generated_manifest(source)
+  deleted = reconcile_generated_output(output_root, owned, set())
+  removed = [path for path in (manifest_path, legacy_path) if path.exists()]
+  for path in removed:
+    path.unlink()
+  absent = len(owned) - deleted
+  detail = f'; {absent} already absent' if absent else ''
+  names = ' and '.join(str(path.relative_to(root)) for path in removed)
+  typer.echo(f'Deleted {deleted} generated files for {client}{detail}; removed {names}.')
 
 
 def add_planned_file(planned: dict[Path, str], *, path: str, content: str):
@@ -309,8 +404,41 @@ def typecheck_project(project: Project) -> bool:
   return True
 
 
-PLANNED_BACKENDS = ('typescript', 'rust')
+PLANNED_BACKENDS = ('typescript', 'rust', 'go')
 """Backends that render the plan (`docs/plan.md`) rather than the spec tree directly."""
+
+
+def refuse_empty_spec(project: Project, *, language: str, check: bool = False):
+  """Refuse a project whose endpoint tree holds no `endpoint.json`, before a single file
+  is written.
+
+  Same rule as `truewire check` and `truewire examples`: a command must never report
+  success having examined nothing. Generating would leave a package with no root module
+  (Python writes no `main.py`, so the `from .main import ...` that `truewire init` wrote
+  does not import), and a client that wraps no endpoint is not one.
+
+  Args:
+    project: The loaded project.
+    language: The backend being generated, named in the way out (`--delete`).
+    check: `--check` was passed: the message then says nothing was checked.
+
+  Raises:
+    CodegenError: `<spec>/endpoints` holds no `endpoint.json`.
+  """
+  from truewire.spec.repo import endpoint_specs
+
+  if endpoint_specs(project):
+    return
+  endpoints = project.endpoints_dir
+  try:
+    shown = endpoints.relative_to(project.root)
+  except ValueError:
+    shown = endpoints
+  raise CodegenError(
+    f'{project.name}: no endpoint specs found under {shown}, so nothing was '
+    f'{"checked" if check else "generated"}. Add an `endpoint.json` there, or run '
+    f'`truewire generate {language} --delete` to remove a client generated before.'
+  )
 
 
 def refuse_name_collisions(project: Project, *, language: str):
@@ -328,11 +456,24 @@ def refuse_name_collisions(project: Project, *, language: str):
     project: The loaded project.
     language: The backend being generated, one of `BACKEND_SECTIONS`.
 
-  Raises:
-    CodegenError: One or more groups collide.
-  """
-  from truewire.spec.authoring import check_router_names
+  A `router.json` that does not load (rule 14, `check_router_docs`) is refused here too,
+  first: the collision check reads every one of them, and the file is what to name.
 
+  Raises:
+    CodegenError: A `router.json` does not load, or one or more groups collide.
+  """
+  from truewire.spec.authoring import check_router_docs, check_router_names
+
+  unloadable = check_router_docs(project)
+  if unloadable:
+    detail = '\n'.join(
+      f'  {violation["location"]}: {violation["message"]}' for violation in unloadable
+    )
+    raise CodegenError(
+      f'{project.name}: {len(unloadable)} invalid router.json '
+      f'{"entry" if len(unloadable) == 1 else "entries"} '
+      f'(docs/spec/authoring.md rule 14); nothing generated.\n{detail}'
+    )
   violations = check_router_names(project, language=language)
   if not violations:
     return
@@ -352,7 +493,7 @@ def generate_typescript(
 ):
   """`truewire generate typescript`: render the plan through the TypeScript backend into
   `<[typescript].src>/<[typescript].package>/`, under the same manifest discipline as the
-  Python backend (`.truewire/typescript-files.json`; `--check`, `--delete`).
+  Python backend (`.truewire/codegen/typescript.json`; `--check`, `--delete`).
 
   Raises:
     CodegenError: The project declares no `[typescript]` section, or the manifest is
@@ -367,13 +508,28 @@ def generate_rust(
 ):
   """`truewire generate rust`: render the plan through the Rust backend into
   `<[rust].src>/<[rust].package>/`, under the same manifest discipline
-  (`.truewire/rust-files.json`; `--check`, `--delete`).
+  (`.truewire/codegen/rust.json`; `--check`, `--delete`).
 
   Raises:
     CodegenError: The project declares no `[rust]` section, or the manifest is missing
       where `--delete` needs it, or the plan cannot be built.
   """
   generate_planned(project, language='rust', delete=delete, check=check, log=log)
+
+
+def generate_go(
+  project: Project, *, delete: bool = False, check: bool = False,
+  log: Callable[[str], None] = lambda message: None,
+):
+  """`truewire generate go`: render the plan through the Go backend into
+  `<[go].src>/<[go].package>/`, under the same manifest discipline
+  (`.truewire/codegen/go.json`; `--check`, `--delete`).
+
+  Raises:
+    CodegenError: The project declares no `[go]` section, or the manifest is missing
+      where `--delete` needs it, or the plan cannot be built.
+  """
+  generate_planned(project, language='go', delete=delete, check=check, log=log)
 
 
 def generate_planned(
@@ -392,6 +548,10 @@ def generate_planned(
       from truewire.codegen.typescript import render_package
 
       output_root = project.typescript_package_dir
+    elif language == 'go':
+      from truewire.codegen.go import render_package
+
+      output_root = project.go_package_dir
     else:
       from truewire.codegen.rust import render_package
 
@@ -399,22 +559,12 @@ def generate_planned(
   except NotAProject as exc:
     raise CodegenError(str(exc))
   manifest_path = project.manifest_path(language)
+  legacy_path = project.legacy_manifest_path(language)
   if delete:
-    if not manifest_path.exists():
-      raise CodegenError(
-        f'Cannot delete generated files: missing manifest {manifest_path.relative_to(root)}'
-      )
-    owned = load_generated_manifest(manifest_path)
-    deleted = reconcile_generated_output(output_root, owned, set())
-    manifest_path.unlink()
-    absent = len(owned) - deleted
-    detail = f'; {absent} already absent' if absent else ''
-    typer.echo(
-      f'Deleted {deleted} generated files for {client}{detail}; removed '
-      f'{manifest_path.relative_to(root)}.'
-    )
+    delete_generated_output(root, output_root, manifest_path, legacy_path, client=client)
     return
 
+  refuse_empty_spec(project, language=language, check=check)
   refuse_name_collisions(project, language=language)
   log(f'[{client}] building plan')
   try:
@@ -422,18 +572,35 @@ def generate_planned(
   except ValueError as exc:
     raise CodegenError(str(exc))
   log(f'[{client}] rendering {language}')
-  rendered = render_package(plan, project)
+  try:
+    rendered = render_package(plan, project)
+  except ValueError as exc:
+    raise CodegenError(f'{client}: {exc}')
   planned: dict[Path, str] = {}
   for path, content in rendered.files.items():
     add_planned_file(planned, path=path, content=content)
   for note in rendered.skipped:
     typer.echo(f'skipped {note}', err=True)
+  if language == 'go':
+    from truewire.codegen.policy import refusal_problems, refused_functions
+
+    problems = refusal_problems(plan, project)
+    if problems:
+      raise CodegenError(f'{client}: nothing generated.\n' + '\n'.join(f'  {problem}' for problem in problems))
+    for function in refused_functions(plan):
+      # Go renders no refusal yet (B4): the method is generated and calls the API.
+      typer.echo(f'skipped {function}: [policy].refuse is not generated for Go; its method still makes the request', err=True)
+    # Nor `rate`/`retry`: the Go runtime has neither.
+    for key, declared in (('rate', project.policy.rate is not None), ('retry', project.policy.retry)):
+      if declared:
+        typer.echo(f'skipped [policy].{key}: not generated for Go; the Go client neither paces nor retries', err=True)
 
   if check:
     # No banner and no formatter on this side: the tree holds the plan verbatim.
-    check_generated_output(root, output_root, manifest_path, planned, client=client)
+    check_generated_output(root, output_root, manifest_path, legacy_path, planned, client=client)
     return
 
+  migrate_manifest(root, manifest_path, legacy_path)
   bootstrapping = not manifest_path.is_file()
   previous = load_generated_manifest(manifest_path)
   log(f'[{client}] reconciling generated files')
@@ -449,7 +616,7 @@ def generate_planned(
 
 
 def generate(
-  language: str = typer.Argument('python', help='Target language: `python`, `typescript` or `rust`.'),
+  language: str = typer.Argument('python', help='Target language: `python`, `typescript`, `rust` or `go`.'),
   project: str | None = PROJECT_OPTION,
   verbose: int = typer.Option(0, '--verbose', '-v', count=True),
   delete: Annotated[
@@ -464,7 +631,7 @@ def generate(
   """Generate the project's package from its spec, for the given language.
 
   Args:
-    language: Codegen backend to generate with: `python` (the default), `typescript` or `rust`.
+    language: Codegen backend to generate with: `python` (the default), `typescript`, `rust` or `go`.
     project: Project directory (holding `truewire.toml`); the nearest one by default.
     verbose: Repeat for more detail: `-v` logs per-stage progress, `-vv` logs every file written.
     delete: Delete manifest-owned files without loading the backend or spec.
@@ -478,6 +645,7 @@ def generate(
     class_name,
     discover_schemas_files,
     endpoint_output,
+    group_class_name,
     load_generator,
     load_schema_file,
     load_schemas,
@@ -490,6 +658,9 @@ def generate(
     skip_router,
   )
   from truewire.codegen.meta import META_MODULE, meta_module
+  from truewire.codegen.policy import (
+    POLICY_MODULE, extras_replaced, python_module, refusal_problems, refused_functions,
+  )
   from truewire.plan.build import build_plan
   from truewire.codegen.python import (
     RouterChild,
@@ -575,22 +746,12 @@ def generate(
     except BackendUnavailable as exc:
       raise CodegenError(str(exc))
     manifest_path = loaded.manifest_path(language)
+    legacy_path = loaded.legacy_manifest_path(language)
     if delete:
-      if not manifest_path.exists():
-        raise CodegenError(
-          f'Cannot delete generated files: missing manifest {manifest_path.relative_to(root)}'
-        )
-      owned = load_generated_manifest(manifest_path)
-      deleted = reconcile_generated_output(output_root, owned, set())
-      manifest_path.unlink()
-      absent = len(owned) - deleted
-      detail = f'; {absent} already absent' if absent else ''
-      typer.echo(
-        f'Deleted {deleted} generated files for {client}{detail}; removed '
-        f'{manifest_path.relative_to(root)}.'
-      )
+      delete_generated_output(root, output_root, manifest_path, legacy_path, client=client)
       return
 
+    refuse_empty_spec(loaded, language=language, check=check)
     refuse_name_collisions(loaded, language=language)
     log(f'[{client}] loading generator: {language}')
     try:
@@ -683,6 +844,12 @@ def generate(
     if meta_source is not None:
       log(f'[{client}] generating meta module')
       add_planned_file(planned, path=f'{META_MODULE}.py', content=meta_source)
+
+    refused = set(loaded.policy.refuse)
+    # Refused endpoints whose callable no generated `@refused` guards: skipped by the
+    # backend as hand-written, or rendered by a backend override that left it out.
+    hand_written: set[str] = set()
+    unguarded: list[str] = []
 
     surface_groups = generator.surface_groups()
     if surface_groups:
@@ -809,26 +976,41 @@ def generate(
         child_name=child_name,
         is_aggregate_parent=parent in aggregates_by_base[base],
       )
+      resolved = endpoint.resolved_function(spec_file, spec_root)
       if skip_endpoint(generator, endpoint):
         # `handwritten`: the node above (path/class/transport) is real and used by any
         # router sharing its directory, but the file itself is hand-written -- regenerating
         # it here would overwrite what a person wrote.
+        hand_written.add(resolved)
         log_finish(f' -> {out} (hand-written, not regenerated)')
       else:
-        add_planned_file(
-          planned,
-          path=out.as_posix(),
-          content=generator.endpoint(
-            endpoint,
-            endpoint_references,
-            class_name=endpoint_class_name,
-            method_name=method_name,
-            endpoint_dir=spec_file.parent,
-          )
-          + '\n',
+        content = generator.endpoint(
+          endpoint,
+          endpoint_references,
+          class_name=endpoint_class_name,
+          method_name=method_name,
+          endpoint_dir=spec_file.parent,
         )
+        if resolved in refused and f'@refused({resolved!r})' not in content:
+          unguarded.append(resolved)
+        add_planned_file(planned, path=out.as_posix(), content=content + '\n')
         log_finish(f' -> {out}')
     progress_finish()
+
+    python_config = generator.codegen_config.python if generator.codegen_config is not None else None
+    problems = refusal_problems(
+      generator.plan, loaded,
+      handwritten=hand_written | extras_replaced(python_config.extras if python_config is not None else None),
+    ) + [
+      f'[policy].refuse names {function!r}, but its module was rendered without `@refused` '
+      '(a [python].backend override?): nothing would refuse it'
+      for function in unguarded
+    ]
+    if problems:
+      raise CodegenError(f'{client}: nothing generated.\n' + '\n'.join(f'  {problem}' for problem in problems))
+    if refused_functions(generator.plan):
+      log(f'[{client}] generating policy module')
+      add_planned_file(planned, path=f'{POLICY_MODULE}.py', content=python_module())
 
     router_records: list[tuple[str, tuple[str, ...]]] = []
     for base, functions in functions_by_base.items():
@@ -869,20 +1051,9 @@ def generate(
         # composed as a `kind: 'router'` child pointing at its own generated composite
         # class -- never as a bare `kind: 'endpoint'` leaf, which would multiply-inherit
         # only its leaf portion directly and silently drop everything under its own
-        # subdirectory. Checked ahead of the plain leaf branch below.
-        if child_node in router_nodes_by_base[base]:
-          child_out = Path(base).joinpath(*child_node, '__init__.py')
-          children[child_name] = {
-            'import_path': relative_import(out, child_out),
-            'class_name': class_name(child_name),
-            'attr_name': child_name,
-            'kind': 'router',
-            'transport': subtree_transport(transport_by_node, base, child_node),
-            'mixin': 'AuthRouter',
-            'doc': load_router(loaded.endpoints_dir / Path(base, *child_node)),
-            'spec_dir': loaded.endpoints_dir / Path(base, *child_node),
-          }
-        elif (base, child_node) in endpoint_by_node:
+        # subdirectory. So only a child that is a leaf and not a router node takes the
+        # endpoint branch; every other child is a router.
+        if child_node not in router_nodes_by_base[base] and (base, child_node) in endpoint_by_node:
           endpoint = endpoint_by_node[(base, child_node)]
           child_out = path_by_node[(base, child_node)]
           children[child_name] = {
@@ -895,15 +1066,17 @@ def generate(
           }
         else:
           child_out = Path(base).joinpath(*child_node, '__init__.py')
+          child_dir = loaded.endpoints_dir / Path(base, *child_node)
+          child_doc = load_router(child_dir)
           children[child_name] = {
             'import_path': relative_import(out, child_out),
-            'class_name': class_name(child_name),
+            'class_name': group_class_name(child_doc, child_name),
             'attr_name': child_name,
             'kind': 'router',
             'transport': subtree_transport(transport_by_node, base, child_node),
             'mixin': 'AuthRouter',
-            'doc': load_router(loaded.endpoints_dir / Path(base, *child_node)),
-            'spec_dir': loaded.endpoints_dir / Path(base, *child_node),
+            'doc': child_doc,
+            'spec_dir': child_dir,
           }
 
       section = node[-1] if node else base
@@ -962,9 +1135,10 @@ def generate(
     if check:
       log(f'[{client}] rendering the expected output')
       expected = expected_generated_content(root, output_root, planned, config=loaded.ruff_config)
-      check_generated_output(root, output_root, manifest_path, expected, client=client)
+      check_generated_output(root, output_root, manifest_path, legacy_path, expected, client=client)
       return
 
+    migrate_manifest(root, manifest_path, legacy_path)
     bootstrapping = not manifest_path.is_file()
     previous = load_generated_manifest(manifest_path)
     log(f'[{client}] reconciling generated files')

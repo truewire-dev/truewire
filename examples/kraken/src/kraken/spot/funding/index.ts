@@ -96,6 +96,8 @@ export class Funding {
   /**
    * Make a withdrawal request. Requires the `Funds permissions - Withdraw` API key permission.
    *
+   * Refused by `[policy].refuse`: rejects with `RefusedByPolicy` before any request is made.
+   *
    * @see https://docs.kraken.com/api-reference/funding/withdraw-funds
    */
   withdraw(request: withdraw.Request, options?: CallOptions): Promise<withdraw.WithdrawReceipt>

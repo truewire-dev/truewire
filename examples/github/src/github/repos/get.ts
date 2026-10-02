@@ -28,6 +28,7 @@ export interface Repository {
   full_name: string
   /** Whether the repository is private. */
   private: boolean
+  /** Owning account. */
   owner: SimpleUser
   /** Web page of the repository. */
   html_url: string

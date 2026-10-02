@@ -369,7 +369,18 @@ async fn rpc_a_dropped_connection_fails_pending_requests_and_the_next_request_re
         let inner = rpc.clone();
         async move { (inner.rpc_request(&call("silent", None)).await, rpc) }
     });
-    server.settle().await;
+    // Wait for the pending request itself, not a fixed delay that can expire before
+    // the handshake completes on a busy host.
+    tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            if server.sockets().iter().any(|conn| !conn.received().is_empty()) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .expect("the pending request reached the server");
     server.last().drop_connection();
     let (result, rpc) = pending.await.expect("task");
     let err = result.expect_err("dropped");
@@ -398,6 +409,46 @@ async fn rpc_close_fails_pending_requests_and_clears_the_reply_table() {
     rpc.close().await;
     let err = pending.await.expect("task").expect_err("closed");
     assert_eq!(err.to_string(), "NetworkError: Connection closed");
+    assert_eq!(link.pending_replies(), 0);
+}
+
+#[tokio::test]
+async fn rpc_a_request_dropped_by_a_timeout_leaves_no_pending_reply_and_a_late_reply_is_dropped() {
+    let server = Server::start(ServerOptions::default()).await;
+    let rpc = Socket::new(Calc, options(&server));
+    let link = rpc.open().await.expect("open");
+    let silent = call("silent", None);
+    let timed_out = tokio::time::timeout(Duration::from_millis(50), rpc.rpc_request(&silent)).await;
+    assert!(timed_out.is_err(), "the silent call should time out");
+    assert_eq!(server.last().received().len(), 1);
+    assert_eq!(link.pending_replies(), 0);
+    server
+        .last()
+        .reply(json!({"req_id": 0, "method": "silent", "success": true}));
+    server.settle().await;
+    assert_eq!(link.pending_replies(), 0);
+    assert!(rpc.is_open().await);
+    assert_eq!(
+        rpc.rpc_request(&call("add", Some(json!({"a": 2, "b": 3}))))
+            .await
+            .expect("sum")["result"],
+        5
+    );
+    assert_eq!(link.pending_replies(), 0);
+    rpc.close().await;
+}
+
+#[tokio::test]
+async fn rpc_a_request_whose_send_fails_leaves_no_pending_reply() {
+    let server = Server::start(ServerOptions::default()).await;
+    let rpc = Socket::new(Calc, options(&server));
+    let link = rpc.open().await.expect("open");
+    rpc.close().await;
+    let err = link
+        .rpc_request(&call("add", Some(json!({"a": 1, "b": 1}))))
+        .await
+        .expect_err("closed");
+    assert!(err.is_network(), "{err}");
     assert_eq!(link.pending_replies(), 0);
 }
 

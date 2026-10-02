@@ -34,6 +34,7 @@ the failure being fixed, not the fix.
 """
 
 import ast
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing_extensions import Any, Literal
@@ -50,7 +51,7 @@ from truewire.codegen.layout import (
   skip_endpoint,
 )
 from truewire.project import Project, resolve
-from truewire.spec import Endpoint, HandwrittenSurface, endpoint_records
+from truewire.spec import AbsentSurface, Endpoint, HandwrittenSurface, endpoint_records
 
 Fault = Literal['undeclared', 'no_module', 'no_method', 'no_symbol', 'stale']
 """Why a spec reaches nobody, or why its declaration no longer describes the client."""
@@ -197,6 +198,15 @@ def reconcile(root: Path | Project, *, scope: Path | None = None, language: str 
       be resolved and every answer would be a guess.
   """
   project = resolve(root)
+  if language == 'go':
+    from .go import reconcile_go
+
+    return reconcile_go(project, scope=scope)
+  if language == 'typescript':
+    return reconcile_typescript(project, scope=scope)
+
+  if language == 'rust':
+    return _reconcile_rust(project, scope=scope)
   package = package_root(project)
   generator = load_generator(project, language)
   generator.core_package = f'{package.name}.core'
@@ -305,3 +315,224 @@ def reconcile(root: Path | Project, *, scope: Path | None = None, language: str 
         if params is not None and 'validate' not in params:
           out.missing_validate.append(endpoint.function)
   return out
+
+
+_TS_MEMBER = re.compile(
+  r'^[ \t]*(?:export[ \t]+)?(?:(?:public|private|protected|static|readonly|abstract|override|declare|async|function)[ \t]+)*'
+  r'\*?[ \t]*([A-Za-z_$][\w$]*)[ \t]*(?:<[^>\n]*>)?[ \t]*[(:=]',
+  re.MULTILINE,
+)
+"""A class member or top-level function declaration at the start of a line: `name(`, `async
+name(`, `readonly name:`, `function name(`. Parsed as text, never compiled, for the same
+reason `module_callables` never imports: the package may be mid-generation."""
+
+
+def typescript_callables(path: Path) -> set[str]:
+  """Return every name a TypeScript module declares as a method, property or function.
+
+  Args:
+    path: Module to read.
+  """
+  try:
+    text = path.read_text()
+  except OSError:
+    return set()
+  return set(_TS_MEMBER.findall(text))
+
+
+def typescript_parameters(path: Path, method: str) -> set[str] | None:
+  """Return the parameter names of a TypeScript method's last declaration (its
+  implementation, written after its overloads), or `None` when it is not declared.
+
+  Args:
+    path: Module to read.
+    method: Method name.
+  """
+  try:
+    text = path.read_text()
+  except OSError:
+    return None
+  pattern = re.compile(
+    r'^[ \t]*(?:(?:async|public|private|protected|static)[ \t]+)*\*?[ \t]*' + re.escape(method) + r'[ \t]*\(([^)]*)\)',
+    re.MULTILINE,
+  )
+  found = pattern.findall(text)
+  if not found:
+    return None
+  return {part.split(':')[0].split('=')[0].strip().rstrip('?') for part in found[-1].split(',') if part.strip()}
+
+
+def reconcile_typescript(project: Project, *, scope: Path | None = None) -> Reconciliation:
+  """Classify every in-scope spec by what a TypeScript caller can call.
+
+  The same three answers as `reconcile`, from the TypeScript backend's own rendering:
+
+  - **generated**: the plan renders the endpoint (nothing in `Rendered.skipped` names it)
+    and its module under `[typescript].src/<package>` declares the camelCase method.
+  - **hand-written**: the spec declares `surface: handwritten`, which the backend does not
+    render, and a `[typescript.extras]` entry serves the spec's symbol: the symbol's module
+    path (`spot.account.retrieve_export`) names the router node (`spot.account`) and the
+    entry's `file` (`retrieve_export`), its name the method (`retrieve_export` ->
+    `retrieveExport`) the entry lists and the file declares.
+  - **absent**: the spec declares `surface: absent`.
+
+  A generated `rpc` method whose implementation takes no `options` (where `validate` is
+  passed) is reported in `missing_validate`, as in Python.
+
+  Args:
+    project: The project being judged.
+    scope: Subdivision under `<spec>/endpoints` to restrict the report to.
+
+  Raises:
+    BackendUnavailable: The project declares no `[typescript]` section.
+  """
+  from truewire.codegen.typescript import render_package
+  from truewire.codegen.typescript.endpoint import endpoint_file
+  from truewire.codegen.typescript.names import camel_case
+  from truewire.plan.build import build_plan
+
+  config = project.typescript
+  if config is None:
+    raise BackendUnavailable(f'{project.root}: truewire.toml declares no [typescript] section')
+  plan = build_plan(project)
+  rendered = render_package(plan, project)
+  package = project.typescript_package_dir
+  extras = config.extras or {}
+  out = Reconciliation()
+  for record in endpoint_records(project, scope=scope):
+    endpoint = record.endpoint
+    function = endpoint.resolved_function(record.path, project.spec_dir)
+    rel = record.path.parent.relative_to(project.endpoints_dir).as_posix()
+    surface = endpoint.surface
+    if isinstance(surface, AbsentSurface):
+      out.absent.append(function)
+      continue
+    if isinstance(surface, HandwrittenSurface):
+      module_path, _, name = surface.symbol.partition(':')
+      parts = module_path.split('.')
+      node, file = '.'.join(parts[:-1]), parts[-1]
+      method = camel_case(name)
+      target = package.joinpath(*parts).with_suffix('.ts')
+      entry = next((e for e in extras.get(node, []) if e.file == file and method in e.methods), None)
+      if entry is None:
+        out.gaps.append(Gap(
+          function=function, path=rel, fault='no_symbol',
+          detail=f'{surface.symbol}: no [typescript.extras.{node!r}] entry with file {file!r} lists {method!r}',
+        ))
+      elif method not in typescript_callables(target):
+        out.gaps.append(Gap(
+          function=function, path=rel, fault='no_symbol',
+          detail=f'{surface.symbol}: {target.relative_to(package).as_posix()} declares no {method!r}',
+        ))
+      else:
+        out.handwritten.append(function)
+      continue
+
+    planned = plan.endpoint(function)
+    skipped = any(note.startswith(f'{function}:') for note in rendered.skipped)
+    segments = function.split('.')
+    target = package / endpoint_file(segments)
+    method = camel_case(segments[-1])
+    if planned is None or skipped:
+      out.gaps.append(Gap(
+        function=function, path=rel, fault='undeclared',
+        detail='skipped by the typescript backend; no `surface` declared',
+      ))
+    elif not target.is_file():
+      out.gaps.append(Gap(
+        function=function, path=rel, fault='no_module',
+        detail=f'{target.relative_to(package).as_posix()} not in package; needs regenerating',
+      ))
+    elif method not in typescript_callables(target):
+      out.gaps.append(Gap(
+        function=function, path=rel, fault='no_method',
+        detail=f'{target.relative_to(package).as_posix()} defines no {method!r}',
+      ))
+    else:
+      out.generated.append(function)
+      if planned.kind == 'rpc':
+        params = typescript_parameters(target, method)
+        if params is not None and 'options' not in params:
+          out.missing_validate.append(function)
+  return out
+
+_RUST_FN = r'\bfn\s+{name}\s*[<(]'
+
+
+def _rust_defines(text: str, name: str) -> bool:
+  """Whether Rust source `text` defines a function or method called `name`."""
+  import re
+  return re.search(_RUST_FN.format(name=re.escape(name)), text) is not None
+
+
+def _reconcile_rust(project: Project, *, scope: Path | None) -> Reconciliation:
+  """`reconcile` for the Rust backend, which renders from the plan rather than through a
+  Python `Generator`.
+
+  What the backend emits is asked of `render_package` in memory, and what the package
+  holds is read off disk, so a package that is missing files or was edited by hand shows
+  up. A generated method lives in `<router>/<endpoint>.rs` as `fn <method>`; the Rust form
+  of `validate: false` is its `_raw` twin, so a generated `rpc` method returning a value
+  with no twin is reported as `missing_validate`.
+
+  Hand-written Rust methods are inherent `impl` blocks on the generated structs, written in
+  the crate beside them (`impl crate::spot::account::Account { pub async fn ... }`), so no
+  table declares them: a `surface.kind == "handwritten"` endpoint is satisfied when a
+  function named after its `symbol` exists anywhere in the package. A `surface` written
+  for another backend never makes a Rust-generated endpoint `stale`: it describes that
+  backend's refusal, not this one's.
+
+  Raises:
+    BackendUnavailable: When `truewire.toml` declares no `[rust]` section.
+  """
+  from truewire.codegen.rust import render_package
+  from truewire.codegen.rust.endpoint import endpoint_file, raw_name
+  from truewire.codegen.rust.names import snake_ident
+  from truewire.plan.build import build_plan
+
+  if project.rust is None:
+    raise BackendUnavailable(f'{project.root}: truewire.toml declares no [rust] section')
+  package = project.rust_package_dir
+  plan = build_plan(project)
+  rendered = render_package(plan, project)
+  skipped = {note.split(':', 1)[0]: note.split(':', 1)[1].strip() for note in rendered.skipped if ':' in note}
+  by_function = {endpoint.function: endpoint for endpoint in plan.endpoints}
+  sources = {path: path.read_text() for path in package.rglob('*.rs')} if package.is_dir() else {}
+
+  out = Reconciliation()
+  endpoints_root = project.endpoints_dir
+  for record in endpoint_records(project, scope=scope):
+    endpoint = record.endpoint
+    function = endpoint.resolved_function(record.path, project.spec_dir)
+    rel = record.path.parent.relative_to(endpoints_root).as_posix()
+    surface = endpoint.surface
+    if surface is not None and surface.kind == 'absent':
+      out.absent.append(function)
+      continue
+    if isinstance(surface, HandwrittenSurface):
+      _, name = resolve_symbol(package, surface.symbol)
+      if any(_rust_defines(text, name) for text in sources.values()):
+        out.handwritten.append(function)
+      else:
+        out.gaps.append(Gap(function=function, path=rel, fault='no_symbol', detail=f'no `fn {name}` in the Rust package'))
+      continue
+    planned = by_function.get(function)
+    file = endpoint_file(function.split('.'))
+    if planned is None or file not in rendered.files:
+      reason = skipped.get(function) or 'not rendered by the rust backend'
+      out.gaps.append(Gap(function=function, path=rel, fault='undeclared', detail=f'{reason}; no `surface` declared'))
+      continue
+    module = package / file
+    if module not in sources:
+      out.gaps.append(Gap(function=function, path=rel, fault='no_module', detail=f'{file} not in package; needs regenerating'))
+      continue
+    fallback = 'subscribe' if planned.kind == 'stream' else 'call'
+    method = snake_ident(planned.path[-1], fallback=fallback)
+    if not _rust_defines(sources[module], method):
+      out.gaps.append(Gap(function=function, path=rel, fault='no_method', detail=f'{file} defines no `fn {method}`'))
+      continue
+    out.generated.append(function)
+    if planned.kind == 'rpc' and planned.response.payload is not None and not _rust_defines(sources[module], raw_name(method)):
+      out.missing_validate.append(function)
+  return out
+

@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "files": [
+    "client.go",
+    "issues/issues.go",
+    "issues/list/list.go",
+    "meta/meta.go",
+    "replay/replay.go",
+    "repos/get/get.go",
+    "repos/getcommit/getcommit.go",
+    "repos/listcommits/listcommits.go",
+    "repos/listreleases/listreleases.go",
+    "repos/listtags/listtags.go",
+    "repos/repos.go",
+    "types/types.go"
+  ]
+}

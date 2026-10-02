@@ -1,0 +1,53 @@
+{
+  "meta": {},
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/deposits",
+    "method": "GET",
+    "description": "Deposits by row offset.",
+    "request": {
+      "title": "DepositsRequest",
+      "type": "object",
+      "properties": {
+        "offset": {
+          "type": "integer"
+        },
+        "limit": {
+          "type": "integer",
+          "format": "int64",
+          "default": 1000
+        }
+      }
+    },
+    "response": {
+      "type": "array",
+      "items": {
+        "title": "Deposit",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    }
+  },
+  "pagination": {
+    "strategy": "offset",
+    "offset": {
+      "parameter": "offset"
+    },
+    "size": {
+      "parameter": "limit"
+    },
+    "done": {
+      "kind": "short_page"
+    }
+  }
+}

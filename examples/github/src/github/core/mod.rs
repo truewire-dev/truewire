@@ -8,43 +8,105 @@
 use async_trait::async_trait;
 use truewire_core::http::{query_from, RequestOptions, Response};
 use truewire_core::serde_json::Value;
-use truewire_core::{Error, HttpCall, HttpClient, HttpEndpoint, Result};
+use truewire_core::{Error, HttpCall, HttpClient, HttpClientOptions, HttpEndpoint, Result};
 
 use crate::meta::DefaultMeta;
 
 const DEFAULT_BASE_URL: &str = "https://api.github.com";
 
-/// What `Core::new` takes.
-#[derive(Debug, Clone, Default)]
+/// What `Debug` prints in place of a secret that is set.
+const REDACTED: &str = "<redacted>";
+
+/// What `Core::new` takes. Its `Debug` leaves out the token and the proxy URL, which can
+/// carry a password.
+#[derive(Clone, Default)]
 pub struct CoreOptions {
     /// Defaults to `https://api.github.com`; point it at `truewire mock` in tests.
     pub base_url: Option<String>,
     /// A token, sent as `Authorization: Bearer` (public endpoints accept it too, and it
     /// raises the rate limit).
     pub token: Option<String>,
-    /// The HTTP client to send through; one is made when omitted.
+    /// The HTTP client to send through; one paced and retrying as `GitHub::RATE` and
+    /// `GitHub::RETRY` say when omitted.
     pub http: Option<HttpClient>,
+    /// An HTTP(S) proxy URL every request goes through (packages clause P18). Not together
+    /// with `http`.
+    pub proxy: Option<String>,
 }
 
 /// The shared HTTP transport: base URL, GitHub's headers, the optional token and error
-/// mapping.
-#[derive(Debug)]
+/// mapping. Its `Debug` leaves out the token.
 pub struct Core {
     base_url: String,
     token: Option<String>,
     http: HttpClient,
 }
 
+impl std::fmt::Debug for CoreOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CoreOptions")
+            .field("base_url", &self.base_url)
+            .field("token", &self.token.as_ref().map(|_| REDACTED))
+            .field("http", &self.http)
+            .field("proxy", &self.proxy.as_ref().map(|_| REDACTED))
+            .finish_non_exhaustive()
+    }
+}
+
+impl std::fmt::Debug for Core {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Core")
+            .field("base_url", &self.base_url)
+            .field("token", &self.token.as_ref().map(|_| REDACTED))
+            .field("http", &self.http)
+            .finish_non_exhaustive()
+    }
+}
+
 impl Core {
+    /// # Panics
+    ///
+    /// When `options.proxy` is not a proxy URL or comes with `http`; [`try_new`](Self::try_new)
+    /// returns that as an error.
     pub fn new(options: CoreOptions) -> Self {
+        Self::try_new(options).expect("CoreOptions: bad `proxy` (use try_new to handle it)")
+    }
+
+    /// The core `options` describe; an `Error::Logic` when `proxy` is not a proxy URL or
+    /// comes with `http`.
+    pub fn try_new(options: CoreOptions) -> Result<Self> {
         let base_url = options
             .base_url
             .unwrap_or_else(|| DEFAULT_BASE_URL.to_string());
-        Self {
+        let http = match (
+            options.http,
+            options.proxy.filter(|proxy| !proxy.is_empty()),
+        ) {
+            (Some(_), Some(_)) => {
+                return Err(Error::logic(
+                    "CoreOptions: pass `http` or `proxy`, not both",
+                ))
+            }
+            (Some(http), None) => http,
+            (None, Some(proxy)) => {
+                HttpClient::new(HttpClientOptions::default().with_proxy(&proxy)?)
+                    .with_rate(crate::GitHub::RATE)
+                    .with_retry(crate::GitHub::RETRY)
+            }
+            (None, None) => HttpClient::default()
+                .with_rate(crate::GitHub::RATE)
+                .with_retry(crate::GitHub::RETRY),
+        };
+        Ok(Self {
             base_url: base_url.trim_end_matches('/').to_string(),
             token: options.token,
-            http: options.http.unwrap_or_default(),
-        }
+            http,
+        })
+    }
+
+    /// The HTTP client every request goes through.
+    pub fn http(&self) -> &HttpClient {
+        &self.http
     }
 
     /// Headers for one call: GitHub's media type, API version and a User-Agent, plus the
@@ -163,7 +225,17 @@ impl crate::GitHub {
     /// `[python.cores.root]` names in the Python backend -- an inherent impl on the
     /// generated type, in the same crate -- and it is what keeps `Arc::new(Core::new(...))`
     /// out of the first line a reader sees.
+    ///
+    /// # Panics
+    ///
+    /// When `options.proxy` is not a proxy URL; [`try_new`](Self::try_new) returns that as
+    /// an error.
     pub fn new(options: CoreOptions) -> Self {
         Self::from_core(Core::new(options))
+    }
+
+    /// [`new`](Self::new), with a bad `options.proxy` as an error rather than a panic.
+    pub fn try_new(options: CoreOptions) -> Result<Self> {
+        Ok(Self::from_core(Core::try_new(options)?))
     }
 }

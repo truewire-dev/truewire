@@ -9,12 +9,15 @@ plan, the language-neutral IR every backend renders from, rather than by transli
 either earlier runtime.
 
 Status: the runtime exists and is tested (`cargo test`, `cargo clippy -- -D warnings` and
-`cargo fmt --check` run in CI, job `runtime-rust`). The generator renders HTTP `rpc`
-endpoints, the type tree, routers, the root and the `PaginatedResponse` walkers;
-`examples/github` is generated, compiled and replayed against `truewire mock` in CI (job
-`examples-rust`). Stream endpoints, WebSocket commands and composite cores are not rendered
-yet and are reported as skipped, the way the TypeScript backend reported them before its
-second pass. The crate is not on crates.io (the `truewire` crate name is reserved by
+`cargo fmt --check` run in CI, job `runtime-rust`). The generator renders `rpc` endpoints
+over HTTP, over a WebSocket and over both, `stream` endpoints (with a typed subscription
+`reply`), composite cores, the type tree, routers, the root, `dispatch.rs`, and every
+`PaginatedResponse` walker (`page`, `offset`, `token`, `seek`), and unary `grpc` endpoints
+over `prost` stubs (see "gRPC endpoints" below). `examples/github` (HTTP,
+paging) and `examples/kraken` (REST with HMAC-SHA512 signing, WebSocket commands and
+streams over two sockets, a composite root) are generated, compiled and replayed against
+`truewire mock` in CI (job `examples-rust`), with `truewire-testing` as their harness.
+The crate is not on crates.io (the `truewire` crate name is reserved by
 `crates/truewire`, and `truewire-core` will be published beside it). See the end of this
 page for what is left.
 
@@ -29,7 +32,7 @@ name = "GitHub"       # the root struct
 ```
 
 ```sh
-truewire generate rust             # writes src/github/**/*.rs and .truewire/rust-files.json
+truewire generate rust             # writes src/github/**/*.rs and .truewire/codegen/rust.json
 truewire generate rust --check     # CI: every owned file exists and is what the plan renders
 ```
 
@@ -43,7 +46,7 @@ path = "src/github/lib.rs"
 [dependencies]
 async-trait = "0.1"
 serde = { version = "1", features = ["derive"] }
-truewire-core = "0.1"
+truewire-core = "0.2"
 ```
 
 ```rust
@@ -157,8 +160,9 @@ shape the TypeScript codecs report.
 ## The core contract
 
 The generated code never imports the project's core. Each generated struct holds its core
-as an `Arc<dyn HttpEndpoint<Meta>>` (or `CommandEndpoint`/`StreamEndpoint`, once those are
-rendered), the Rust half of `truewire_core.contract` and `contract.ts` (ADR 0011):
+as an `Arc<dyn HttpEndpoint<Meta>>` (or `CommandEndpoint`/`StreamEndpoint`, or `GrpcEndpoint` for a gRPC endpoint, whose contract carries encoded
+messages; see "gRPC endpoints"), the Rust half of `truewire_core.contract` and `contract.ts`
+(ADR 0011):
 
 ```rust
 pub struct HttpCall<'a, Meta> {
@@ -230,6 +234,107 @@ schema being a plain field), or `()` for a core with no schema. Its properties m
 scalars, an `enum` of one scalar kind to that scalar, arrays of those, and
 `serde_json::Value` for anything else.
 
+## gRPC endpoints
+
+A `kind: grpc` endpoint (ADR 0017) is rendered over the `prost` messages `truewire protos
+rust` builds from `spec/proto/`. The command runs `buf generate` with `protoc-gen-prost`
+(prost 0.14) over the stripped tree and writes `<package>/protos/`: one `<proto
+package>.rs` per package, `descriptors.binpb` (the tree's `FileDescriptorSet`) and a
+`mod.rs` nesting one module per package segment around each file's `include!`, the way
+`prost-build` names them, with `FILE_DESCRIPTOR_SET`. The stubs are checked in like the
+generated modules; the crate needs no `build.rs` and no `protoc`. `truewire protos rust
+--check` compares them with a fresh build.
+
+```sh
+cargo install protoc-gen-prost --version 0.5.0 --locked   # beside buf
+truewire protos rust       # src/<package>/protos/
+truewire generate rust     # the endpoints, and `pub mod protos;` in lib.rs
+```
+
+```toml
+[dependencies]
+prost = "0.14"
+prost-types = "0.14"     # when a message uses a well-known type
+truewire-core = { version = "0.2", features = ["grpc"] }
+```
+
+Each endpoint module aliases its messages and calls one verb on its core:
+
+```rust
+pub const METHOD: &str = "/cosmos.bank.v1beta1.Query/AllBalances";
+pub type Request = crate::protos::cosmos::bank::v1beta1::QueryAllBalancesRequest;
+pub type Response = crate::protos::cosmos::bank::v1beta1::QueryAllBalancesResponse;
+pub type Row = crate::protos::cosmos::base::v1beta1::Coin;
+
+pub async fn all_balances(&self, request: Request, options: CallOptions) -> Result<Response> {
+    let call = GrpcCall { method: METHOD, request: request.encode_to_vec(), meta: &(), options };
+    let reply = self.core.invoke(call).await?;
+    decode_message("cosmos.bank.v1beta1.QueryAllBalancesResponse", &reply)
+}
+
+pub fn all_balances_paged(&self, request: Request, options: CallOptions) -> PaginatedResponse<Row, Vec<u8>>;
+```
+
+The contract is the one trait that does not speak `Value`: `GrpcEndpoint<Meta>::invoke(GrpcCall
+{ method, request: Vec<u8>, meta, options }) -> Result<Vec<u8>>`. Carrying encoded messages
+keeps it object-safe for every message type and free of `prost`, and the generated method
+does the typed half (`grpc_codec.rs` holds the one decode helper, a `ValidationError` when a
+reply does not decode). `truewire_core::grpc::GrpcClient` (feature `grpc`, `tonic`)
+implements it for every `Meta`, so a gRPC-only client is `GrpcDemo::from_core(GrpcClient::new(url)?)`;
+it maps statuses onto the error taxonomy (`NOT_FOUND` and `INVALID_ARGUMENT` are bad
+requests, `UNAVAILABLE` a network error, and so on). There is no `_raw` twin. Walks clone
+the request, set the driver path (`request.pagination.get_or_insert_with(Default::default).key
+= state`) and read rows, cursor and total straight off the fields; a `token` walk's state is
+the cursor's Rust type (`Vec<u8>` for Cosmos `next_key`), a `page` walk's the index's
+(`u64`). `dispatch.rs` gains `call_grpc(function, request: &[u8], options) -> Result<Vec<u8>>`,
+which decodes the request into the method's `Request` and encodes what it returned.
+
+Names follow `prost-build` (`heck`): a message is `UpperCamelCase` (`QueryBTCRequest` is
+`QueryBtcRequest`), a nested type sits in a module named after its parent
+(`search_response::Hit`), a field is `snake_case` with keywords raw (`r#type`), a singular
+message field and a proto3 `optional` scalar are `Option`s, an enum field an `i32`, and
+the well-known types come from `prost-types`.
+
+Testing: `truewire-testing` with feature `grpc` has `GrpcMock`, an in-process gRPC server
+over `tonic` answering every recorded gRPC example (a request equal to a recorded one, as
+a message, gets its response; anything else `NOT_FOUND`; a method with no recording
+`UNIMPLEMENTED`), `grpc_examples`, and `replay_grpc`, which encodes each recorded request,
+calls the generated `call_grpc` and compares the reply with the recording as messages. A
+recorded `google.protobuf.Any` is read in proto JSON's `@type` form or betterproto's
+`type_url`/`value` form; one whose `@type` names a message `spec/proto/` does not declare
+cannot be encoded, so that example is left out of the mock and reported skipped:
+
+```rust
+let protos = Arc::new(Protos::from_descriptor_set(dydx::protos::FILE_DESCRIPTOR_SET)?);
+let mock = GrpcMock::start(env!("CARGO_MANIFEST_DIR"), protos.clone()).await?;
+let client = GrpcDemo::from_core(GrpcClient::new(mock.url())?);
+let examples = grpc_examples(env!("CARGO_MANIFEST_DIR"));
+let client = &client;
+replay_grpc(&examples, &protos, |function, request| async move {
+    client.call_grpc(&function, &request, CallOptions::default()).await
+})
+.await
+.assert_passed();
+```
+
+`packages/truewire/test/test_codegen_rust_grpc.py` does exactly that for the `grpc_client`
+fixture, plus both walks, after `cargo fmt --check` and `cargo clippy -- -D warnings`; it
+skips without cargo, `buf` or `protoc-gen-prost`.
+
+## Protobuf sources
+
+A project with `spec/proto/**/*.proto` gets `<package>/protos.rs`: `SOURCES`, each file's
+path under `spec/proto/` beside its text (ADR 0016). A hand-written core compiles them once
+with `truewire_core::proto::Protos::from_sources(SOURCES)` (feature `proto`; imports resolve
+among the sources, and `google/protobuf/*.proto` resolve too), decodes a binary frame with
+`decode(envelope, bytes)` and narrows it with `narrow(&frame, field)`. A project with gRPC
+endpoints gets no `protos.rs`: its `protos` module is the `prost` one above, and a core
+compiles the same messages with `Protos::from_descriptor_set(protos::FILE_DESCRIPTOR_SET)`.
+
+A router whose endpoints are all hand-written (mexc's protobuf-framed spot streams) is still
+rendered, holding the core those endpoints would hold as `pub(crate) core`, so the inherent
+`impl` written beside it has a struct and a transport.
+
 ## Recording
 
 `HttpClient::recording()` is the Rust form of `truewire_core.http.recording()`: every
@@ -239,10 +344,59 @@ before the core unwraps an envelope or maps an error. It is what a future `truew
 capture` reads through a generated Rust client. Recordings may overlap, and
 `HttpClientOptions::on_exchange` is the permanent form.
 
+## Proxy
+
+Packages clause P18: a proxy is given explicitly, since a sandbox or a library caller
+cannot always set `HTTPS_PROXY`. The generated client takes its core ready-made
+(`from_core`), so the core is where the proxy goes, one URL for both transports:
+
+```rust
+let options = HttpClientOptions::default().with_proxy("http://127.0.0.1:3128")?;
+let http = HttpClient::new(options);
+let socket = Socket::new(dialect, SocketOptions::new(url)).with_proxy("http://127.0.0.1:3128")?;
+```
+
+`with_proxy` on `HttpClientOptions` builds the `reqwest` client (`http://` or `https://`
+proxy; an explicit one ignores the environment, `NO_PROXY` included). On `Socket` every
+connection is a `CONNECT` tunnel through an `http://` proxy, `ws://` and `wss://` alike,
+credentials from the URL's userinfo. `""` means no proxy. Without one, HTTP reads
+`HTTPS_PROXY`/`HTTP_PROXY`/`ALL_PROXY`/`NO_PROXY` as `reqwest` always did; the socket
+reads nothing. The `github` and `kraken` example cores take `CoreOptions::proxy`, and
+`try_new` returns a bad one as an error where `new` panics.
+
+## WebSocket commands and dual transports
+
+An `rpc` endpoint whose `transports` is `["ws"]` renders like an HTTP one, holding an
+`Arc<dyn CommandEndpoint<Meta>>` and handing it a `CommandCall { path, request, meta,
+options }` whose `path` is the wire method name. One declaring `["http", "ws"]` holds a
+core satisfying both and picks the transport per call from `CallOptions::transport`
+(`Transport::Http` or `Transport::Ws`), defaulting to the one its spec lists first -- the
+Rust form of the Python backend's `transport=` keyword:
+
+```rust
+let time = client.public.get_time(CallOptions::default().transport(Transport::Ws)).await?;
+```
+
+A trait object names one trait, so a core that must be several at once (a dual-transport
+endpoint, a router holding commands beside streams, a composite field handed to both) is
+held as a combined trait the generator declares in `contract.rs`, with a blanket impl:
+`pub trait CommandStreamEndpoint: CommandEndpoint + StreamEndpoint {}`. A core
+implementing the parts implements the whole, and the value upcasts to each part where a
+child holds only one.
+
+## Calling by function path
+
+`dispatch.rs` adds `call`, `call_raw`, `subscribe` and `subscribe_raw` to the root: every
+generated method by its dotted function path, with a wire request in and a wire value out
+(`call` decodes the request into its `Request`, calls the typed method and dumps the
+result; `call_raw` calls the `_raw` twin). It is the lookup Python gets from `getattr` and
+TypeScript from indexing the client, written out because Rust has no reflection, and it is
+what `truewire-testing`'s replay and anything else driving a client from data use. An
+unknown function is a `LogicError`.
+
 ## Streams
 
-The runtime is built; the generator does not render `stream` endpoints yet (they are
-reported as skipped). When it does, a `stream` endpoint's generated method calls
+A `stream` endpoint's generated method calls
 `subscribe` with the channel template, the dumped parameters (or `None` for a
 direct-channel or connect-only stream, where the method filled the template itself, as in
 the other backends) and the endpoint's `meta`, and maps the core's `Stream<Value>` into
@@ -254,6 +408,15 @@ pub async fn ticker(&self, parameters: Parameters, options: CallOptions) -> Resu
     Ok(stream.map(decode))
 }
 ```
+
+A stream whose parameters only fill its channel template (`tickers.{symbol}`, no
+parameters object on the wire) takes a generated `Parameters` struct of those fields; the
+method dumps it, fills each placeholder with the field's query text (a string verbatim, a
+number as its digits) and subscribes with `parameters: None`, as the TypeScript and Go
+methods do.
+
+A stream declaring a `reply` schema (ADR 0014) returns `Stream<Message, Reply>`: the typed
+method adds `.map_reply(decode)`, so `stream.reply` is the acknowledgement's own type.
 
 `Stream<N>` is a `futures::Stream<Item = Result<N>>` with the acknowledging `reply` and an
 `unsubscribe()`; a dropped connection yields one `NetworkError` item and ends it. There is
@@ -290,6 +453,12 @@ serial acks, `StreamsRpc` with a handshake) driven against an in-process server.
   `state`, so a page can be retried and a walk resumed. The request type is the endpoint's
   `Request` without the driver parameter (`ListPagedRequest`), unless the cursor is
   required and seeds the walk, in which case it is `Request` itself.
+- A `token` walk over a union payload (one page shape per product category) matches the
+  payload's variant, reads its rows and its cursor there (a variant without the cursor ends
+  the walk), and yields the union of the variants' row types as one untagged
+  `<Walker>PagedRequestRow` enum, or the shared row type when every variant has the same one.
+- A page size or a page `total` the wire sends as a string is parsed; a size that is not a
+  number is unknown, and a total that is not one never ends the walk.
 - The terminator checks are the runtime's, not the emitter's: `exhausted(rows, size)` for
   `short_page`/`empty`, `total_reached(...)` for a `page` walk ended by `total`,
   `cursor_or_done(cursor)` for `absent_cursor` (a zero-valued cursor is absent, as the
@@ -326,6 +495,24 @@ for one page. Every read of the response (rows, a cursor, a `total`) is rendered
 the type tree, so a nullable page or an optional cursor is read through `Option` rather
 than assumed present.
 
+## Seek and offset walks
+
+A `seek` walk (ADR 0013) returns `PaginatedResponse<Row, SeekState<Key, Row>>`. Its request
+is the single call's own `Request` (both bounds kept); `init` is the caller's moving bound,
+each page is requested from the state's `pos` (and, with a `span`, up to the span edge as
+the far bound) with an integer page size clamped once to at least 2 and at most the
+schema's `maximum` (a page must hold one new row beside the one it re-reads; the clamped
+size is also the cap), and the page is folded back through `truewire_core::Seek`, which
+owns the whole algorithm: re-served boundary rows deduplicated by key (`unique`) or by
+content, the moving bound set to a full page's extreme key, span chunks never past the
+caller's far bound, and a `LogicError` for a full page stuck on one key or a carried row
+the venue stopped serving. `Key` is the moving bound's type (an integer, a float, a string
+id compared by equality, `IntegerString`, or any timestamp newtype); a row's key is read
+through its wire form, so a numeral-string field walks a numeric bound. An `offset` walk's
+state is the offset, stepped by the rows each page held. A `total` terminator only decides
+when to stop: a missing or moving total is not an error, and no state is kept outside
+`next`'s argument.
+
 ## Testing
 
 `crates/truewire-core/tests` is at the granularity of `packages/core-ts/test`: `errors.rs`,
@@ -338,7 +525,15 @@ open, drop and reconnect, close, refused and hanging connections, close frames, 
 errors, pings, subscribe/push/unsubscribe, `message_key` routing, refused subscriptions,
 `map`/`filter`, serial ordering, and an `on_open` handshake). No test touches the network.
 
-`examples/github/tests` is the pattern for a generated package. `common/mod.rs` spawns
+`crates/truewire-testing` is the harness for a generated package: `Mock::start(project)`
+runs `truewire mock` on free ports and reads the HTTP and WebSocket URLs it announces
+(`TRUEWIRE_BIN`, else the nearest `.venv/bin/truewire`, else `PATH`); `http_examples` and
+`ws_examples` discover every recording with its function path; `replay` runs a check over
+all of them and fails once, naming every failure; `Replayed::compare` checks the typed
+value dumps back to the raw one. `examples/kraken/tests/replay.rs` is a whole replay test
+in thirty lines, through `dispatch.rs`.
+
+`examples/github/tests` is the older pattern for a generated package. `common/mod.rs` spawns
 `truewire mock --http-port 0 --ws-port 0` and builds the client against its URL;
 `replay.rs` walks `spec/endpoints/**/examples/*.request.json`, decodes each recorded
 request into its `Request` struct, calls the method and its `_raw` twin, and checks the
@@ -351,13 +546,11 @@ every file passes `rustfmt --check`.
 
 ## Not generated yet
 
-- `stream` endpoints, `rpc` endpoints reached only over a WebSocket, and routers under a
-  composite core (`children`/`forward` in `truewire.toml`) with everything beneath them:
-  the runtime has `StreamEndpoint`, `CommandEndpoint` and `Socket` for them, and the
-  generator reports each as skipped. `examples/kraken` therefore has no Rust package yet.
-- `window` walks, `seek` walks with `overlap`, the `unchanged` terminator, and the walks
-  the plan marks `walker: generator` (`offset`, and the shapes the resumable form does
-  not cover): the plain method is generated and the walker reported as skipped.
+- Walks the resumable form does not cover (a `page` or `token` walk the plan marks
+  `walker: generator`): the plain method is generated and the walker reported as skipped.
+- Streaming `grpc` methods, and a gRPC walk driven through a `oneof` member or ended by
+  anything but `absent_cursor`/`empty` (token) or `total`/`short_page`/`empty` (page):
+  the method is generated and the walker reported as skipped.
 - Publishing `truewire-core` to crates.io, and a `release/core-rust` workflow in the shape
   of `release-core-ts.yml`.
 - `truewire docs check` for ```rust blocks and `truewire surface` for the snake_case rule.
@@ -365,6 +558,6 @@ every file passes `rustfmt --check`.
 Two gaps are the plan's rather than the backend's, recorded in `docs/plan.md`: every
 integer renders as `i64` (the plan carries no width), and a union renders
 `#[serde(untagged)]` (the plan carries no discriminator). Two runtime limitations a
-reader should know: `rust_decimal` holds 28 significant digits, so a `decimal-string`
-beyond that fails validation rather than losing precision silently, and a literal mixing
-strings with numbers widens to `serde_json::Value`.
+reader should know: a literal mixing strings with numbers widens to `serde_json::Value`,
+and a `DecimalString` (the exact wire text over a `bigdecimal::BigDecimal`, any number of
+digits) is `Clone` but not `Copy`.

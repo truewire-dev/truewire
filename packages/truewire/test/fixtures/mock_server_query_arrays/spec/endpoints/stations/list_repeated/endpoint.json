@@ -1,0 +1,19 @@
+{
+  "meta": {},
+  "function": "acme.list_repeated",
+  "notes": ["Control: declares no `query_arrays`, so a list still travels as a repeated key."],
+  "spec": {
+    "kind": "rpc",
+    "transports": ["http"],
+    "path": "/repeated",
+    "method": "GET",
+    "request": {
+      "title": "ListRepeatedRequest",
+      "type": "object",
+      "properties": {"id": {"type": "array", "items": {"type": "string"}}},
+      "required": []
+    },
+    "response": {"type": "object"},
+    "description": "List with repeated keys."
+  }
+}

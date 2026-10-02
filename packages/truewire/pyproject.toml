@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "truewire"
-version = "0.10.1"
+version = "0.11.0"
 authors = [
   {name = "Truewire contributors"}
 ]
@@ -31,7 +31,7 @@ dependencies = [
   "case-converter",
   "jinja2",
   "ruff",
-  "truewire-core>=0.2.1,<0.3",
+  "truewire-core>=0.3.0,<0.4",
 ]
 requires-python = ">=3.11"
 readme = {file = "README.md", content-type = "text/markdown"}
@@ -50,7 +50,7 @@ Repository = "https://github.com/truewire-dev/truewire"
 where = ["src"]
 
 [tool.setuptools.package-data]
-truewire = ["py.typed", "resources/*"]
+truewire = ["py.typed", "resources/*", "resources/agents/**/*", "schemas/published/*.json"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

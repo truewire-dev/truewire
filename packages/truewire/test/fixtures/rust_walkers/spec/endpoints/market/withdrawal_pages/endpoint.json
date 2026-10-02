@@ -1,0 +1,68 @@
+{
+  "meta": {},
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/withdrawal-pages",
+    "method": "GET",
+    "description": "Withdrawals by row offset, ended by a total counting pages.",
+    "request": {
+      "title": "WithdrawalPagesRequest",
+      "type": "object",
+      "properties": {
+        "from": {
+          "type": "integer"
+        },
+        "limit": {
+          "type": "integer",
+          "maximum": 500
+        }
+      }
+    },
+    "response": {
+      "title": "WithdrawalPages",
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "title": "Withdrawal",
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id"
+            ]
+          }
+        },
+        "pages": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "items",
+        "pages"
+      ]
+    }
+  },
+  "pagination": {
+    "strategy": "offset",
+    "offset": {
+      "parameter": "from"
+    },
+    "size": {
+      "parameter": "limit"
+    },
+    "done": {
+      "kind": "total",
+      "path": "pages",
+      "rows": "items",
+      "counts": "pages"
+    }
+  }
+}

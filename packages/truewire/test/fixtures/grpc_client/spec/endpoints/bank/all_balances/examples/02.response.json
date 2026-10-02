@@ -1,0 +1,9 @@
+{
+  "balances": [
+    {
+      "denom": "uusdc",
+      "amount": "7"
+    }
+  ],
+  "pagination": {}
+}

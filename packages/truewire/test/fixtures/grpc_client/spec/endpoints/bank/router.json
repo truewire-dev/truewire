@@ -1,0 +1,5 @@
+{
+  "description": "Balances and supply of the demo bank module.",
+  "upstream": "https://docs.cosmos.network/main/build/modules/bank",
+  "core": "grpc"
+}

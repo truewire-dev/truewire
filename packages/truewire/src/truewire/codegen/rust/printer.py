@@ -25,6 +25,8 @@ ATTR_WIDTH = 70
 """`rustfmt`'s default `attr_fn_like_width`."""
 CHAIN_WIDTH = 60
 """`rustfmt`'s default `chain_width`: the widest method chain it keeps on one line."""
+FN_CALL_WIDTH = 60
+"""`rustfmt`'s default `fn_call_width`: the widest argument list it keeps on one line."""
 
 
 class Writer:
@@ -84,7 +86,9 @@ class Writer:
   def attribute(self, name: str, args: list[str]):
     """`#[name(args)]`, vertical when the arguments exceed `rustfmt`'s width."""
     joined = ', '.join(args)
-    if len(joined) <= ATTR_WIDTH and self.column + len(f'#[{name}({joined})]') <= MAX_WIDTH:
+    fits = self.column + len(f'#[{name}({joined})]') <= MAX_WIDTH
+    # `rustfmt` lets a lone argument overflow the attribute width while the line still fits.
+    if fits and (len(joined) <= ATTR_WIDTH or len(args) == 1):
       self.line(f'#[{name}({joined})]')
       return
     with self.block(f'#[{name}(', ')]'):
@@ -94,22 +98,75 @@ class Writer:
   def signature(self, head: str, params: list[str], tail: str):
     """`head(params) tail` on one line when it fits, else one parameter per line."""
     flat = f'{head}({", ".join(params)}){tail}'
-    if self.column + len(flat) <= MAX_WIDTH:
+    if self.column + len(flat) <= MAX_WIDTH and not _long_tuple(flat):
       self.line(flat)
       return
-    with self.block(f'{head}(', f'){tail}'):
+    closer = f'){tail}'
+    # Measured against `rustfmt` for a broken signature: the closing `) -> T {` stays whole
+    # while `) -> T` ends by column 94, the brace moves down through column 102, and past
+    # that the return type's outer generic breaks.
+    if tail.endswith(' {') and self.column + len(closer) - 2 > MAX_WIDTH - 6:
+      bare = closer[:-2]
+      if self.column + len(bare) <= MAX_WIDTH + 2 and not _long_tuple(bare):
+        # A return type too wide for the closing line: `rustfmt` moves the brace down.
+        with self.block(f'{head}(', bare):
+          for param in params:
+            self.param(param)
+        self.line('{')
+        return
+      split = _split_generic(bare)
+      if split is not None:
+        # Still too wide without the brace: `rustfmt` breaks the outer generic's arguments.
+        outer, args = split
+        with self.block(f'{head}(', f'{outer}<'):
+          for param in params:
+            self.param(param)
+        with self.indented():
+          for arg in args:
+            self.type_line(arg, ',')
+        # Measured against `rustfmt`: when an argument line overflows and cannot be broken
+        # itself (a bare path), it gives up on the closer's spacing and writes `>{`; a tuple or
+        # generic argument is broken instead, and the closer keeps its space.
+        wide = any(
+          self.column + len(INDENT) + len(arg) + 1 > MAX_WIDTH and not _breakable(arg) for arg in args
+        )
+        self.line('>{' if wide else '> {')
+        return
+    with self.block(f'{head}(', closer):
       for param in params:
-        self.line(f'{param},')
+        self.param(param)
+
+  def param(self, param: str):
+    """One `name: Type,` parameter line of a broken signature; an `impl A + B` that overflows
+    breaks one bound per line, as `rustfmt` does."""
+    if self.column + len(param) + 1 > MAX_WIDTH and ': impl ' in param:
+      name, _, bound = param.partition(': impl ')
+      self.bounds(f'{name}: impl ', bound.split(' + '), ',')
+      return
+    self.line(f'{param},')
 
   def chain(self, prefix: str, root: str, elements: list[str], suffix: str = ''):
     """`prefix root.a.b() suffix` on one line when the chain is within `rustfmt`'s chain
-    width, else one element per line under the root (which keeps its first element when
-    it is a short bare statement root such as `self`)."""
+    width, moving below a let binding's `=` if the full line overflows. Otherwise, one
+    element per line under the root (which keeps its first element when it is a short
+    bare statement root such as `self`)."""
     joined = f'{root}{"".join(elements)}'
     flat = f'{prefix}{joined}{suffix}'
-    if len(joined) <= CHAIN_WIDTH and self.column + len(flat) <= MAX_WIDTH:
-      self.line(flat)
-      return
+    # `rustfmt` reserves an extra column for a trailing `?`, but not a statement's `;`.
+    chain_width = len(joined) + joined.endswith('?')
+    if chain_width <= CHAIN_WIDTH:
+      binding = prefix.startswith('let ') and prefix.endswith(' = ')
+      # A binding reserves one column beyond a trailing `?`, and one more after a call.
+      reserved = (joined.endswith('?') + joined.endswith(')?')) if binding else 0
+      if self.column + len(flat) + reserved <= MAX_WIDTH:
+        self.line(flat)
+        return
+      continuation_width = len(joined) + len(suffix) + reserved
+      if binding and self.column + len(INDENT) + continuation_width <= MAX_WIDTH:
+        self.line(prefix.rstrip())
+        with self.indented():
+          self.line(f'{joined}{suffix}')
+        return
     rest = list(elements)
     head = f'{prefix}{root}'
     if not prefix and len(root) <= len(INDENT) and rest:
@@ -132,11 +189,324 @@ class Writer:
       return
     with self.block(f'{prefix}{name} {{', f'}}{suffix}'):
       for field in fields:
-        self.line(f'{field},')
+        self.field(field)
+
+  def call(self, head: str, args: list[str], suffix: str = ''):
+    """`head(args) suffix` on one line when the arguments are within `rustfmt`'s call width
+    and the line fits, else one argument per line."""
+    joined = ', '.join(args)
+    flat = f'{head}({joined}){suffix}'
+    if len(joined) <= FN_CALL_WIDTH and self.column + len(flat) <= MAX_WIDTH:
+      self.line(flat)
+      return
+    with self.block(f'{head}(', f'){suffix}'):
+      for arg in args:
+        self.line(f'{arg},')
+
+  def declaration(self, text: str):
+    """`struct_field` over one `name: Type` text."""
+    name, _, type_ = text.partition(': ')
+    self.struct_field(name, type_)
+
+  def struct_field(self, name: str, type_: str):
+    """One `name: Type,` line of a struct declaration; a line overflowing `MAX_WIDTH` puts
+    the type on the next line, one level in, as `rustfmt` does."""
+    line = f'{name}: {type_},'
+    if self.column + len(line) <= MAX_WIDTH and not _must_break(type_):
+      self.line(line)
+      return
+    if (self.column + len(INDENT) + len(type_) + 1 > MAX_WIDTH or _must_break(type_)) and _breakable(type_):
+      # Too wide for the next line as well: `rustfmt` keeps `name: Outer<(` on the field's
+      # line and breaks the type itself.
+      self.type_line(type_, ',', prefix=f'{name}: ')
+      return
+    self.line(f'{name}:')
+    with self.indented():
+      self.line(f'{type_},')
+
+  def type_alias(self, head: str, expr: str):
+    """`head expr;` (`pub type Name = `), the type broken as `rustfmt` breaks it when the
+    line overflows."""
+    if self.column + len(head) + len(expr) + 1 > MAX_WIDTH and self.column + len(INDENT) + len(expr) + 1 <= MAX_WIDTH:
+      # The type fits whole on the next line: `rustfmt` breaks after the `=` first.
+      self.line(head.rstrip())
+      with self.indented():
+        self.line(f'{expr};')
+      return
+    self.type_line(expr, ';', prefix=head)
+
+  def let_binding(self, head: str, value: str):
+    """`head = value;`; when that overflows, `rustfmt` breaks after the `=` and puts the
+    value on the next line, one level in."""
+    line = f'{head} = {value};'
+    if self.column + len(line) <= MAX_WIDTH:
+      self.line(line)
+      return
+    self.line(f'{head} =')
+    with self.indented():
+      self.line(f'{value};')
+
+  @contextmanager
+  def closure_binding(self, head: str, param: str, type_: str, suffix: str, *, offset: int = 0, closer: str = '};'):
+    """`head = param<type_><suffix>` with the closure body inside it, laid out as `rustfmt`
+    does: whole when it fits, else the closure head alone on the next line one level in when
+    it fits there (the body then sits one level deeper again), else the type's generic
+    arguments one per line. A line reaching the last column counts as too wide, which is how
+    `rustfmt` measures this binding.
+
+    `offset` is how much deeper than `column` the lines finally sit, for a body rendered in
+    its own writer and re-indented when it is placed."""
+    column = self.column + offset
+    head_text = f'{param}{type_}{suffix}'
+    if column + len(f'{head} = {head_text}') < MAX_WIDTH and not _must_break(type_):
+      self.line(f'{head} = {head_text}')
+      with self.indented():
+        yield
+      self.line(closer)
+      return
+    if column + len(INDENT) + len(head_text) < MAX_WIDTH and not _must_break(type_):
+      self.line(f'{head} =')
+      with self.indented():
+        self.line(head_text)
+        with self.indented():
+          yield
+        self.line(closer)
+      return
+    self.type_line(type_, suffix, prefix=f'{head} = {param}', offset=offset)
+    with self.indented():
+      yield
+    self.line(closer)
+
+  def field(self, field: str, *, keyed: bool = True):
+    """One `name: value,` line of a vertical struct literal; a value ending in a call that
+    would overflow `MAX_WIDTH` has its arguments broken one per line, as `rustfmt` does.
+    When even `name: callee(` overflows, the value moves to the next line, one level in,
+    and is laid out there the same way (whole when it fits)."""
+    line = f'{field},'
+    # A value `rustfmt` moved to its own line is measured without its trailing comma.
+    width = MAX_WIDTH if keyed else MAX_WIDTH + 1
+    fits = self.column + len(line) <= width and len(_trailing_call_args(field)) <= FN_CALL_WIDTH
+    if fits or not field.endswith(')'):
+      self.line(line)
+      return
+    if keyed and ': ' in field:
+      key, value = field.split(': ', 1)
+      open_paren = _call_open(value)
+      if open_paren >= 0 and self.column + len(key) + 2 + open_paren + 1 > MAX_WIDTH:
+        self.line(f'{key}:')
+        with self.indented():
+          self.field(value, keyed=False)
+        return
+    depth, open_at = 0, -1
+    for index in range(len(field) - 1, -1, -1):
+      char = field[index]
+      if char == ')':
+        depth += 1
+      elif char == '(':
+        depth -= 1
+        if depth == 0:
+          open_at = index
+          break
+    inner = field[open_at + 1:-1]
+    if open_at < 0 or not inner:
+      self.line(line)
+      return
+    args, depth, current = [], 0, ''
+    for char in inner:
+      if char == ',' and depth == 0:
+        args.append(current.strip())
+        current = ''
+        continue
+      depth += char in '([{<'
+      depth -= char in ')]}>'
+      current += char
+    args.append(current.strip())
+    with self.block(f'{field[:open_at + 1]}', '),'):
+      for arg in args:
+        self.line(f'{arg},')
+
+  def variant(self, label: str, expr: str):
+    """One `Label(Type),` tuple variant; a type overflowing `MAX_WIDTH` is broken the way
+    `rustfmt` breaks it: the payload on its own lines, then each overflowing generic's
+    arguments and tuple's members one per line (`Vec<(` ... `)>` sharing their lines)."""
+    line = f'{label}({expr}),'
+    if self.column + len(line) <= MAX_WIDTH and not _must_break(expr):
+      self.line(line)
+      return
+    with self.block(f'{label}(', '),'):
+      self.type_line(expr, ',')
+
+  def binding(self, head: str, value: str):
+    """`let_binding` under the name the composite constructors used first."""
+    self.let_binding(head, value)
+
+  def bounds(self, head: str, bounds: list[str], suffix: str):
+    """`head A + B suffix` (a `where` predicate) on one line when it fits, else one bound per
+    line after the first, each `+ B` one level in, as `rustfmt` breaks it."""
+    flat = f'{head}{" + ".join(bounds)}{suffix}'
+    if self.column + len(flat) <= MAX_WIDTH:
+      self.line(flat)
+      return
+    self.line(f'{head}{bounds[0]}')
+    with self.indented():
+      for index, bound in enumerate(bounds[1:], start=1):
+        self.line(f'+ {bound}' + (suffix if index == len(bounds) - 1 else ''))
+
+  def type_line(self, expr: str, suffix: str, prefix: str = '', *, offset: int = 0):
+    """`prefix expr suffix`, the type broken as `rustfmt` breaks one that does not fit: a
+    tuple's members and a generic's arguments one per line, `Outer<(` ... `)>` sharing
+    their lines, recursively, with `prefix` kept on the first line."""
+    if self.column + offset + len(prefix) + len(expr) + len(suffix) <= MAX_WIDTH and not _must_break(expr):
+      self.line(prefix + expr + suffix)
+      return
+    if _is_tuple(expr):
+      with self.block(prefix + '(', ')' + suffix):
+        for member in _split_top(expr[1:-1]):
+          self.type_line(member, ',')
+      return
+    generic = _split_generic(expr)
+    if generic is None:
+      self.line(prefix + expr + suffix)
+      return
+    outer, args = generic
+    if len(args) == 1 and _is_tuple(args[0]):
+      with self.block(f'{prefix}{outer}<(', ')>' + suffix):
+        for member in _split_top(args[0][1:-1]):
+          self.type_line(member, ',')
+      return
+    with self.block(f'{prefix}{outer}<', '>' + suffix):
+      for arg in args:
+        self.type_line(arg, ',')
 
   def render(self) -> str:
     out = '\n'.join(self._lines).rstrip('\n')
     return out + '\n'
+
+
+def _trailing_call_args(text: str) -> str:
+  """The argument text of the call `text` ends with (`a, b` of `f(a, b)`), or `''`."""
+  if not text.endswith(')'):
+    return ''
+  depth = 0
+  for index in range(len(text) - 1, -1, -1):
+    if text[index] == ')':
+      depth += 1
+    elif text[index] == '(':
+      depth -= 1
+      if depth == 0:
+        return text[index + 1:-1]
+  return ''
+
+
+def _call_open(text: str) -> int:
+  """The index of the `(` opening the call `text` ends in, or -1."""
+  if not text.endswith(')'):
+    return -1
+  depth = 0
+  for index in range(len(text) - 1, -1, -1):
+    char = text[index]
+    if char == ')':
+      depth += 1
+    elif char == '(':
+      depth -= 1
+      if depth == 0:
+        return index
+  return -1
+
+
+def _long_tuple(text: str) -> bool:
+  """Whether `text` holds a tuple type whose members, joined, are wider than
+  `FN_CALL_WIDTH`: `rustfmt` lays such a tuple out one member per line even when it fits."""
+  stack: list[int] = []
+  for index, char in enumerate(text):
+    if char == '(':
+      stack.append(index)
+    elif char == ')' and stack:
+      start = stack.pop()
+      if len(', '.join(_split_top(text[start + 1:index]))) > FN_CALL_WIDTH:
+        return True
+  return False
+
+
+def _is_tuple(text: str) -> bool:
+  """Whether `text` is one parenthesized tuple type (`(A, B)`), not `(A)` followed by more."""
+  if not (text.startswith('(') and text.endswith(')')):
+    return False
+  depth = 0
+  for index, char in enumerate(text):
+    depth += char in '<([{'
+    depth -= char in '>)]}'
+    if depth == 0 and index < len(text) - 1:
+      return False
+  return True
+
+
+def _must_break(text: str) -> bool:
+  """Whether `rustfmt` lays a type out vertically even where it fits: a tuple whose members
+  exceed `fn_call_width` (it formats a tuple's members as it does a call's arguments), or a
+  type holding one."""
+  if _is_tuple(text):
+    members = _split_top(text[1:-1])
+    return len(', '.join(members)) > FN_CALL_WIDTH or any(_must_break(member) for member in members)
+  generic = _split_generic(text)
+  return generic is not None and any(_must_break(arg) for arg in generic[1])
+
+
+def long_tuple(text: str, members: int = 5) -> bool:
+  """Whether `text` holds an inline tuple of at least `members` members anywhere: what
+  clippy's `type_complexity` flags in a signature or field (a candle row), and a pair does not."""
+  for start, char in enumerate(text):
+    if char != '(':
+      continue
+    depth = 0
+    for end in range(start, len(text)):
+      depth += text[end] in '<([{'
+      depth -= text[end] in '>)]}'
+      if depth == 0:
+        if len(_split_top(text[start + 1:end])) >= members:
+          return True
+        break
+  return False
+
+
+def _breakable(text: str) -> bool:
+  """Whether a type can be broken across lines: a tuple, or one ending in a generic."""
+  return _is_tuple(text) or _split_generic(text) is not None
+
+
+def _split_top(text: str) -> list[str]:
+  """`A, B<C, D>, (E, F)` -> [`A`, `B<C, D>`, `(E, F)`]: the top-level comma-separated parts."""
+  parts, depth, current = [], 0, ''
+  for char in text:
+    if char == ',' and depth == 0:
+      parts.append(current.strip())
+      current = ''
+      continue
+    depth += char in '<([{'
+    depth -= char in '>)]}'
+    current += char
+  if current.strip():
+    parts.append(current.strip())
+  return parts
+
+
+def _split_generic(text: str) -> tuple[str, list[str]] | None:
+  """`) -> Outer<A, B<C, D>>` -> (`) -> Outer`, [`A`, `B<C, D>`]): the outermost generic's
+  top-level arguments, or `None` when `text` does not end in one."""
+  if not text.endswith('>') or '<' not in text:
+    return None
+  start = text.index('<')
+  args, depth, current = [], 0, ''
+  for char in text[start + 1:-1]:
+    if char == ',' and depth == 0:
+      args.append(current.strip())
+      current = ''
+      continue
+    depth += char in '<([{'
+    depth -= char in '>)]}'
+    current += char
+  args.append(current.strip())
+  return text[:start], args
 
 
 def _ident_key(name: str) -> tuple[int, str]:
@@ -176,7 +546,8 @@ class Imports:
       else:
         segments.append((1,))
         line = f'use {path}::{{{", ".join(ordered)}}};'
-        if len(line) > MAX_WIDTH:
+        # `rustfmt` breaks a brace list two columns short of `max_width`.
+        if len(line) > MAX_WIDTH - 2:
           line = '\n'.join([f'use {path}::{{', *_packed(ordered), '};'])
       groups[group].append((tuple(segments), line))
     out: list[str] = []
@@ -193,10 +564,13 @@ def _packed(names: list[str]) -> list[str]:
   `MAX_WIDTH`, each followed by a comma."""
   lines: list[str] = []
   current = INDENT
-  for name in names:
+  for index, name in enumerate(names):
     item = f'{name},'
     candidate = item if current == INDENT else f'{current} {item}'
-    if current != INDENT and len(INDENT + candidate) > MAX_WIDTH:
+    # Measured against `rustfmt`: a packed line (its trailing comma included) stays under
+    # `max_width`, except the last, whose trailing comma is not counted, so it may reach it.
+    last = index == len(names) - 1
+    if current != INDENT and (len(candidate) > MAX_WIDTH if last else len(candidate) >= MAX_WIDTH):
       lines.append(current)
       current = INDENT + item
     else:
@@ -205,4 +579,4 @@ def _packed(names: list[str]) -> list[str]:
   return lines
 
 
-__all__ = ['ATTR_WIDTH', 'BANNER', 'CHAIN_WIDTH', 'INDENT', 'MAX_WIDTH', 'STRUCT_LIT_WIDTH', 'Imports', 'Writer']
+__all__ = ['ATTR_WIDTH', 'BANNER', 'CHAIN_WIDTH', 'INDENT', 'MAX_WIDTH', 'STRUCT_LIT_WIDTH', 'Imports', 'Writer', 'long_tuple']

@@ -1,0 +1,60 @@
+{
+  "meta": {},
+  "spec": {
+    "kind": "stream",
+    "channel": "book",
+    "description": "An order book: the subscription reply carries the whole book, pushes carry deltas.",
+    "parameters": {
+      "title": "BookParameters",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "payload": {
+      "title": "BookDelta",
+      "type": "object",
+      "properties": {
+        "bids": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "reply": {
+      "title": "BookSnapshot",
+      "type": "object",
+      "properties": {
+        "bids": {
+          "type": "array",
+          "items": {
+            "title": "Level",
+            "type": "object",
+            "properties": {
+              "price": {
+                "type": "string"
+              },
+              "size": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "price",
+              "size"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

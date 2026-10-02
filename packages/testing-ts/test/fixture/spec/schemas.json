@@ -1,0 +1,12 @@
+{
+  "Pet": {
+    "title": "Pet",
+    "type": "object",
+    "description": "A pet.",
+    "required": ["id", "name"],
+    "properties": {
+      "id": {"type": "integer", "description": "Pet id."},
+      "name": {"type": "string", "description": "Pet name."}
+    }
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "description": "The account's trades.",
+  "core": "default",
+  "upstream": "https://truewire.dev/docs/spec/authoring"
+}

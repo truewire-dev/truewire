@@ -1,0 +1,63 @@
+{
+  "meta": {},
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/fills",
+    "method": "GET",
+    "description": "Fills by a non-unique millisecond cursor and a fixed row cap.",
+    "request": {
+      "title": "FillsRequest",
+      "type": "object",
+      "properties": {
+        "user": {
+          "type": "string"
+        },
+        "startTime": {
+          "type": "integer"
+        },
+        "endTime": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "user",
+        "startTime"
+      ]
+    },
+    "response": {
+      "type": "array",
+      "items": {
+        "title": "Fill",
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "integer"
+          },
+          "px": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "t",
+          "px"
+        ]
+      }
+    }
+  },
+  "pagination": {
+    "strategy": "seek",
+    "cursor": {
+      "field": "[-1].t",
+      "unique": false
+    },
+    "bound": {
+      "start": "startTime",
+      "end": "endTime"
+    },
+    "anchor": "start",
+    "cap": 3
+  }
+}

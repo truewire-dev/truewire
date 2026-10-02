@@ -1,6 +1,6 @@
 # ADR 0002: Pagination is declared as an audited discriminated union, not inferred
 
-- Status: accepted
+- Status: accepted, amended by 0013 (`window` and the old `seek` cursor are replaced)
 - Date: 2026-08-06 (carried over 2026-09-06)
 
 ## Context

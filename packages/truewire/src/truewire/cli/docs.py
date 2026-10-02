@@ -5,7 +5,9 @@ import shutil
 
 import typer
 
-from truewire.docs import Finding, PyrightUnavailable, check_docs, lint_docs, report
+from truewire.docs import Finding, PyrightUnavailable, check_docs, check_docs_yml, lint_docs, report
+from truewire.project import PROJECT_FILE, NotAProject, Project, load_project
+from truewire.schemas.config import LANGUAGES
 from .common import PROJECT_OPTION, resolve_project
 
 def _root(project: str | None, path: str | None) -> tuple[str, Path]:
@@ -20,17 +22,49 @@ def _root(project: str | None, path: str | None) -> tuple[str, Path]:
   return loaded.name, loaded.root
 
 
+def _target(project: str | None, path: str | None) -> tuple[str, Path, Project | None]:
+  """The name and directory a docs command runs against, and the project there: `--path`
+  verbatim with the `truewire.toml` it holds, if any, else the resolved project."""
+  if path is None:
+    loaded = resolve_project(project)
+    return loaded.name, loaded.root, loaded
+  root = Path(path).expanduser().resolve()
+  if not root.is_dir():
+    typer.echo(f'Not a directory: {root}')
+    raise typer.Exit(code=1)
+  if not (root / PROJECT_FILE).is_file():
+    return root.name, root, None
+  try:
+    return root.name, root, load_project(root)
+  except NotAProject as error:
+    typer.echo(str(error))
+    raise typer.Exit(code=1)
+
+
+def _declared(project: Project | None) -> tuple[str, ...] | None:
+  """The languages `project` declares, or None when there is no project to hold docs to."""
+  if project is None:
+    return None
+  return tuple(language for language in LANGUAGES if getattr(project.config, language) is not None)
+
+
 def check(
   project: str | None = PROJECT_OPTION,
   path: str | None = typer.Option(None, '--path', help='Directory holding README.md and docs/; defaults to the project root.'),
 ):
-  """Type-check every python example in a project's published docs.
+  """Validate `docs/docs.yml` and type-check every python example in a project's published docs.
 
-  Runs pyright over the blocks of `README.md` and `docs/`, against the project's own
-  package source. Nothing is executed and no credential is read: a doc example that calls
+  `docs/docs.yml` is checked against its schema (an unknown key, a wrong type), every page
+  its nav names must exist under `docs/`, and its quickstart needs one block per language
+  `truewire.toml` declares (W10). Then pyright runs over the blocks of `README.md` and
+  `docs/`, against the project's own package source. Nothing is executed and no credential is read: a doc example that calls
   a method the package does not have is a type error, not a failed request.
   """
-  client, root = _root(project, path)
+  client, root, loaded = _target(project, path)
+
+  problems = check_docs_yml(root, _declared(loaded))
+  for problem in problems:
+    typer.echo(problem)
 
   try:
     examples, diagnostics = check_docs(root)
@@ -48,8 +82,10 @@ def check(
   summary = (
     f'{len(examples)} block(s) across {pages} page(s), {wrapped} wrapped for top-level await'
   )
-  if errors:
+  if errors or problems:
     typer.echo('')
+    if problems:
+      typer.echo(f'{len(problems)} problem(s) in docs/docs.yml')
     typer.echo(f'{summary}: {len(errors)} error(s), {warnings} warning(s)')
     raise typer.Exit(code=1)
 

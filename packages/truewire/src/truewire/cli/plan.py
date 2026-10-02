@@ -35,6 +35,20 @@ def _endpoint_line(endpoint) -> str:
 
   assert isinstance(endpoint, EndpointPlan)
   wire = endpoint.wire
+  if endpoint.kind == 'grpc' and endpoint.grpc is not None:
+    grpc = endpoint.grpc
+    parts = [
+      endpoint.function, 'grpc', grpc.streaming, wire.path or '', f'core={endpoint.core}',
+      f'request={grpc.request.name}', f'returns={grpc.response.name}',
+    ]
+    if endpoint.pagination is not None:
+      parts.append(
+        f'paged={endpoint.pagination.strategy}/{endpoint.pagination.done.get("kind")} '
+        f'walker={endpoint.pagination.walker} driver={endpoint.pagination.driver}'
+      )
+    if endpoint.surface is not None:
+      parts.append(endpoint.surface)
+    return '  '.join(parts)
   if endpoint.kind == 'stream':
     where = f'channel {wire.channel}'
   else:

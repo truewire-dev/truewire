@@ -46,6 +46,7 @@ pub struct Repository {
     pub full_name: String,
     /// Whether the repository is private.
     pub private: bool,
+    /// Owning account.
     pub owner: SimpleUser,
     /// Web page of the repository.
     pub html_url: String,

@@ -11,7 +11,8 @@ Two kinds of check live here, side by side:
   one get forgotten.
 - **native** -- a check with no `truewire` subcommand of its own, because it doesn't fit
   any existing command's domain: `truewire.standards.links`/`docstrings`/
-  `duplicate_schemas`/`secrets`/`router_coverage`/`no_call` (S1/S3/S6/S16/S26/S29) each
+  `duplicate_schemas`/`secrets`/`secret_values`/`router_coverage`/`no_call`
+  (S1/S3/S6/S16/W14/S26/S29) each
   needed either a new target shape (project-wide instead of per-operation) or a wholly
   different kind of input (network requests, `.py` source, `truewire.toml`) that no existing
   command reads. Rather than growing a fresh top-level subcommand per narrow rule, each is
@@ -38,13 +39,17 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from truewire.project import Project
+from truewire.project import PROJECT_FILE, Project
+from truewire.score.rows import declared_languages
 from truewire.standards.docstrings import check_docstrings
 from truewire.standards.duplicate_schemas import check_duplicate_schemas
 from truewire.standards.finding import Finding
+from truewire.standards.layout import check_layout
 from truewire.standards.links import check_links
 from truewire.standards.no_call import check_no_call_methods
+from truewire.standards.paged_shape import check_paged_shape
 from truewire.standards.router_coverage import check_router_coverage
+from truewire.standards.secret_values import check_secret_values, held_secrets, redact
 from truewire.standards.secrets import check_secret_placeholders
 
 from .common import PROJECT_OPTION, resolve_project
@@ -61,6 +66,9 @@ class Check:
   rules: str
   argv: list[str]
   """Argument list following `truewire` itself, e.g. `['check']` -- see `run_check`."""
+  per_language: bool = False
+  """Whether this runs once per language `truewire.toml` declares, with `--language`, as
+  one row each; skipped on a project that declares none."""
 
 
 @dataclass(frozen=True)
@@ -73,6 +81,9 @@ class NativeCheck:
   default: bool = True
   """Whether this runs in a plain `truewire standards` call with no `--only`.
   `False` only for `links` (S1) -- see this module's own docstring."""
+  python_only: bool = False
+  """Whether this scans the generated Python package, so is skipped on a project with no
+  `[python]` section rather than raising `NotAProject`."""
 
 
 @dataclass(frozen=True)
@@ -81,6 +92,8 @@ class Result:
   ok: bool
   stdout: str
   stderr: str = ''
+  skipped: bool = False
+  """The check does not apply to this project; `ok` is `True` so it fails nothing."""
   command: str | None = None
   """Shell command actually run, shown in failed-check detail. `None` for a native check --
   there is no subprocess invocation to show."""
@@ -88,10 +101,11 @@ class Result:
 
 CHECKS: list[Check] = [
   Check('check', 'check', 'S5, S7, S8 (reserved-param), S14, S15', ['check']),
-  Check('surface', 'surface', 'S8 (validate param)', ['surface']),
+  Check('surface', 'surface', 'S8 (validate param)', ['surface'], per_language=True),
   Check('examples --require-verified', 'examples', 'S13', ['examples', '--require-verified']),
   Check('docs check', 'docs-check', 'S20', ['docs', 'check']),
   Check('docs lint', 'docs-lint', 'S21, S25', ['docs', 'lint']),
+  Check('agents check', 'agents', 'A11', ['agents', 'check']),
 ]
 """Per-project `truewire` subcommands, in `docs/production_standards.md` order."""
 
@@ -108,13 +122,22 @@ def _check_no_call_methods_from_project(project: Project) -> list[Finding]:
   return check_no_call_methods(project.package_dir)
 
 
+def _check_paged_shape_from_project(project: Project) -> list[Finding]:
+  """Adapt `check_paged_shape` (which scans one package directory) the same way as
+  `_check_docstrings_from_project`, above."""
+  return check_paged_shape(project.package_dir)
+
+
 NATIVE_CHECKS: list[NativeCheck] = [
   NativeCheck('links', 'links', 'S1', check_links, default=False),
-  NativeCheck('docstrings', 'docstrings', 'S3', _check_docstrings_from_project),
+  NativeCheck('docstrings', 'docstrings', 'S3', _check_docstrings_from_project, python_only=True),
   NativeCheck('duplicate schemas', 'duplicate-schemas', 'S6', check_duplicate_schemas),
   NativeCheck('secret placeholders', 'secret-placeholders', 'S16', check_secret_placeholders),
+  NativeCheck('secret values', 'secret-values', 'W14, I5', check_secret_values),
+  NativeCheck('paged methods are PaginatedResponse', 'paged-shape', 'S24', _check_paged_shape_from_project, python_only=True),
   NativeCheck('router.json coverage', 'router-coverage', 'S26', check_router_coverage),
-  NativeCheck('no __call__ methods', 'no-call', 'S29', _check_no_call_methods_from_project),
+  NativeCheck('no __call__ methods', 'no-call', 'S29', _check_no_call_methods_from_project, python_only=True),
+  NativeCheck('init layout', 'layout', 'A7-A9, W10, W13, W16', check_layout),
 ]
 """In-process checks with no `truewire` subcommand of their own, in
 `docs/production_standards.md` order."""
@@ -133,20 +156,44 @@ def _truewire_script() -> Path:
   return Path(sys.executable).parent / 'truewire'
 
 
-def run_check(check: Check, project: Project) -> Result:
+def run_check(check: Check, project: Project, language: str | None = None) -> Result:
   """
   Run one `Check` -- a `truewire` subcommand -- against a project and wrap its outcome.
 
   Args:
     check: Which check to run.
     project: The project to check.
+    language: Passed as `--language`, for a `per_language` check.
   """
   argv = [str(_truewire_script()), *check.argv, '--project', str(project.root)]
+  if language is not None:
+    argv += ['--language', language]
   process = subprocess.run(argv, cwd=project.root, capture_output=True, text=True)
   return Result(
     ok=process.returncode == 0, stdout=process.stdout, stderr=process.stderr,
     command=' '.join(shlex.quote(part) for part in argv),
   )
+
+
+def run_check_rows(check: Check, project: Project) -> list[tuple[str, Result]]:
+  """
+  Run one `Check` and return its rows as `(label, result)`: one row, or for a
+  `per_language` check one `<label> (<language>)` row per declared language, and a single
+  skipped row when the project declares none.
+
+  Args:
+    check: Which check to run.
+    project: The project to check.
+  """
+  if not check.per_language:
+    return [(check.label, run_check(check, project))]
+  languages = declared_languages(project)
+  if not languages:
+    return [(check.label, Result(
+      ok=True, stdout=f'Skipped: no language declared in {PROJECT_FILE}, so no generated package to check.\n',
+      skipped=True,
+    ))]
+  return [(f'{check.label} ({language})', run_check(check, project, language)) for language in languages]
 
 
 def render_findings(findings: list[Finding]) -> str:
@@ -178,6 +225,11 @@ def run_native_check(check: NativeCheck, root: Project) -> Result:
     check: Which check to run.
     root: Project to check.
   """
+  if check.python_only and root.python is None:
+    return Result(
+      ok=True, stdout='Skipped: no [python] section, so no generated Python package to scan.\n',
+      skipped=True,
+    )
   findings = check.fn(root)
   ok = not any(f['severity'] == 'error' for f in findings)
   return Result(ok=ok, stdout=render_findings(findings))
@@ -243,15 +295,19 @@ def standards(
 ):
   """Run every mechanically-enforced `docs/production_standards.md` check for one project.
 
-  Aggregates `check`, `surface`, `examples --require-verified`, `docs check`, `docs lint`,
-  and six in-process
+  Aggregates `check`, `surface` (once per declared language), `examples --require-verified`,
+  `docs check`, `docs lint`,
+  and nine in-process
   checks with no subcommand of their own -- `links` (S1), `docstrings` (S3), `duplicate
-  schemas` (S6), `secret placeholders` (S16), `router.json coverage` (S26), `no __call__
-  methods` (S29) -- into one pass and one summary table. Every external check keeps its own
+  schemas` (S6), `secret placeholders` (S16), `secret values` (W14), `paged methods` (S24),
+  `router.json coverage`
+  (S26), `no __call__ methods` (S29), `init layout` (A7-A9, W10, W13, W16) -- into one pass
+  and one summary table. Every external check keeps its own
   real exit code and output; a native check's `ok` is whether it reported any
   `error`-severity finding -- `docstrings`/`duplicate schemas`/`secret placeholders` stay
   `warning`-only per each one's own docstring, the same staged rollout `ws-verb` used;
-  `router.json coverage` and `no __call__ methods` are `error`-severity from the start.
+  `secret values`, `router.json coverage`, `no __call__ methods` and `init layout` are
+  `error`-severity from the start.
   `links` is the one check excluded from a plain run -- see this module's own docstring --
   select it with `--only links`. Does **not** cover a review- or `manual`-enforced rule;
   those still need a human reading the code.
@@ -265,7 +321,8 @@ def standards(
   """
   if list_checks:
     for check in CHECKS:
-      typer.echo(f'{check.slug:<20} {check.label} ({check.rules}) [default: on]')
+      each = ', once per declared language' if check.per_language else ''
+      typer.echo(f'{check.slug:<20} {check.label} ({check.rules}) [default: on{each}]')
     for native in NATIVE_CHECKS:
       state = 'on' if native.default else 'off, pass --only to run'
       typer.echo(f'{native.slug:<20} {native.label} ({native.rules}) [default: {state}]')
@@ -285,10 +342,14 @@ def standards(
     raise typer.Exit(code=1)
 
   typer.echo(f'Project: {client}\n')
+  # Every check's output is printed through `redact`: an external check quotes the
+  # recordings it rejects, and a recording can hold a `[secrets]` value (W14).
+  secrets = held_secrets(loaded)
 
   rows: list[tuple[str, str, str, Result]] = []
   for check in checks:
-    rows.append((check.label, check.rules, check.slug, run_check(check, loaded)))
+    for label, result in run_check_rows(check, loaded):
+      rows.append((label, check.rules, check.slug, result))
   for native in natives:
     rows.append((native.label, native.rules, native.slug, run_native_check(native, loaded)))
 
@@ -300,25 +361,26 @@ def standards(
   for label, rules, _slug, result in rows:
     if not result.ok:
       failed.append((label, result))
-    table.add_row(label, rules, '[green]OK[/]' if result.ok else '[red]FAILED[/]')
+    status = '[yellow]SKIPPED[/]' if result.skipped else '[green]OK[/]' if result.ok else '[red]FAILED[/]'
+    table.add_row(label, rules, status)
   Console().print(table)
 
   if verbose:
     for label, _rules, _slug, result in rows:
       typer.echo(f'\n--- {label} ---')
-      typer.echo(result.stdout)
+      typer.echo(redact(result.stdout, secrets))
       if result.stderr:
-        typer.echo(result.stderr, err=True)
+        typer.echo(redact(result.stderr, secrets), err=True)
 
   if failed:
     typer.echo(f'\n{len(failed)}/{len(rows)} check(s) failed:')
     for label, result in failed:
       typer.echo(f'\n=== {label} ===')
       if result.command:
-        typer.echo(f'$ {result.command}')
-      typer.echo(result.stdout)
+        typer.echo(redact(f'$ {result.command}', secrets))
+      typer.echo(redact(result.stdout, secrets))
       if result.stderr:
-        typer.echo(result.stderr, err=True)
+        typer.echo(redact(result.stderr, secrets), err=True)
     typer.echo(
       f'\nSee `docs/production_standards.md` for the rules each check enforces; rerun the '
       f'failing command(s) directly for full output.'

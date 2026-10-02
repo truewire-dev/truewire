@@ -1,0 +1,29 @@
+{
+  "meta": {
+    "public": true
+  },
+  "docs": "https://docs.cosmos.network/main/build/modules/bank",
+  "spec": {
+    "kind": "grpc",
+    "service": "demo.bank.v1.Query",
+    "rpc": "AllBalances",
+    "request": "demo.bank.v1.QueryAllBalancesRequest",
+    "response": "demo.bank.v1.QueryAllBalancesResponse",
+    "proto": "demo/bank/v1/query.proto",
+    "description": "Query every balance of an address."
+  },
+  "pagination": {
+    "strategy": "token",
+    "cursor": {
+      "parameter": "pagination.key",
+      "from": "pagination.next_key"
+    },
+    "size": {
+      "parameter": "pagination.limit"
+    },
+    "done": {
+      "kind": "absent_cursor",
+      "rows": "balances"
+    }
+  }
+}

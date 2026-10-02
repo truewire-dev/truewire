@@ -19,26 +19,26 @@ async def test_deposit_methods_union_branch(client):
 
 
 @pytest.mark.asyncio
-async def test_trades_history_paged_walks_multiple_pages(client):
-  """`trades_history` declares `pagination` (`offset`, terminated by an item-counted
-  `total`) and now generates a real `trades_history_paged` iterator: moving `limit`
-  from `requestBody` to `parameters`/`in: 'query'` (production_standards.md S18) let
-  the shared `Generator.paged_size_default` find `limit`'s declared `default` (50),
-  which is what the walk needs to advance `ofs` by on every call, including the ones
-  where the caller passes no explicit `limit`.
+async def test_trades_history_pages_by_hand_with_ofs_and_count(client):
+  """`trades_history` declares no `pagination` (ADR 0013): its rows are a map keyed by
+  trade id, and a `PaginatedResponse` needs an array row collection to yield, so no
+  `trades_history_paged` is generated. A caller pages with `ofs`/`count` instead.
 
   Exercises a real 2-page walk against the mock server (`paged_page1`/`paged_page2`
   recorded examples, `count: 3` total across the two pages, `limit=2`): page 1 returns
-  2 trades and isn't enough to cover `count`, so the walk advances `ofs` from 0 to 2 and
-  fetches page 2, which returns the remaining 1 trade and satisfies `count`, stopping
-  the walk after exactly 2 pages -- not just 1, which couldn't distinguish a correct
-  walk from one that happens to terminate immediately.
+  2 trades and isn't enough to cover `count`, so `ofs` moves from 0 to 2 and page 2
+  returns the remaining 1 trade.
   """
   async with client:
-    assert hasattr(client.spot.account, 'trades_history_paged')
-    pages = [
-      page async for page in client.spot.account.trades_history_paged(limit=2)
-    ]
+    assert not hasattr(client.spot.account, 'trades_history_paged')
+    pages = []
+    ofs = 0
+    while True:
+      page = await client.spot.account.trades_history(limit=2, ofs=ofs)
+      pages.append(page)
+      ofs += len(page['trades'])
+      if not page['trades'] or ofs >= page['count']:
+        break
     assert len(pages) == 2
     assert [page['count'] for page in pages] == [3, 3]
     all_trades = {txid: trade for page in pages for txid, trade in page['trades'].items()}

@@ -17,9 +17,11 @@ opening a socket.
 from dataclasses import dataclass, field
 from typing_extensions import cast
 import asyncio
+import gc
 import pytest
 import websockets
 
+from truewire_core.exceptions import NetworkError
 from truewire_core.ws.socket import Socket, Context
 
 class FakeConnection:
@@ -103,6 +105,71 @@ async def test_two_touches_open_once():
     await socket.open()
   assert socket.open_calls == 1
 
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('cancelled', [False, True])
+async def test_failed_open_releases_all_waiters_and_allows_retry(cancelled):
+  started = asyncio.Event()
+  finish = asyncio.Event()
+  error = NetworkError('connect failed')
+
+  class FailingOnceSocket(RecordingSocket):
+    async def force_open(self):
+      if not started.is_set():
+        started.set()
+        await finish.wait()
+        raise error
+      return await super().force_open()
+
+  socket = FailingOnceSocket(url='wss://example.invalid')
+  owner = asyncio.create_task(socket.open())
+  await started.wait()
+  waiters = [asyncio.create_task(socket.open()) for _ in range(2)]
+  await asyncio.sleep(0)  # Both waiters reach the in-flight attempt's future.
+  calls = [owner, *waiters]
+  try:
+    if cancelled:
+      owner.cancel()
+    else:
+      finish.set()
+    done, pending = await asyncio.wait(calls, timeout=1)
+    assert not pending, 'a failed connect left callers waiting'
+    assert len(done) == 3
+    for call in calls:
+      if cancelled and call is owner:
+        assert call.cancelled()
+      elif cancelled:
+        assert isinstance(call.exception(), NetworkError)
+      else:
+        assert call.exception() is error
+    assert socket._ctx_future is None
+    assert not socket.open_lock.locked()
+    async with socket:
+      contexts = await asyncio.gather(socket.open(), socket.open())
+      assert contexts[0] is contexts[1]
+      assert socket.open_calls == 1
+  finally:
+    for call in calls:
+      call.cancel()
+    await asyncio.gather(*calls, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_failed_open_without_waiters_retrieves_future_exception():
+  loop = asyncio.get_running_loop()
+  previous_handler = loop.get_exception_handler()
+  unhandled = []
+  loop.set_exception_handler(lambda loop, context: unhandled.append(context))
+  try:
+    async with RaisingSocket(url='wss://example.invalid') as socket:
+      with pytest.raises(AssertionError, match='force_open must not be called'):
+        await socket.open()
+      assert socket._ctx_future is None
+    gc.collect()
+    assert not unhandled
+  finally:
+    loop.set_exception_handler(previous_handler)
+
 @pytest.mark.asyncio
 async def test_aexit_closes_what_was_opened():
   """Exiting after use closes exactly the connection that was opened."""
@@ -156,3 +223,210 @@ def test_a_socket_is_constructible_outside_an_event_loop():
   """
   socket = RaisingSocket(url='wss://example.invalid')
   assert socket._ctx_future is None
+
+@pytest.mark.asyncio
+async def test_close_during_wait_raises_network_error():
+  started = asyncio.Event()
+  cleaned = asyncio.Event()
+
+  async def request():
+    started.set()
+    try:
+      await _hang()
+    finally:
+      await asyncio.sleep(0)
+      cleaned.set()
+
+  async with RecordingSocket(url='wss://example.invalid') as socket:
+    call = asyncio.create_task(socket.wait(request()))
+    await started.wait()
+  with pytest.raises(NetworkError, match='WebSocket connection closed'):
+    await call
+  assert not call.cancelled()
+  assert cleaned.is_set()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('background', ['listener', 'pinger'])
+@pytest.mark.parametrize('ending', ['cancelled', 'returned', 'failed'])
+async def test_wait_background_exit(background, ending):
+  error = NetworkError('transport failed')
+
+  async def finish():
+    if ending == 'failed':
+      raise error
+
+  async with RecordingSocket(url='wss://example.invalid') as socket:
+    ctx = await socket.open()
+    old = getattr(ctx, background)
+    old.cancel()
+    await asyncio.gather(old, return_exceptions=True)
+    task = asyncio.create_task(finish())
+    setattr(ctx, background, task)
+    if ending == 'cancelled':
+      task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+    request = asyncio.Future()
+    with pytest.raises(NetworkError) as exc:
+      await socket.wait(request, ctx=ctx)
+    if ending == 'failed':
+      assert exc.value is error
+    else:
+      assert exc.value.args == ('WebSocket connection closed',)
+    assert request.cancelled()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('background', ['listener', 'pinger'])
+@pytest.mark.parametrize('failed', [False, True])
+async def test_completed_request_wins_over_closed_connection(background, failed):
+  error = ValueError('request failed')
+  async with RecordingSocket(url='wss://example.invalid') as socket:
+    ctx = await socket.open()
+    task = getattr(ctx, background)
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+    request = asyncio.Future()
+    if failed:
+      request.set_exception(error)
+      with pytest.raises(ValueError) as exc:
+        await socket.wait(request, ctx=ctx)
+      assert exc.value is error
+    else:
+      request.set_result('reply')
+      assert await socket.wait(request, ctx=ctx) == 'reply'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('timeout', [False, True])
+async def test_wait_caller_cancellation_awaits_request_cleanup(timeout):
+  started = asyncio.Event()
+  cleaned = asyncio.Event()
+
+  async def request():
+    started.set()
+    try:
+      await _hang()
+    finally:
+      await asyncio.sleep(0)
+      cleaned.set()
+
+  async with RecordingSocket(url='wss://example.invalid') as socket:
+    ctx = await socket.open()
+    call = asyncio.create_task(socket.wait(request()))
+    await started.wait()
+    if timeout:
+      with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(call, timeout=0)
+    else:
+      call.cancel()
+      with pytest.raises(asyncio.CancelledError):
+        await call
+    assert cleaned.is_set()
+    assert not ctx.listener.done()
+    assert not ctx.pinger.done()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_connect_waiter_leaves_owner_and_other_waiter_running():
+  started, finish = asyncio.Event(), asyncio.Event()
+
+  class GatedSocket(RecordingSocket):
+    async def force_open(self):
+      started.set()
+      await finish.wait()
+      return await super().force_open()
+
+  async with GatedSocket(url='wss://example.invalid') as socket:
+    owner = asyncio.create_task(socket.open())
+    await started.wait()
+    waiter = asyncio.create_task(socket.open())
+    survivor = asyncio.create_task(socket.open())
+    await asyncio.sleep(0)
+    waiter.cancel()
+    await asyncio.gather(waiter, return_exceptions=True)
+    finish.set()
+    results = await asyncio.gather(owner, survivor, return_exceptions=True)
+    assert all(isinstance(ctx, Context) for ctx in results), results
+    assert results[0] is results[1] is await socket.open()
+    assert socket.open_calls == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('error_type', [ConnectionRefusedError, OSError, TimeoutError])
+async def test_connect_transport_failures_are_network_errors(monkeypatch, error_type):
+  error = error_type('synthetic connection failure')
+
+  async def connect(*args, **kwargs):
+    raise error
+
+  monkeypatch.setattr(websockets, 'connect', connect)
+
+  class RealSocket(Socket):
+    def on_msg(self, msg):
+      pass
+
+  async with RealSocket(url='ws://example.invalid') as socket:
+    with pytest.raises(NetworkError) as info:
+      await socket.open()
+    assert info.value.__cause__ is error
+
+
+@pytest.mark.asyncio
+async def test_wait_binds_nested_context_resolution_without_affecting_other_sockets():
+  async with RecordingSocket(url='ws://example.invalid') as socket:
+    async with RecordingSocket(url='ws://other.invalid') as other:
+      original = await socket.open()
+      await socket.close(original)
+      replacement = await socket.open()
+
+      async def request():
+        assert await other.ctx is not original
+        return await socket.ctx
+
+      with pytest.raises(NetworkError):
+        await socket.wait(request(), ctx=original)
+      assert socket.open_calls == 2
+      assert other.open_calls == 1
+      assert await socket.ctx is replacement
+
+
+@pytest.mark.asyncio
+async def test_owner_exit_during_connect_closes_the_connection():
+  """The owner leaves `async with` while the first connect is in flight. The connect closes
+  what it opened and raises `ClosedByOwner`, instead of leaving a connection, listener and
+  pinger with no owner."""
+  from truewire_core.ws.socket import ClosedByOwner
+
+  gate = asyncio.Event()
+  started = asyncio.Event()
+  opened: list[Context] = []
+
+  @dataclass
+  class Gated(Socket):
+    def on_msg(self, msg):
+      ...
+
+    async def force_open(self) -> Context:
+      started.set()
+      await gate.wait()
+      ctx = Context(
+        ws=cast(websockets.ClientConnection, FakeConnection()),
+        listener=asyncio.create_task(_hang()),
+        pinger=asyncio.create_task(_hang()),
+      )
+      opened.append(ctx)
+      return ctx
+
+  socket = Gated(url='wss://example.invalid')
+  async with socket:
+    call = asyncio.create_task(socket.open())
+    await started.wait()
+  gate.set()
+  with pytest.raises(ClosedByOwner):
+    await call
+  await asyncio.sleep(0)
+  assert len(opened) == 1
+  assert opened[0].listener.done() and opened[0].pinger.done()
+  assert len(cast(FakeConnection, opened[0].ws).exit_calls) == 1
+  assert isinstance(ClosedByOwner('x'), NetworkError)

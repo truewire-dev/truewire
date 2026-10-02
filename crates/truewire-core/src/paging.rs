@@ -28,8 +28,16 @@ use std::sync::Arc;
 
 use futures::future::BoxFuture;
 use futures::stream::{self, Stream, StreamExt};
+use serde::de::DeserializeOwned;
+use serde::Serialize;
+use serde_json::Value;
 
 use crate::errors::{Error, Result};
+use crate::types::{
+    DateIso, IntegerString, TimestampIso, TimestampMicros, TimestampMicrosFloat, TimestampMicrosString,
+    TimestampMillis, TimestampMillisFloat, TimestampMillisString, TimestampNanos, TimestampNanosFloat,
+    TimestampNanosString, TimestampSeconds, TimestampSecondsFloat, TimestampSecondsString,
+};
 
 /// One page of a walk, with the state on either side of it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -288,6 +296,10 @@ impl CursorLike for bool {
 /// The `total` a `page`/`offset` walk read on earlier pages, to check each new page's
 /// against: a page that omits it, or reports a different value than an earlier page of the
 /// same walk, is a `LogicError` (the API changed under the walk; retry it from the start).
+///
+/// No generated walker uses it since ADR 0013, which dropped the strict check: a walk over
+/// live data is racy whether or not `total` moves, and the shared state broke `next`'s
+/// purity. `total` now only decides when to stop. Kept for code written against it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TotalSeen {
     seen: Option<i64>,
@@ -315,4 +327,597 @@ impl TotalSeen {
             }
         }
     }
+}
+
+// -- seek (ADR 0013) ------------------------------------------------------------------
+
+/// The unit a `seek` walk's `span` is declared in. A timestamp bound moves by that much
+/// time; a numeric bound (a block height, an id) moves by `span` of its own ticks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SpanUnit {
+    Micros,
+    Millis,
+    Seconds,
+}
+
+/// A type a `seek` walk's moving bound can have: what a row's cursor field is read as and
+/// compared with.
+pub trait SeekKey: Clone + PartialEq + PartialOrd + DeserializeOwned + Send + Sync + 'static {
+    /// Whether keys compare by order. A plain string id compares by equality only, and the
+    /// last row of a page in wire order stands in for its extreme.
+    const ORDERED: bool = true;
+
+    /// This key moved by `span` (in `unit`, for a timestamp), backwards when `backwards`.
+    fn shifted(&self, span: i64, unit: SpanUnit, backwards: bool) -> Self;
+
+    /// This key as an instant: `Some` for a timestamp, `None` for an id or a day.
+    fn instant(&self) -> Option<chrono::DateTime<chrono::Utc>> {
+        None
+    }
+
+    /// The key at `instant`: `Some` for a timestamp, `None` for an id or a day.
+    fn from_instant(_instant: chrono::DateTime<chrono::Utc>) -> Option<Self> {
+        None
+    }
+}
+
+impl SeekKey for i64 {
+    fn shifted(&self, span: i64, _unit: SpanUnit, backwards: bool) -> Self {
+        if backwards {
+            self.saturating_sub(span)
+        } else {
+            self.saturating_add(span)
+        }
+    }
+}
+
+impl SeekKey for f64 {
+    fn shifted(&self, span: i64, _unit: SpanUnit, backwards: bool) -> Self {
+        if backwards {
+            self - span as f64
+        } else {
+            self + span as f64
+        }
+    }
+}
+
+impl SeekKey for IntegerString {
+    fn shifted(&self, span: i64, _unit: SpanUnit, backwards: bool) -> Self {
+        let span = num_bigint::BigInt::from(span);
+        Self(if backwards { &self.0 - span } else { &self.0 + span })
+    }
+}
+
+impl SeekKey for String {
+    const ORDERED: bool = false;
+
+    /// A string id has no arithmetic; a span over one is refused by `truewire check`.
+    fn shifted(&self, _span: i64, _unit: SpanUnit, _backwards: bool) -> Self {
+        self.clone()
+    }
+}
+
+fn span_duration(span: i64, unit: SpanUnit) -> chrono::Duration {
+    match unit {
+        SpanUnit::Micros => chrono::Duration::microseconds(span),
+        SpanUnit::Millis => chrono::Duration::milliseconds(span),
+        SpanUnit::Seconds => chrono::Duration::seconds(span),
+    }
+}
+
+macro_rules! seek_timestamp {
+    ($($name:ident),*) => {$(
+        impl SeekKey for $name {
+            fn shifted(&self, span: i64, unit: SpanUnit, backwards: bool) -> Self {
+                let by = span_duration(span, unit);
+                Self(if backwards { self.0 - by } else { self.0 + by })
+            }
+
+            fn instant(&self) -> Option<chrono::DateTime<chrono::Utc>> {
+                Some(self.0)
+            }
+
+            fn from_instant(instant: chrono::DateTime<chrono::Utc>) -> Option<Self> {
+                Some(Self(instant))
+            }
+        }
+    )*};
+}
+
+seek_timestamp!(
+    TimestampSecondsFloat,
+    TimestampMillisFloat,
+    TimestampMicrosFloat,
+    TimestampNanosFloat,
+    TimestampSecondsString,
+    TimestampMillisString,
+    TimestampMicrosString,
+    TimestampNanosString,
+    TimestampSeconds,
+    TimestampMillis,
+    TimestampMicros,
+    TimestampNanos,
+    TimestampIso
+);
+
+impl SeekKey for DateIso {
+    fn shifted(&self, span: i64, unit: SpanUnit, backwards: bool) -> Self {
+        let by = span_duration(span, unit);
+        let moved = if backwards {
+            self.to_datetime() - by
+        } else {
+            self.to_datetime() + by
+        };
+        Self::from_datetime(&moved)
+    }
+}
+
+/// A `seek` walk's state: the value the moving bound is sent as (the caller's own bound
+/// at first, `None` when omitted), and the rows already yielded that share that key, so
+/// the venue re-serving them on the next page costs nothing.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SeekState<K, T> {
+    pub pos: Option<K>,
+    pub carried: Vec<T>,
+}
+
+impl<K, T> SeekState<K, T> {
+    /// The first state: the caller's own moving bound, nothing carried.
+    pub fn new(pos: Option<K>) -> Self {
+        Self {
+            pos,
+            carried: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Segment {
+    Key(String),
+    Index(i64),
+}
+
+/// One `seek` declaration as a generated walker runs it (ADR 0013, `docs/pagination.md`
+/// §2.4): which row field the bound follows, whether it is unique per row, which way the
+/// walk moves, the row cap a full page is measured against, and the span.
+///
+/// A generated `<method>_paged` builds one, sends each request from the state's `pos`
+/// (and, with a span, up to [`edge`](Self::edge)), and folds the page back through
+/// [`step`](Self::step), which owns the whole algorithm: dedup of re-served boundary rows
+/// (by key when unique, by content otherwise), moving the bound to the extreme key of a
+/// full page, and the `LogicError`s for a full page stuck on one key or a carried row the
+/// venue stopped serving.
+///
+/// A far bound the venue refuses beside the moving one (`exclusive.far`) is kept on the rows
+/// instead: [`until`](Self::until) names the row field, and
+/// [`step_until`](Self::step_until) drops every row past the caller's value and ends the
+/// walk on the page that held one.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Seek {
+    walker: String,
+    /// The cursor field as messages print it: relative to one row, empty for the row itself.
+    field: String,
+    segments: Vec<Segment>,
+    unique: bool,
+    descending: bool,
+    cap: Option<usize>,
+    span: Option<(i64, SpanUnit)>,
+    cursor: Option<RowTime>,
+    until: Option<(String, Vec<Segment>)>,
+}
+
+/// How [`Seek::key`] reads a row's cursor value whose timestamp format is not the bound's:
+/// through the row field's own type (`name`), then as the instant it names.
+#[derive(Clone, Copy)]
+struct RowTime {
+    name: &'static str,
+    read: fn(Value) -> std::result::Result<chrono::DateTime<chrono::Utc>, String>,
+}
+
+impl PartialEq for RowTime {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
+impl std::fmt::Debug for RowTime {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.name)
+    }
+}
+
+fn read_instant<T: SeekKey>(value: Value) -> std::result::Result<chrono::DateTime<chrono::Utc>, String> {
+    lenient_key::<T>(value)?
+        .instant()
+        .ok_or_else(|| format!("is not a timestamp as `{}`", std::any::type_name::<T>()))
+}
+
+impl Seek {
+    /// `walker` names the generated method in errors; `field` is the declared
+    /// `cursor.field` (`[-1][0]`, `[-1].t`). Messages print it relative to one row (`[0]`,
+    /// `t`), and a bare `[-1]` as the row itself.
+    pub fn new(walker: &str, field: &str, unique: bool, descending: bool) -> Self {
+        Self {
+            walker: walker.to_string(),
+            field: row_relative(field),
+            segments: parse_row_field(field),
+            unique,
+            descending,
+            cap: None,
+            span: None,
+            cursor: None,
+            until: None,
+        }
+    }
+
+    /// Read the cursor field as `T`, the row field's own timestamp type, when it is not the
+    /// bound's: a row `timestamp` in epoch seconds under an epoch-milliseconds bound
+    /// (`.cursor::<TimestampSeconds>()`) is read as seconds, then compared and sent as the
+    /// same instant in the bound's type. Without it, a row value is read as the bound's type.
+    pub fn cursor<T: SeekKey>(mut self) -> Self {
+        self.cursor = Some(RowTime {
+            name: std::any::type_name::<T>(),
+            read: read_instant::<T>,
+        });
+        self
+    }
+
+    /// The row cap a full page is measured against; `None` when none resolves, and the
+    /// walk then continues until a page brings nothing new.
+    pub fn cap(mut self, cap: Option<usize>) -> Self {
+        self.cap = cap;
+        self
+    }
+
+    /// The widest range one request may cover.
+    pub fn span(mut self, span: i64, unit: SpanUnit) -> Self {
+        self.span = Some((span, unit));
+        self
+    }
+
+    /// The row field (`[-1].time`) a far bound the venue refuses beside the moving one is
+    /// kept on, by [`step_until`](Self::step_until).
+    pub fn until(mut self, field: &str) -> Self {
+        self.until = Some((row_relative(field), parse_row_field(field)));
+        self
+    }
+
+    /// The far bound this request is sent with when a span is declared: the moving bound
+    /// shifted by the span, never past the caller's own far bound. `None` without a span.
+    pub fn edge<K: SeekKey>(&self, pos: Option<&K>, far: Option<&K>) -> Result<Option<K>> {
+        let Some((span, unit)) = self.span else {
+            return Ok(None);
+        };
+        let (Some(pos), Some(far)) = (pos, far) else {
+            return Err(Error::logic(format!(
+                "`{}` walks a bounded range in spans: pass both bounds",
+                self.walker
+            )));
+        };
+        let shifted = pos.shifted(span, unit, self.descending);
+        let past = if self.descending {
+            shifted < *far
+        } else {
+            shifted > *far
+        };
+        Ok(Some(if past { far.clone() } else { shifted }))
+    }
+
+    /// One row's cursor key, read through its wire form: `None` when the field is absent
+    /// or null. A numeral string is read as the number a numeric bound takes, and a number
+    /// as the string a string bound takes. With [`cursor`](Self::cursor), the value is read
+    /// as the row's own timestamp type and converted to the bound's.
+    pub fn key<K: SeekKey, T: Serialize>(&self, row: &T) -> Result<Option<K>> {
+        self.read(&self.segments, &self.field, row, self.cursor)
+    }
+
+    /// One row's field at `segments` (declared as `field`), read as a `K`.
+    fn read<K: SeekKey, T: Serialize>(
+        &self,
+        segments: &[Segment],
+        field: &str,
+        row: &T,
+        cursor: Option<RowTime>,
+    ) -> Result<Option<K>> {
+        let mut value = serde_json::to_value(row).map_err(|e| Error::validation(e.to_string()))?;
+        for segment in segments {
+            let next = match (segment, value) {
+                (Segment::Key(key), Value::Object(mut map)) => map.remove(key),
+                (Segment::Index(index), Value::Array(mut items)) => {
+                    let at = if *index < 0 { items.len() as i64 + index } else { *index };
+                    if at < 0 || at as usize >= items.len() {
+                        None
+                    } else {
+                        Some(items.swap_remove(at as usize))
+                    }
+                }
+                _ => None,
+            };
+            match next {
+                Some(found) => value = found,
+                None => return Ok(None),
+            }
+        }
+        if value.is_null() {
+            return Ok(None);
+        }
+        let invalid = |message: String| Error::validation(format!("`{}`: {} {message}", self.walker, the_field(field)));
+        if let Some(cursor) = cursor {
+            let instant = (cursor.read)(value).map_err(invalid)?;
+            return K::from_instant(instant)
+                .map(Some)
+                .ok_or_else(|| invalid("is a timestamp, and the moving bound is not".to_string()));
+        }
+        lenient_key(value).map(Some).map_err(invalid)
+    }
+
+    /// "`t`", or "row" when the row itself is the key.
+    fn named(&self) -> String {
+        if self.field.is_empty() {
+            "row".to_string()
+        } else {
+            format!("`{}`", self.field)
+        }
+    }
+
+    /// Fold one fetched page into the rows to yield and the state after it.
+    ///
+    /// `edge` is the span edge this request was sent with ([`edge`](Self::edge)); `far` the
+    /// caller's own far bound.
+    pub fn step<K, T>(
+        &self,
+        state: &SeekState<K, T>,
+        rows: Vec<T>,
+        edge: Option<&K>,
+        far: Option<&K>,
+    ) -> Fetched<T, SeekState<K, T>>
+    where
+        K: SeekKey,
+        T: Serialize + Clone + PartialEq,
+    {
+        self.fold(state, rows, edge, far, |_| Ok(false))
+    }
+
+    /// [`step`](Self::step), keeping `bound`, the caller's own value of the far bound
+    /// [`until`](Self::until) names: a page holding a row past it ends the walk, and every
+    /// such row is dropped. `None` (the caller gave none) is a plain `step`; a `bound` on a
+    /// walk declaring no [`until`](Self::until) field is a [`LogicError`](crate::LogicError),
+    /// since there is no row field to keep it on.
+    pub fn step_until<K, B, T>(
+        &self,
+        state: &SeekState<K, T>,
+        rows: Vec<T>,
+        edge: Option<&K>,
+        far: Option<&K>,
+        bound: Option<&B>,
+    ) -> Fetched<T, SeekState<K, T>>
+    where
+        K: SeekKey,
+        B: SeekKey,
+        T: Serialize + Clone + PartialEq,
+    {
+        let Some(bound) = bound else {
+            return self.step(state, rows, edge, far);
+        };
+        let Some((field, segments)) = &self.until else {
+            return Err(Error::logic(format!(
+                "`{}` was given a far bound to keep on the rows, but declares no `until` field to read it from",
+                self.walker
+            )));
+        };
+        self.fold(state, rows, edge, far, |row| {
+            Ok(match self.read::<B, T>(segments, field, row, None)? {
+                Some(value) if self.descending => value < *bound,
+                Some(value) => value > *bound,
+                None => false,
+            })
+        })
+    }
+
+    /// The walk over one page; a page holding a row `past` reports ends it, such rows dropped.
+    fn fold<K, T>(
+        &self,
+        state: &SeekState<K, T>,
+        rows: Vec<T>,
+        edge: Option<&K>,
+        far: Option<&K>,
+        past: impl Fn(&T) -> Result<bool>,
+    ) -> Fetched<T, SeekState<K, T>>
+    where
+        K: SeekKey,
+        T: Serialize + Clone + PartialEq,
+    {
+        let keys = rows
+            .iter()
+            .map(|row| self.key::<K, T>(row))
+            .collect::<Result<Vec<_>>>()?;
+        let fresh: Vec<T> = if self.unique {
+            let carried = state
+                .carried
+                .iter()
+                .map(|row| self.key::<K, T>(row))
+                .collect::<Result<Vec<_>>>()?;
+            rows.iter()
+                .zip(&keys)
+                .filter(|(_, key)| !carried.contains(key))
+                .map(|(row, _)| row.clone())
+                .collect()
+        } else {
+            let mut remaining = state.carried.clone();
+            let mut fresh = Vec::new();
+            for row in &rows {
+                match remaining.iter().position(|seen| seen == row) {
+                    Some(index) => {
+                        remaining.remove(index);
+                    }
+                    None => fresh.push(row.clone()),
+                }
+            }
+            if !remaining.is_empty() {
+                return Err(Error::logic(format!(
+                    "`{}` requested from its last position and the venue no longer returned one or more rows it had \
+                     already returned for that {}; row content was expected to stay available across requests, so \
+                     the walk stopped instead of silently dropping or duplicating rows.",
+                    self.walker,
+                    self.named()
+                )));
+            }
+            fresh
+        };
+        let beyond = rows.iter().map(&past).collect::<Result<Vec<_>>>()?;
+        if beyond.contains(&true) {
+            let mut kept = Vec::with_capacity(fresh.len());
+            for row in fresh {
+                if !past(&row)? {
+                    kept.push(row);
+                }
+            }
+            return Ok((kept, None));
+        }
+        let values: Vec<&K> = keys.iter().flatten().collect();
+        let extreme: Option<K> = if K::ORDERED {
+            values
+                .iter()
+                .copied()
+                .reduce(|best, key| {
+                    let better = if self.descending { key < best } else { key > best };
+                    if better {
+                        key
+                    } else {
+                        best
+                    }
+                })
+                .cloned()
+        } else {
+            values.last().map(|key| (*key).clone())
+        };
+        let at = |target: &K| -> Vec<T> {
+            rows.iter()
+                .zip(&keys)
+                .filter(|(_, key)| key.as_ref() == Some(target))
+                .map(|(row, _)| row.clone())
+                .collect()
+        };
+        let full = self.cap.is_some_and(|cap| rows.len() >= cap);
+        if full {
+            return match extreme {
+                Some(extreme) if state.pos.as_ref() != Some(&extreme) => {
+                    let carried = at(&extreme);
+                    Ok((
+                        fresh,
+                        Some(SeekState {
+                            pos: Some(extreme),
+                            carried,
+                        }),
+                    ))
+                }
+                _ => Err(Error::logic(format!(
+                    "`{}` received a full page of {} rows all sharing one {} value; the rest of that value is \
+                     unreachable and advancing would drop it.",
+                    self.walker,
+                    rows.len(),
+                    self.named()
+                ))),
+            };
+        }
+        if self.cap.is_none() {
+            if let Some(extreme) = extreme {
+                if state.pos.as_ref() != Some(&extreme) {
+                    let carried = at(&extreme);
+                    return Ok((
+                        fresh,
+                        Some(SeekState {
+                            pos: Some(extreme),
+                            carried,
+                        }),
+                    ));
+                }
+            }
+        }
+        match (edge, far) {
+            (Some(edge), Some(far)) => {
+                let reached = if self.descending { edge <= far } else { edge >= far };
+                if reached {
+                    Ok((fresh, None))
+                } else {
+                    let carried = at(edge);
+                    Ok((
+                        fresh,
+                        Some(SeekState {
+                            pos: Some(edge.clone()),
+                            carried,
+                        }),
+                    ))
+                }
+            }
+            _ => Ok((fresh, None)),
+        }
+    }
+}
+
+/// `[-1][0]` -> `[Index(0)]`; `[-1].t` -> `[Key("t")]`: a `cursor.field` relative to one row.
+/// A declared row field (`[-1].t`, `[-1][0]`) relative to one row (`t`, `[0]`); empty for a
+/// bare `[-1]`, the row itself.
+fn row_relative(field: &str) -> String {
+    let relative = field.strip_prefix("[-1]").unwrap_or(field);
+    relative.strip_prefix('.').unwrap_or(relative).to_string()
+}
+
+/// "the row's `t`", or "the row" when the row itself is the key.
+fn the_field(field: &str) -> String {
+    if field.is_empty() {
+        "the row".to_string()
+    } else {
+        format!("the row's `{field}`")
+    }
+}
+
+fn parse_row_field(field: &str) -> Vec<Segment> {
+    let rest = field.strip_prefix("[-1]").unwrap_or(field);
+    let mut segments = Vec::new();
+    let mut chars = rest.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '.' => {}
+            '[' => {
+                let mut digits = String::new();
+                for d in chars.by_ref() {
+                    if d == ']' {
+                        break;
+                    }
+                    digits.push(d);
+                }
+                if let Ok(index) = digits.trim().parse() {
+                    segments.push(Segment::Index(index));
+                }
+            }
+            other => {
+                let mut name = String::from(other);
+                while let Some(&next) = chars.peek() {
+                    if next == '.' || next == '[' {
+                        break;
+                    }
+                    name.push(next);
+                    chars.next();
+                }
+                segments.push(Segment::Key(name));
+            }
+        }
+    }
+    segments
+}
+
+fn lenient_key<K: DeserializeOwned>(value: Value) -> std::result::Result<K, String> {
+    let first = match serde_json::from_value::<K>(value.clone()) {
+        Ok(key) => return Ok(key),
+        Err(e) => e.to_string(),
+    };
+    let alternative = match &value {
+        Value::String(text) => serde_json::from_str::<Value>(text).ok().filter(Value::is_number),
+        Value::Number(number) => Some(Value::String(number.to_string())),
+        _ => None,
+    };
+    alternative
+        .and_then(|alt| serde_json::from_value::<K>(alt).ok())
+        .ok_or(first)
 }

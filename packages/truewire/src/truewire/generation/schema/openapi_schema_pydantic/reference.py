@@ -19,6 +19,15 @@ class Reference(BaseModel):
     """
 
     ref: str = Field(validation_alias='$ref', serialization_alias='ref')
+    description: str | None = None
+    """Prose describing the field this reference stands in for.
+
+    JSON Schema 2020-12 allows a `$ref` to carry siblings, and a property whose type is a
+    shared schema still needs its own description: what a product's `future_product_details`
+    is on that product is not the same sentence as what a `FutureProductDetails` is. Declared
+    rather than left to `extra='allow'` so the parser can read it off a `Reference` and a
+    `Schema` alike, instead of dropping it and emitting a field with no docstring.
+    """
     model_config = ConfigDict(
         extra="allow",
         populate_by_name=True,

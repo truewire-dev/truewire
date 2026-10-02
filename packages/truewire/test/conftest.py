@@ -4,6 +4,24 @@ from contextlib import contextmanager
 from importlib.abc import MetaPathFinder
 from typing_extensions import Iterator
 
+import httpx
+import pytest
+
+
+@pytest.fixture(scope='session', autouse=True)
+def fake_registries():
+  """Score tests use a supplied fake transport or a default 404, never public registries."""
+  from truewire.score import published as registry
+
+  def client(**kwargs):
+    if kwargs.get('transport') is None:
+      kwargs['transport'] = httpx.MockTransport(lambda _: httpx.Response(404))
+    return httpx.Client(**kwargs)
+
+  with pytest.MonkeyPatch.context() as patch:
+    patch.setattr(registry, 'Client', client)
+    yield
+
 
 class _ForbidImport(MetaPathFinder):
   """A `sys.meta_path` finder that refuses any import of one top-level package."""

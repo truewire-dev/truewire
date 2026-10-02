@@ -1,0 +1,32 @@
+{
+  "meta": {},
+  "notes": [
+    "Dual-transport JSON-RPC method, WebSocket first: recorded natively over the WebSocket only."
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": ["ws", "http"],
+    "path": "pets_list",
+    "method": "POST",
+    "description": "List pets.",
+    "request": {
+      "title": "ListPetsRequest",
+      "type": "object",
+      "properties": {
+        "limit": {"type": "integer", "description": "Most pets to return."}
+      }
+    },
+    "response": {
+      "title": "ListPetsFrame",
+      "type": "object",
+      "description": "Wire frame.",
+      "required": ["jsonrpc", "id", "result"],
+      "properties": {
+        "jsonrpc": {"type": "string", "description": "Wire envelope field; see the core."},
+        "id": {"type": "integer", "description": "Wire envelope field; see the core."},
+        "result": {"type": "array", "description": "The pets.", "items": {"$ref": "Pet", "description": "One pet."}}
+      }
+    }
+  },
+  "envelope": {"payload": "result", "correlate": "id"}
+}

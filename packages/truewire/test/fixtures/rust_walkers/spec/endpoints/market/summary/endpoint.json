@@ -1,0 +1,101 @@
+{
+  "meta": {},
+  "spec": {
+    "kind": "rpc",
+    "transports": [
+      "http"
+    ],
+    "path": "/summary",
+    "method": "GET",
+    "description": "Per-account summaries, one payload shape per kind, by page.",
+    "request": {
+      "title": "SummaryRequest",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "integer",
+          "enum": [
+            1,
+            2
+          ]
+        },
+        "page": {
+          "type": "integer"
+        },
+        "size": {
+          "type": "integer",
+          "default": 10
+        }
+      },
+      "required": [
+        "kind"
+      ]
+    },
+    "response": {
+      "anyOf": [
+        {
+          "title": "SummaryUsdm",
+          "type": "object",
+          "required": [
+            "data"
+          ],
+          "properties": {
+            "data": {
+              "type": "array",
+              "items": {
+                "title": "UsdmRow",
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "SummaryCoinm",
+          "type": "object",
+          "required": [
+            "data"
+          ],
+          "properties": {
+            "data": {
+              "type": "array",
+              "items": {
+                "title": "CoinmRow",
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "pagination": {
+    "strategy": "page",
+    "index": {
+      "parameter": "page",
+      "start": 1
+    },
+    "size": {
+      "parameter": "size"
+    },
+    "done": {
+      "kind": "short_page",
+      "rows": "data"
+    }
+  }
+}

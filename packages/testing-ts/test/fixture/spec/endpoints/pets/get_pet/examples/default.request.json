@@ -1,0 +1,4 @@
+{
+  "description": "Pet 42.",
+  "request": {"petId": 42}
+}

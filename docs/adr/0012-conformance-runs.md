@@ -47,3 +47,14 @@ Streams wait for the machine. The CEO session's outbound proxy refuses WebSocket
 Shape diffing has heuristics that will be wrong at first: an optional key that was absent in one recording and present in the next is a shape change only if the schema did not already allow both. The first week of reports exists to find those; a finding that turns out to be the tool's fault is fixed in the tool, and the report format carries enough (both sides, the pointer) to tell the two apart.
 
 Left open: whether the recorded request set is enough coverage for behaviours (one page of pagination proves paging works once, not that the last page terminates); how a scenario declares the market and size it uses without a per-exchange dialect; and the rotating-proxy question, which is Marcel's.
+
+## Phase one, as built (2026-09-28)
+
+`truewire conform` exists for HTTP `rpc` endpoints in Python ([docs/conform.md](../conform.md)). Where it departs from the decision above:
+
+- **Two finding kinds, not three.** `schema` and `shape` are both `drift`: the API changed. The new kind is `client:python`, a body the schema accepts that the generated client rejects: our code is wrong. That split is what the report is for; which check found a drift (`key_added`, `enum_value`, `status`, ...) is a field of the finding.
+- **Behaviours (step 4) are not checked yet.** The recorded request is replayed once, so a paginated endpoint proves its first page only.
+- **First-seen dates come from a ledger**, `<state>/<project>/ledger.json`, keyed by a fingerprint of where the finding is and what kind it is, not by diffing the previous report.
+- **No recording is rewritten.** A run writes nothing under `spec/`; turning a `drift` finding into a recording pull request is a later step.
+- **Only GETs are sent unless named.** A replayed `AddOrder` with a real key would place a real order, so anything but a GET is skipped as `not_a_read` unless `--allow` names it as a read the API sends as a POST.
+- **No declared rate limit exists in the spec yet**; calls are held `--interval` seconds apart, and the core's own limiter applies on top.

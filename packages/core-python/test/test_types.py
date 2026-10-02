@@ -31,6 +31,29 @@ class TestAliases:
       assert parsed.tzinfo is not None
       assert adapter.dump_python(parsed, mode='json') == wire
 
+  def test_number_epoch_aliases_keep_the_fraction(self):
+    """A `type: number` epoch sends back the fraction it was read with (TRU-480); the
+    integer alias floors it."""
+    cases = [
+      (types.TimestampSecondsFloat, 1688669448.4712, 1688669448),
+      (types.TimestampMillisFloat, 1688669448471.25, 1688669448471),
+      (types.TimestampMicrosFloat, 1688669448471200, 1688669448471200),
+      (types.TimestampNanosFloat, 1688669448471200000, 1688669448471200000),
+    ]
+    for alias, wire, _ in cases:
+      adapter = TypeAdapter(alias)
+      dumped = adapter.dump_python(adapter.validate_python(wire), mode='json')
+      assert dumped == wire and type(dumped) is type(wire), alias
+    assert TypeAdapter(TimestampSeconds).dump_python(
+      TypeAdapter(TimestampSeconds).validate_python(1688669448.4712), mode='json',
+    ) == 1688669448
+
+  def test_a_whole_number_epoch_dumps_an_int(self):
+    adapter = TypeAdapter(types.TimestampSecondsFloat)
+    assert adapter.dump_json(INSTANT.replace(microsecond=0)) == b'1717072496'
+    assert adapter.dump_json(INSTANT) == b'1717072496.123456'
+    assert types.timestamp_seconds_float.dump(INSTANT) == 1717072496.123456
+
   def test_iso_alias_round_trips_rfc3339(self):
     adapter = TypeAdapter(TimestampIso)
     parsed = adapter.validate_python('2024-05-30T12:34:56.123456Z')

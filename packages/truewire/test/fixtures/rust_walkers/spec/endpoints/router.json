@@ -1,0 +1,5 @@
+{
+  "description": "Every walk and stream shape the Rust backend renders beyond the fixture client: seek (ADR 0013), offset, and a typed stream reply (ADR 0014).",
+  "core": "root",
+  "upstream": "https://truewire.dev/docs/rust"
+}

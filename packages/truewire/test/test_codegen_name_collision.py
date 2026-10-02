@@ -84,7 +84,7 @@ def test_generate_refuses_the_collision_and_writes_nothing(
   assert "'weather'" in result.output
   assert "'Weather'" in result.output
   assert f'[{language}]' in result.output
-  assert not (project / '.truewire' / f'{language}-files.json').exists()
+  assert not (project / '.truewire' / 'codegen' / f'{language}.json').exists()
   assert 'Traceback' not in result.output
 
 

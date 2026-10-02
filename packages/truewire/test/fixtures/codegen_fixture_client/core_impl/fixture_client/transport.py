@@ -32,7 +32,7 @@ class InMemoryTransport:
       to refuse a `signed` call with none configured.
   """
 
-  api_key: str | None = None
+  api_key: str | None = field(default=None, repr=False)
   responses: dict[tuple[str, str], bytes] = field(default_factory=dict)
   channels: dict[str, list[bytes]] = field(default_factory=dict)
   calls: list[RecordedCall] = field(default_factory=list)

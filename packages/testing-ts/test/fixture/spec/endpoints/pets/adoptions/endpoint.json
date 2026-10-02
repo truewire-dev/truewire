@@ -1,0 +1,54 @@
+{
+  "meta": {},
+  "notes": [
+    "A `seek` walk (ADR 0013) over JSON-RPC: the venue keeps the oldest `limit` rows of a range, so the walk moves `from` to the latest `at` of each full page. Recorded as the three pages a walk over [0, 9] with `limit: 3` requests."
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": ["http"],
+    "path": "pets_adoptions",
+    "method": "POST",
+    "description": "Adoptions in a range of adoption ticks, oldest first.",
+    "request": {
+      "title": "AdoptionsRequest",
+      "type": "object",
+      "properties": {
+        "from": {"type": "integer", "description": "Earliest tick, inclusive."},
+        "to": {"type": "integer", "description": "Latest tick, inclusive."},
+        "limit": {"type": "integer", "default": 3, "maximum": 500, "description": "Most rows to return, at most 500."}
+      }
+    },
+    "response": {
+      "title": "AdoptionsFrame",
+      "type": "object",
+      "description": "Wire frame.",
+      "required": ["jsonrpc", "id", "result"],
+      "properties": {
+        "jsonrpc": {"type": "string", "description": "Wire envelope field; see the core."},
+        "id": {"type": "integer", "description": "Wire envelope field; see the core."},
+        "result": {
+          "type": "array",
+          "description": "The adoptions.",
+          "items": {
+            "title": "Adoption",
+            "type": "object",
+            "description": "One adoption.",
+            "required": ["at", "pet"],
+            "properties": {
+              "at": {"type": "integer", "description": "Tick of the adoption."},
+              "pet": {"type": "string", "description": "Name of the adopted pet."}
+            }
+          }
+        }
+      }
+    }
+  },
+  "envelope": {"payload": "result", "correlate": "id"},
+  "pagination": {
+    "strategy": "seek",
+    "cursor": {"field": "[-1].at", "unique": true},
+    "bound": {"start": "from", "end": "to"},
+    "anchor": "start",
+    "size": {"parameter": "limit"}
+  }
+}

@@ -379,6 +379,92 @@ def test_http_registry_matches_new_shape_flat_object_rpc_example():
   assert match.rpc_method == 'acme_getFlatAllowance'
 
 
+POSITIONAL_ROOT = Path(__file__).resolve().parent / 'fixtures' / 'mock_server_rpc_positional'
+"""Spec root whose JSON-RPC endpoints declare `envelope.positional`: an unwrapped single
+property, a spread array, and positional slots with a folded, optional trailing object."""
+
+
+def _rpc_call(method, params):
+  return {'jsonrpc': '2.0', 'id': 7, 'method': method, 'params': params}
+
+
+@pytest.mark.parametrize(
+  ('method', 'params', 'function', 'example_id'),
+  [
+    (
+      'acme_getTokenMetadata',
+      ['0xACME0000000000000000000000000000000001'],
+      'acme.get_token_metadata',
+      'default',
+    ),
+    (
+      'acme_simulateBundle',
+      [
+        {'from': '0xACME0000000000000000000000000000000001', 'value': '0x1'},
+        {'from': '0xACME0000000000000000000000000000000002', 'value': '0x2'},
+      ],
+      'acme.simulate_bundle',
+      'default',
+    ),
+    (
+      'acme_getTokenBalances',
+      ['0xACME0000000000000000000000000000000001', 'erc20', {'maxCount': 1, 'pageKey': 'cursor-1'}],
+      'acme.get_token_balances',
+      'paged',
+    ),
+    (
+      'acme_getTokenBalances',
+      ['0xACME0000000000000000000000000000000001', 'erc20'],
+      'acme.get_token_balances',
+      'default',
+    ),
+  ],
+  ids=['unwrapped-single', 'spread-array', 'folded-trailing-object', 'trailing-object-omitted'],
+)
+def test_http_registry_matches_declared_positional_rpc_params(method, params, function, example_id):
+  """`envelope.positional` makes the mock expect the declared wire array, built from the
+  flat recorded request, instead of `[request]`."""
+  registry = MockRegistry(root=POSITIONAL_ROOT)
+
+  match = registry.match('POST', '/', [], _rpc_call(method, params))
+
+  assert match is not None
+  assert match.endpoint_function == function
+  assert match.example_id == example_id
+
+
+@pytest.mark.parametrize(
+  ('method', 'params'),
+  [
+    ('acme_getTokenMetadata', [{'contractAddress': '0xACME0000000000000000000000000000000001'}]),
+    ('acme_getTokenBalances', [{'address': '0xACME0000000000000000000000000000000001', 'tokenSpec': 'erc20'}]),
+    ('acme_getTokenBalances', ['0xACME0000000000000000000000000000000001', 'erc20', {}]),
+  ],
+  ids=['wrapped-request-object', 'wrapped-flat-request', 'empty-trailing-object'],
+)
+def test_http_registry_rejects_params_not_in_the_declared_positional_shape(method, params):
+  """With `positional` declared, the default `[request]` shape (or any other) no longer matches."""
+  registry = MockRegistry(root=POSITIONAL_ROOT)
+
+  with pytest.raises(UnexpectedRequestParameters):
+    registry.match('POST', '/', [], _rpc_call(method, params))
+
+
+def test_http_mock_serves_a_declared_positional_rpc_call():
+  """End to end over HTTP: the positional call is served its recording, id echoed."""
+  import httpx
+
+  with running_server(POSITIONAL_ROOT) as server:
+    host, port = server.server_address[0], server.server_address[1]
+    response = httpx.post(
+      f'http://{host}:{port}/',
+      json=_rpc_call('acme_getTokenMetadata', ['0xACME0000000000000000000000000000000001']),
+    )
+
+  assert response.status_code == 200
+  assert response.json() == {'jsonrpc': '2.0', 'id': 7, 'result': {'symbol': 'ACME'}}
+
+
 def test_http_registry_raises_for_unexpected_rest_parameters():
   """A body that matches no recorded example raises rather than 404ing silently."""
   registry = MockRegistry(root=ROOT)
@@ -462,6 +548,18 @@ def test_http_registry_matches_a_list_valued_body_field_pooled_from_parameters()
   assert match is not None
   assert match.endpoint_function == 'widgets.list'
   assert match.example_id == 'default'
+
+
+def test_normalize_query_compares_nested_objects_regardless_of_key_order():
+  """A body field holding objects (a batch of orders) matches the recording whatever order
+  the client wrote each object's keys in; a different value still does not."""
+  from truewire.mock import _normalize_query
+
+  recorded = {'orders': [{'ordertype': 'limit', 'type': 'buy', 'price': '1'}], 'pair': 'X', 'meta': {'b': 1, 'a': 2}}
+  sent = {'pair': 'X', 'meta': {'a': 2, 'b': 1}, 'orders': [{'price': '1', 'type': 'buy', 'ordertype': 'limit'}]}
+  assert _normalize_query(sent) == _normalize_query(recorded)
+  assert _normalize_query({**sent, 'orders': [{'price': '2', 'type': 'buy', 'ordertype': 'limit'}]}) != _normalize_query(recorded)
+  assert _normalize_query({'ids': ['w1', 'w2']}) == [('ids', 'w1'), ('ids', 'w2')]
 
 
 def test_ws_registry_matches_subscription_example():
@@ -1284,3 +1382,40 @@ def test_http_server_answers_a_browser():
   assert preflight.headers['access-control-allow-origin'] == '*'
   assert 'GET' in preflight.headers['access-control-allow-methods']
   assert response.headers['access-control-allow-origin'] == '*'
+
+
+def test_mock_cli_json_prints_one_ready_line(tmp_path: Path):
+  """TW-X1: `truewire mock --json` announces itself with one JSON object on stdout, the
+  contract a foreign test runner (`@truewire/testing`, Go, Rust) reads instead of scraping
+  the text lines. `ws` is `null` for a project with no WebSocket example."""
+  import subprocess
+  import sys
+  import urllib.request
+
+  root = tmp_path / 'venue'
+  (root / 'spec' / 'endpoints' / 'ping').mkdir(parents=True)
+  (root / 'truewire.toml').write_text('[project]\nname = "venue"\n')
+  (root / 'spec' / 'endpoints' / 'ping' / 'endpoint.json').write_text(json.dumps({
+    'meta': {}, 'spec': {
+      'kind': 'rpc', 'transports': ['http'], 'method': 'GET', 'path': '/ping', 'description': 'Ping.',
+      'response': {'title': 'Pong', 'type': 'object', 'description': 'Pong.', 'properties': {'ok': {'type': 'boolean', 'description': 'Ok.'}}},
+    },
+  }))
+  child = subprocess.Popen(
+    [sys.executable, '-m', 'truewire.cli', 'mock', '--project', str(root), '--http-port', '0', '--ws-port', '0', '--json'],
+    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+  )
+  try:
+    line = child.stdout.readline()  # type: ignore[union-attr]
+    assert line, child.stderr.read()  # type: ignore[union-attr]
+    ready = json.loads(line)
+    assert ready['event'] == 'ready' and ready['ws'] is None
+    assert ready['http'].startswith('http://127.0.0.1:')
+    import urllib.error
+    try:  # listening: any HTTP answer will do, the replay itself is tested above
+      urllib.request.urlopen(f'{ready["http"]}/ping', timeout=10).close()
+    except urllib.error.HTTPError:
+      pass
+  finally:
+    child.terminate()
+    child.wait(timeout=10)

@@ -6,7 +6,7 @@
  * by the token it merges into every outgoing `params`.
  */
 import {
-  ws, type CommandCall, type CommandEndpoint, type StreamEndpoint, type SubscribeCall, type Subscription,
+  ws, type CommandCall, type CommandEndpoint, type StreamEndpoint, type SubscribeCall, type Subscription, parseJsonText, stringifyJson
 } from '@truewire/core'
 import { raiseError } from './envelope.js'
 
@@ -64,11 +64,11 @@ export class SocketConnection extends ws.StreamsRpc<Request, Reply, Notification
 
   async rpcSend(id: number, request: Request): Promise<void> {
     const params = this.tokenSource ? { ...request.params, token: await this.tokenSource() } : request.params
-    ;(await this.ws).send(JSON.stringify({ ...request, params, req_id: id }))
+    ;(await this.ws).send(stringifyJson({ ...request, params, req_id: id }))
   }
 
   parseMsg(msg: ws.Data): ws.Message<Reply, Notification> | null {
-    const frame = JSON.parse(typeof msg === 'string' ? msg : new TextDecoder().decode(msg)) as Record<string, unknown>
+    const frame = parseJsonText(typeof msg === 'string' ? msg : new TextDecoder().decode(msg)) as Record<string, unknown>
     if ('req_id' in frame) return { kind: 'response', id: frame.req_id as number, response: frame as unknown as Reply }
     if ('channel' in frame) return { kind: 'subscription', channel: frame.channel as string, notification: frame as unknown as Notification }
     return null

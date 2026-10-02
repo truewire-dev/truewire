@@ -26,11 +26,15 @@ async def validated_by_default(strict: bool) -> None:
       expected_text='Repository',
     )
     reveal_type(
-      await client.repos.list_commits(owner='truewire-dev', repo='truewire', per_page=3),
+      await client.repos.list_commits(
+        owner='truewire-dev', repo='truewire', per_page=3
+      ),
       expected_text='list[Commit]',
     )
     reveal_type(
-      client.repos.list_commits_paged(owner='truewire-dev', repo='truewire', per_page=3),
+      client.repos.list_commits_paged(
+        owner='truewire-dev', repo='truewire', per_page=3
+      ),
       expected_text='PaginatedResponse[Commit, int]',
     )
     reveal_type(
@@ -46,11 +50,15 @@ async def raw_bodies() -> None:
     raw = await client.repos.get(owner='truewire-dev', repo='truewire', validate=False)
     reveal_type(raw, expected_text='Any')
     reveal_type(
-      await client.repos.list_commits(owner='truewire-dev', repo='truewire', validate=False),
+      await client.repos.list_commits(
+        owner='truewire-dev', repo='truewire', validate=False
+      ),
       expected_text='Any',
     )
     reveal_type(
-      client.repos.list_commits_paged(owner='truewire-dev', repo='truewire', validate=False),
+      client.repos.list_commits_paged(
+        owner='truewire-dev', repo='truewire', validate=False
+      ),
       expected_text='PaginatedResponse[Any, int]',
     )
     reveal_type(

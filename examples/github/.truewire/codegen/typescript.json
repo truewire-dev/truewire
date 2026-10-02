@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "files": [
+    "index.ts",
+    "issues/index.ts",
+    "issues/list.ts",
+    "main.ts",
+    "meta.ts",
+    "repos/get.ts",
+    "repos/get_commit.ts",
+    "repos/index.ts",
+    "repos/list_commits.ts",
+    "repos/list_releases.ts",
+    "repos/list_tags.ts",
+    "types/index.ts"
+  ]
+}

@@ -98,6 +98,9 @@
   integrity sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==
 
 "@truewire/core@file:../../packages/core-ts":
+  version "0.2.0"
+
+"@truewire/testing@file:../../packages/testing-ts":
   version "0.1.0"
 
 "@types/chai@^5.2.2":

@@ -99,12 +99,15 @@ export const SimpleUser: Codec<SimpleUser> = t.object({
 
 /** The git commit object behind a repository commit. */
 export interface GitCommit {
+  /** Who wrote the commit. */
   author: GitActor
+  /** Who committed it. */
   committer: GitActor
   /** Full commit message. */
   message: string
   /** Number of comments on the commit. */
   comment_count?: number
+  /** Root tree of the commit. */
   tree: CommitRef
   /** API URL of the git commit object. */
   url?: string
@@ -127,6 +130,7 @@ export interface Commit {
   node_id?: string
   /** Web page of the commit. */
   html_url?: string
+  /** The underlying git commit. */
   commit: GitCommit
   /** GitHub account matched to the author, when known. */
   author?: SimpleUser | null

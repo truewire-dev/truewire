@@ -1,5 +1,6 @@
-.truewire/
+.truewire/cache/
 __pycache__/
 .venv/
 node_modules/
 dist/
+.env

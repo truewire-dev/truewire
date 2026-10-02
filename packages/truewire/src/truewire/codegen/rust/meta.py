@@ -132,7 +132,7 @@ def meta_module(cores: Mapping[str, CorePlan]) -> str | None:
     with w.block(f'pub struct {shape.name} {{'):
       for _, field, rust_type, description in shape.fields:
         w.doc(description)
-        w.line(f'pub {field}: {rust_type},')
+        w.declaration(f'pub {field}: {rust_type}')
   return w.render()
 
 

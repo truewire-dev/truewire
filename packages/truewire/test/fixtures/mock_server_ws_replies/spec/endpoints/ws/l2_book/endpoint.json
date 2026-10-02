@@ -1,0 +1,16 @@
+{
+  "function": "streams.l2_book",
+  "notes": ["Synthetic sibling stream whose subscribe frame names `spec.channel` itself, so `subscribe_channel` stays per endpoint."],
+  "spec": {
+    "kind": "stream",
+    "channel": "l2Book",
+    "openapi": {
+      "description": "Order book.",
+      "parameters": [
+        {"name": "coin", "in": "query", "required": true, "description": "Coin.", "schema": {"type": "string"}}
+      ],
+      "responses": {"message": {"description": "Book update."}}
+    }
+  },
+  "envelope": {"payload": "data", "channel": "subscription.type"}
+}

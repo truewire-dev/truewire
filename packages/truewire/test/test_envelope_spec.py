@@ -7,7 +7,10 @@ from pydantic import ValidationError
 
 from truewire.spec import (
   Endpoint,
+  PositionalFold,
+  PositionalSpread,
   RpcEnvelopeSpec,
+  positional_params,
   StreamEnvelopeSpec,
   envelope_spec,
   read_dotted_path,
@@ -128,6 +131,74 @@ def test_rpc_envelope_selector_and_params_default_to_none():
   envelope = RpcEnvelopeSpec.model_validate({'payload': 'result'})
   assert envelope.selector is None
   assert envelope.params is None
+  assert envelope.positional is None
+
+
+POSITIONAL_REQUEST = {
+  'title': 'BalancesRequest',
+  'type': 'object',
+  'properties': {
+    'address': {'type': 'string'},
+    'tokenSpec': {'type': 'string'},
+    'pageKey': {'type': 'string'},
+    'maxCount': {'type': 'integer'},
+    'transactions': {'type': 'array', 'items': {'type': 'object'}},
+  },
+}
+
+
+def _positional_endpoint(positional):
+  return {
+    'meta': {},
+    'spec': {
+      'kind': 'rpc',
+      'transports': ['http'],
+      'path': 'acme_getBalances',
+      'method': 'POST',
+      'request': POSITIONAL_REQUEST,
+      'response': {'type': 'object'},
+    },
+    'envelope': {'payload': 'result', 'positional': positional},
+  }
+
+
+def test_rpc_envelope_parses_positional_slots():
+  endpoint = Endpoint.model_validate(
+    _positional_endpoint(['address', {'spread': 'transactions'}, {'fold': ['pageKey', 'maxCount']}])
+  )
+  assert isinstance(endpoint.envelope, RpcEnvelopeSpec)
+  assert endpoint.envelope.positional == [
+    'address', PositionalSpread(spread='transactions'), PositionalFold(fold=['pageKey', 'maxCount']),
+  ]
+
+
+@pytest.mark.parametrize(
+  'positional',
+  [
+    ['missing'],
+    ['address', {'fold': ['address']}],
+    [{'spread': 'address'}],
+    [{'fold': []}],
+    [{'spread': 'transactions', 'fold': ['pageKey']}],
+  ],
+  ids=['undeclared-property', 'property-used-twice', 'spread-of-non-array', 'empty-fold', 'mixed-slot'],
+)
+def test_rpc_envelope_rejects_invalid_positional_slots(positional):
+  with pytest.raises(ValidationError):
+    Endpoint.model_validate(_positional_endpoint(positional))
+
+
+def test_positional_params_packs_drops_trailing_absent_and_nulls_interior_gaps():
+  slots = ['address', 'tokenSpec', {'fold': ['pageKey', 'maxCount']}]
+  assert positional_params(slots, {'address': 'a', 'tokenSpec': 'erc20', 'maxCount': 5}) == [
+    'a', 'erc20', {'maxCount': 5},
+  ]
+  assert positional_params(slots, {'address': 'a', 'tokenSpec': 'erc20'}) == ['a', 'erc20']
+  assert positional_params(slots, {'address': 'a', 'pageKey': 'k'}) == ['a', None, {'pageKey': 'k'}]
+  assert positional_params([{'spread': 'transactions'}], {'transactions': [{'n': 1}, {'n': 2}]}) == [
+    {'n': 1}, {'n': 2},
+  ]
+  assert positional_params(slots, None) == []
 
 
 def test_stream_envelope_accepts_channel():

@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://truewire.dev/schemas/docs.yml.json",
+  "$defs": {
+    "NavSection": {
+      "additionalProperties": false,
+      "description": "A titled group of nav entries.",
+      "properties": {
+        "title": {
+          "description": "The section's heading in the nav.",
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "pages": {
+          "description": "The section's pages and subsections, in reading order.",
+          "items": {
+            "oneOf": [
+              {
+                "pattern": "^[^/].*\\.md$",
+                "type": "string"
+              },
+              {
+                "$ref": "#/$defs/NavSection"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Pages",
+          "type": "array"
+        }
+      },
+      "required": [
+        "title",
+        "pages"
+      ],
+      "title": "nav section",
+      "type": "object"
+    },
+    "QuickstartBlock": {
+      "additionalProperties": false,
+      "description": "The quickstart in one language.",
+      "properties": {
+        "install": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The shell command that installs the package, e.g. `pip install petstore`.",
+          "title": "Install"
+        },
+        "code": {
+          "description": "The first call, as the reader copies it.",
+          "minLength": 1,
+          "title": "Code",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code"
+      ],
+      "title": "quickstart block",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "`docs/docs.yml`: the nav, the quickstart, and the metadata of a project's docs.",
+  "properties": {
+    "$schema": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The published schema of this file, for editors.",
+      "title": "$Schema"
+    },
+    "title": {
+      "description": "The docs site's title, usually the client's name.",
+      "minLength": 1,
+      "title": "Title",
+      "type": "string"
+    },
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "One sentence on what the API is, for the site's metadata.",
+      "title": "Description"
+    },
+    "nav": {
+      "description": "The pages in reading order: each a path under `docs/`, or a section `{title, pages}`.",
+      "items": {
+        "oneOf": [
+          {
+            "pattern": "^[^/].*\\.md$",
+            "type": "string"
+          },
+          {
+            "$ref": "#/$defs/NavSection"
+          }
+        ]
+      },
+      "minItems": 1,
+      "title": "Nav",
+      "type": "array"
+    },
+    "quickstart": {
+      "additionalProperties": {
+        "$ref": "#/$defs/QuickstartBlock"
+      },
+      "description": "One block per language `truewire.toml` declares, keyed by the language.",
+      "propertyNames": {
+        "enum": [
+          "python",
+          "typescript",
+          "rust",
+          "go"
+        ]
+      },
+      "title": "Quickstart",
+      "type": "object"
+    }
+  },
+  "required": [
+    "title",
+    "nav"
+  ],
+  "title": "docs.yml",
+  "type": "object"
+}

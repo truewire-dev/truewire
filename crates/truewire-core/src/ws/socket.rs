@@ -167,6 +167,22 @@ pub struct Link<D: Dialect> {
     tasks: Mutex<Vec<JoinHandle<()>>>,
 }
 
+/// A request's slot in the reply table, removed when the request ends however it ends:
+/// answered, failed, or dropped by the caller (a `tokio::time::timeout`, say). A late reply
+/// for the id then finds no slot and is dropped.
+struct PendingReply<'a, R> {
+    replies: &'a Mutex<HashMap<u64, oneshot::Sender<R>>>,
+    id: u64,
+}
+
+impl<R> Drop for PendingReply<'_, R> {
+    fn drop(&mut self) {
+        if let Ok(mut replies) = self.replies.lock() {
+            replies.remove(&self.id);
+        }
+    }
+}
+
 impl<D: Dialect> std::fmt::Debug for Link<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Link")
@@ -227,13 +243,12 @@ impl<D: Dialect> Link<D> {
         let frame = self.dialect.encode_request(id, request)?;
         let (tx, rx) = oneshot::channel();
         self.replies.lock().expect("replies lock").insert(id, tx);
-        let result = async {
-            self.send(frame).await?;
-            self.wait(rx).await?.map_err(|_| self.closed_error())
-        }
-        .await;
-        self.replies.lock().expect("replies lock").remove(&id);
-        result
+        let _pending = PendingReply {
+            replies: &self.replies,
+            id,
+        };
+        self.send(frame).await?;
+        self.wait(rx).await?.map_err(|_| self.closed_error())
     }
 
     /// Send `frame` and take the next [`Incoming::Serial`] acknowledgement, one request at a time.
@@ -408,6 +423,7 @@ impl<D: Dialect> Link<D> {
 pub struct Socket<D: Dialect> {
     dialect: Arc<D>,
     options: SocketOptions,
+    proxy: Option<url::Url>,
     counter: Arc<AtomicU64>,
     state: tokio::sync::Mutex<Option<Arc<Link<D>>>>,
 }
@@ -425,9 +441,47 @@ impl<D: Dialect> Socket<D> {
         Self {
             dialect: Arc::new(dialect),
             options,
+            proxy: None,
             counter: Arc::new(AtomicU64::new(0)),
             state: tokio::sync::Mutex::new(None),
         }
+    }
+
+    /// Open every connection through the HTTP proxy at `url` (`http://host:3128`,
+    /// credentials in the userinfo) as a `CONNECT` tunnel, `ws://` and `wss://` alike
+    /// (packages clause P18: a sandbox or a library caller cannot always set the process
+    /// environment). `""` leaves the socket connecting directly, as without a proxy, where
+    /// no proxy variable is read.
+    ///
+    /// Anything but an `http://` URL with a host is an `Error::Logic`, whose message never
+    /// repeats the URL.
+    ///
+    /// ```no_run
+    /// # use truewire_core::ws::{Dialect, Socket, SocketOptions};
+    /// # fn build<D: Dialect>(dialect: D) -> truewire_core::Result<Socket<D>> {
+    /// let socket = Socket::new(dialect, SocketOptions::new("wss://ws.example.com/v2"))
+    ///     .with_proxy("http://127.0.0.1:3128")?;
+    /// # Ok(socket) }
+    /// ```
+    pub fn with_proxy(mut self, url: &str) -> Result<Self> {
+        self.proxy = if url.is_empty() {
+            None
+        } else {
+            Some(super::tunnel::parse_proxy(url)?)
+        };
+        Ok(self)
+    }
+
+    /// The proxy every connection goes through, with username and password removed.
+    /// Returns an owned copy; changing it does not change the connection's proxy.
+    pub fn proxy(&self) -> Option<url::Url> {
+        self.proxy.as_ref().map(|proxy| {
+            let mut redacted = proxy.clone();
+            // Proxy validation accepts only HTTP URLs with a host, which support userinfo.
+            redacted.set_username("").expect("HTTP proxy supports a username");
+            redacted.set_password(None).expect("HTTP proxy supports a password");
+            redacted
+        })
     }
 
     /// The dialect this socket speaks.
@@ -465,10 +519,18 @@ impl<D: Dialect> Socket<D> {
     async fn connect(&self) -> Result<Arc<Link<D>>> {
         let url = &self.options.url;
         let failed = |e: Error| Error::network(format!("Failed to connect to {url}")).with_source(e);
-        let connecting = tokio_tungstenite::connect_async(url.as_str());
-        let (ws, _) = match tokio::time::timeout(self.options.timeout, connecting).await {
+        let connecting = async {
+            match &self.proxy {
+                Some(proxy) => super::tunnel::connect(proxy, url).await,
+                None => tokio_tungstenite::connect_async(url.as_str())
+                    .await
+                    .map(|(ws, _)| ws)
+                    .map_err(|e| Error::network(format!("Failed to connect to {url}")).with_source(e)),
+            }
+        };
+        let ws = match tokio::time::timeout(self.options.timeout, connecting).await {
             Ok(Ok(connected)) => connected,
-            Ok(Err(e)) => return Err(Error::network(format!("Failed to connect to {url}")).with_source(e)),
+            Ok(Err(e)) => return Err(e),
             Err(_) => {
                 return Err(failed(Error::network(format!(
                     "timed out after {:?}",

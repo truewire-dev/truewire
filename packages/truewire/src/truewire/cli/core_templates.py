@@ -52,9 +52,11 @@ the one place that knows how to reach the upstream API. Adapt `Transport` (base 
 headers, signing, envelope unwrapping, error mapping) to your API; the generated code
 never changes when you do.
 """
+
+import json
 from dataclasses import dataclass, field
 from types import UnionType
-from typing_extensions import Any, Self, TypeVar, cast
+from typing_extensions import Any, ClassVar, Self, TypeVar, cast
 
 from truewire_core.exceptions import ApiError
 from truewire_core.http import HttpClient
@@ -68,9 +70,10 @@ T = TypeVar('T')
 @dataclass(kw_only=True)
 class Transport:
   """The shared HTTP transport: base URL plus whatever auth the API needs."""
+
   base_url: str
   http: HttpClient = field(default_factory=HttpClient)
-  api_key: str | None = None
+  api_key: str | None = field(default=None, repr=False)
   validate: bool = True
 
   def headers(self, *, public: bool) -> dict[str, str]:
@@ -79,31 +82,62 @@ class Transport:
       return {}
     return {'Authorization': f'Bearer {self.api_key}'}
 
-  async def send(self, method: str, path: str, *, params: dict[str, Any], body: bytes | None, public: bool) -> bytes:
+  async def send(
+    self,
+    method: str,
+    path: str,
+    *,
+    params: dict[str, Any],
+    body: bytes | None,
+    public: bool,
+  ) -> bytes:
     """Send one request; raise `ApiError` on a non-2xx status."""
     filled = path
     for name, value in list(params.items()):
       if f'{{{name}}}' in filled:
         filled = filled.replace(f'{{{name}}}', str(value))
         params.pop(name)
+    headers = self.headers(public=public)
+    if body is not None:
+      headers = {**headers, 'Content-Type': 'application/json'}
     response = await self.http.request(
-      method, self.base_url.rstrip('/') + '/' + filled.lstrip('/'),
-      params=params or None, content=body, headers=self.headers(public=public),
+      method,
+      self.base_url.rstrip('/') + '/' + filled.lstrip('/'),
+      params=params or None,
+      content=body,
+      headers=headers,
     )
     if response.status_code >= 400:
-      raise ApiError(f'{method} {filled}: HTTP {response.status_code}: {response.text[:200]}')
+      raise ApiError(
+        f'{method} {filled}: HTTP {response.status_code}: {response.text[:200]}'
+      )
     return response.content
 
 
 @dataclass(kw_only=True)
 class ClientBase:
   """Root client: owns the transport every endpoint shares."""
+
   client: Transport
+  RATE: ClassVar[float | None] = None
+  """Requests per second to pace to; the generated root sets it from `[policy].rate`."""
+  RETRY: ClassVar[bool] = False
+  """Whether to retry on its own; the generated root sets it from `[policy].retry`."""
 
   @classmethod
-  def new(cls, *, base_url: str = '$base_url', api_key: str | None = None, validate: bool = True) -> Self:
-    """Create a client against `base_url`."""
-    return cls(client=Transport(base_url=base_url, api_key=api_key, validate=validate))
+  def new(
+    cls,
+    *,
+    base_url: str = '$base_url',
+    api_key: str | None = None,
+    validate: bool = True,
+    proxy: str | None = None,
+  ) -> Self:
+    """Create a client against `base_url`, through `proxy` if given (else `HTTPS_PROXY`)."""
+    http = HttpClient(proxy=proxy, rate=cls.RATE, retry=cls.RETRY)
+    return cls(
+      client=Transport(base_url=base_url, api_key=api_key, validate=validate, http=http)
+    )
 
   async def __aenter__(self) -> Self:
     return self
@@ -115,28 +149,42 @@ class ClientBase:
 @dataclass(kw_only=True, frozen=True)
 class Endpoint:
   """Base for every generated endpoint class: one shared transport."""
+
   client: Transport
 
   async def request(
-    self, request: Any = None, *, method: str, path: str,
+    self,
+    request: Any = None,
+    *,
+    method: str,
+    path: str,
     validate: bool | None = None,
     request_type: type[Any] | UnionType | None = None,
     response_type: type[T] | UnionType | None = None,
     meta: Meta = {},
   ) -> T:
-    """Send one request and validate the reply against `response_type`."""
-    params = {k: v for k, v in dict(request or {}).items() if v is not None}
+    """Send one request and validate the reply against `response_type`.
+
+    The request is dumped by `request_type` in JSON mode, so a datetime is the same ISO
+    string in a `POST`, `PUT` or `PATCH` body as on a query string.
+    """
+    fields: dict[str, Any] = dict(request or {})
     body = None
-    if method.upper() in ('POST', 'PUT', 'PATCH') and request_type is not None and request is not None:
-      body = validator(cast(type, request_type)).dump(request)
-      params = {}
-    raw = await self.client.send(method, path, params=params, body=body, public=bool(meta.get('public')))
+    if request_type is not None and request is not None:
+      dumped = validator(cast(type, request_type)).dump(request)
+      if method.upper() in ('POST', 'PUT', 'PATCH'):
+        body, fields = dumped, {}
+      else:
+        fields = json.loads(dumped)
+    params = {k: v for k, v in fields.items() if v is not None}
+    raw = await self.client.send(
+      method, path, params=params, body=body, public=bool(meta.get('public'))
+    )
     if response_type is None:
       return None  # type: ignore[return-value]
     check = self.client.validate if validate is None else validate
     if check:
       return validator(cast(type, response_type)).json(raw)
-    import json
     return json.loads(raw)
 '''
 
@@ -155,17 +203,19 @@ What the transport injects, and where the spec declares it:
 - `X-API-Key`, `X-Timestamp` and `X-Signature` are headers. A recorded example holds the
   request parameters and the response body, never headers, so nothing is declared for them.
 - An API that wants the timestamp, a nonce or the signature as a query or body field gets it
-  added in `Transport.send`, and every endpoint that carries it lists the field name under
+  added in the per-attempt auth hook, and every endpoint that carries it lists the field name under
   `redacted` in its `endpoint.json`. A recorded example then never pins a value that changes
   on every call, and `truewire mock` ignores the field when matching a request.
 """
+
 from dataclasses import dataclass, field
 import hashlib
 import hmac
+import httpx
 import json
 import time
 from types import UnionType
-from typing_extensions import Any, Callable, NoReturn, Self, TypeVar, cast
+from typing_extensions import Any, Callable, ClassVar, NoReturn, Self, TypeVar, cast
 from urllib.parse import urlencode
 
 from truewire_core.exceptions import ApiError, AuthError, BadRequest, RateLimited
@@ -186,7 +236,9 @@ def now_millis() -> str:
   return str(int(time.time() * 1000))
 
 
-def signature_message(timestamp: str, method: str, path: str, body: bytes | None) -> bytes:
+def signature_message(
+  timestamp: str, method: str, path: str, body: bytes | None
+) -> bytes:
   """The bytes a signature covers: `timestamp + METHOD + path + body`.
 
   `path` carries the query string when there is one, so the signature covers exactly what
@@ -223,15 +275,18 @@ def raise_for_status(status: int, text: str, *, context: str) -> NoReturn:
 @dataclass(kw_only=True)
 class Transport:
   """The shared HTTP transport: base URL, credentials and the signing clock."""
+
   base_url: str
   http: HttpClient = field(default_factory=HttpClient)
-  api_key: str | None = None
-  api_secret: str | None = None
+  api_key: str | None = field(default=None, repr=False)
+  api_secret: str | None = field(default=None, repr=False)
   validate: bool = True
   timestamp: Callable[[], str] = field(default=now_millis)
   """Clock for the signed timestamp; a test replaces it to sign a known value."""
 
-  def headers(self, method: str, path: str, body: bytes | None, *, public: bool) -> dict[str, str]:
+  def headers(
+    self, method: str, path: str, body: bytes | None, *, public: bool
+  ) -> dict[str, str]:
     """Headers for one call: nothing for a public call, the key, timestamp and signature otherwise.
 
     Raises:
@@ -240,20 +295,36 @@ class Transport:
     if public:
       return {}
     if self.api_key is None or self.api_secret is None:
-      raise AuthError(f'{method} {path} is not public: pass api_key and api_secret to new()')
+      raise AuthError(
+        f'{method} {path} is not public: pass api_key and api_secret to new()'
+      )
     timestamp = self.timestamp()
     return {
       API_KEY_HEADER: self.api_key,
       TIMESTAMP_HEADER: timestamp,
-      SIGNATURE_HEADER: sign(self.api_secret, signature_message(timestamp, method, path, body)),
+      SIGNATURE_HEADER: sign(
+        self.api_secret, signature_message(timestamp, method, path, body)
+      ),
     }
 
-  async def send(self, method: str, path: str, *, params: dict[str, Any], body: bytes | None, public: bool) -> bytes:
+  async def send(
+    self,
+    method: str,
+    path: str,
+    *,
+    params: dict[str, Any],
+    body: bytes | None,
+    public: bool,
+  ) -> bytes:
     """Send one request; raise on a non-2xx status.
 
     The query string is built here rather than by the HTTP client so that the signed path
     and the sent path are the same bytes.
     """
+    if not public and (self.api_key is None or self.api_secret is None):
+      raise AuthError(
+        f'{method} {path} is not public: pass api_key and api_secret to new()'
+      )
     filled = path
     for name, value in list(params.items()):
       if f'{{{name}}}' in filled:
@@ -262,27 +333,67 @@ class Transport:
     target = '/' + filled.lstrip('/')
     if params:
       target += '?' + urlencode(params, doseq=True)
-    headers = self.headers(method, target, body, public=public)
-    if body is not None:
-      headers['Content-Type'] = 'application/json'
-    response = await self.http.request(method, self.base_url.rstrip('/') + target, content=body, headers=headers)
+    transport = self
+
+    class Auth(httpx.Auth):
+      def auth_flow(self, request: httpx.Request):
+        # HTTPX runs this after pacing, again on every retry.
+        request.headers.update(
+          transport.headers(
+            request.method,
+            request.url.raw_path.decode('ascii'),
+            request.content,
+            public=public,
+          )
+        )
+        yield request
+
+    headers = {'Content-Type': 'application/json'} if body is not None else {}
+    response = await self.http.request(
+      method,
+      self.base_url.rstrip('/') + target,
+      content=body,
+      headers=headers,
+      auth=Auth(),
+    )
     if response.status_code >= 400:
-      raise_for_status(response.status_code, response.text, context=f'{method} {target}')
+      raise_for_status(
+        response.status_code, response.text, context=f'{method} {target}'
+      )
     return response.content
 
 
 @dataclass(kw_only=True)
 class ClientBase:
   """Root client: owns the transport every endpoint shares."""
+
   client: Transport
+  RATE: ClassVar[float | None] = None
+  """Requests per second to pace to; the generated root sets it from `[policy].rate`."""
+  RETRY: ClassVar[bool] = False
+  """Whether to retry on its own; the generated root sets it from `[policy].retry`."""
 
   @classmethod
   def new(
-    cls, *, base_url: str = '$base_url', api_key: str | None = None, api_secret: str | None = None,
+    cls,
+    *,
+    base_url: str = '$base_url',
+    api_key: str | None = None,
+    api_secret: str | None = None,
     validate: bool = True,
+    proxy: str | None = None,
   ) -> Self:
-    """Create a client against `base_url`. Public endpoints need no credentials."""
-    return cls(client=Transport(base_url=base_url, api_key=api_key, api_secret=api_secret, validate=validate))
+    """Create a client against `base_url`, through `proxy` if given (else `HTTPS_PROXY`).
+    Public endpoints need no credentials."""
+    return cls(
+      client=Transport(
+        base_url=base_url,
+        api_key=api_key,
+        api_secret=api_secret,
+        validate=validate,
+        http=HttpClient(proxy=proxy, rate=cls.RATE, retry=cls.RETRY),
+      )
+    )
 
   async def __aenter__(self) -> Self:
     return self
@@ -294,22 +405,37 @@ class ClientBase:
 @dataclass(kw_only=True, frozen=True)
 class Endpoint:
   """Base for every generated endpoint class: one shared transport."""
+
   client: Transport
 
   async def request(
-    self, request: Any = None, *, method: str, path: str,
+    self,
+    request: Any = None,
+    *,
+    method: str,
+    path: str,
     validate: bool | None = None,
     request_type: type[Any] | UnionType | None = None,
     response_type: type[T] | UnionType | None = None,
     meta: Meta = {},
   ) -> T:
-    """Send one request and validate the reply against `response_type`."""
-    params = {k: v for k, v in dict(request or {}).items() if v is not None}
+    """Send one request and validate the reply against `response_type`.
+
+    The request is dumped by `request_type` in JSON mode, so a datetime is the same ISO
+    string in a `POST`, `PUT` or `PATCH` body as on a query string.
+    """
+    fields: dict[str, Any] = dict(request or {})
     body = None
-    if method.upper() in ('POST', 'PUT', 'PATCH') and request_type is not None and request is not None:
-      body = validator(cast(type, request_type)).dump(request)
-      params = {}
-    raw = await self.client.send(method, path, params=params, body=body, public=bool(meta.get('public')))
+    if request_type is not None and request is not None:
+      dumped = validator(cast(type, request_type)).dump(request)
+      if method.upper() in ('POST', 'PUT', 'PATCH'):
+        body, fields = dumped, {}
+      else:
+        fields = json.loads(dumped)
+    params = {k: v for k, v in fields.items() if v is not None}
+    raw = await self.client.send(
+      method, path, params=params, body=body, public=bool(meta.get('public'))
+    )
     if response_type is None:
       return None  # type: ignore[return-value]
     check = self.client.validate if validate is None else validate
@@ -335,10 +461,11 @@ What to change for a specific API: `Transport.headers` (auth), `build_request` (
 `params`, a batch), the error-code tables below, and `unwrap` when the API's error shape is
 not JSON-RPC's own `{code, message, data}`.
 """
+
 from dataclasses import dataclass, field
 import json
 from types import UnionType
-from typing_extensions import Any, NoReturn, Self, TypeVar, cast
+from typing_extensions import Any, ClassVar, NoReturn, Self, TypeVar, cast
 
 from truewire_core.exceptions import ApiError, AuthError, BadRequest, RateLimited
 from truewire_core.http import HttpClient
@@ -408,7 +535,9 @@ def unwrap(frame: Any, *, id: int, method: str) -> Any:
   if frame.get('error') is not None:
     raise_error(method, frame['error'])
   if frame.get('id') != id:
-    raise ApiError(f'{method}: reply id {frame.get("id")!r} does not match request id {id!r}')
+    raise ApiError(
+      f'{method}: reply id {frame.get("id")!r} does not match request id {id!r}'
+    )
   if 'result' not in frame:
     raise ApiError(f'{method}: reply carries neither result nor error')
   return frame['result']
@@ -437,9 +566,10 @@ def raise_for_status(status: int, text: str, *, context: str) -> NoReturn:
 @dataclass(kw_only=True)
 class Transport:
   """The shared HTTP transport: one URL, a request-id counter, optional bearer auth."""
+
   base_url: str
   http: HttpClient = field(default_factory=HttpClient)
-  api_key: str | None = None
+  api_key: str | None = field(default=None, repr=False)
   validate: bool = True
   last_id: int = field(default=0, init=False)
 
@@ -455,7 +585,9 @@ class Transport:
     self.last_id += 1
     id = self.last_id
     body = json.dumps(build_request(id, method, params)).encode()
-    response = await self.http.request('POST', self.base_url, content=body, headers=self.headers(public=public))
+    response = await self.http.request(
+      'POST', self.base_url, content=body, headers=self.headers(public=public)
+    )
     if response.status_code >= 400:
       raise_for_status(response.status_code, response.text, context=method)
     try:
@@ -468,12 +600,28 @@ class Transport:
 @dataclass(kw_only=True)
 class ClientBase:
   """Root client: owns the transport every endpoint shares."""
+
   client: Transport
+  RATE: ClassVar[float | None] = None
+  """Requests per second to pace to; the generated root sets it from `[policy].rate`."""
+  RETRY: ClassVar[bool] = False
+  """Whether to retry on its own; the generated root sets it from `[policy].retry`."""
 
   @classmethod
-  def new(cls, *, base_url: str = '$base_url', api_key: str | None = None, validate: bool = True) -> Self:
-    """Create a client against `base_url`, the one URL every method is posted to."""
-    return cls(client=Transport(base_url=base_url, api_key=api_key, validate=validate))
+  def new(
+    cls,
+    *,
+    base_url: str = '$base_url',
+    api_key: str | None = None,
+    validate: bool = True,
+    proxy: str | None = None,
+  ) -> Self:
+    """Create a client against `base_url`, the one URL every method is posted to, through
+    `proxy` if given (else `HTTPS_PROXY`)."""
+    http = HttpClient(proxy=proxy, rate=cls.RATE, retry=cls.RETRY)
+    return cls(
+      client=Transport(base_url=base_url, api_key=api_key, validate=validate, http=http)
+    )
 
   async def __aenter__(self) -> Self:
     return self
@@ -485,10 +633,15 @@ class ClientBase:
 @dataclass(kw_only=True, frozen=True)
 class Endpoint:
   """Base for every generated endpoint class: one shared transport."""
+
   client: Transport
 
   async def request(
-    self, request: Any = None, *, method: str, path: str,
+    self,
+    request: Any = None,
+    *,
+    method: str,
+    path: str,
     validate: bool | None = None,
     request_type: type[Any] | UnionType | None = None,
     response_type: type[T] | UnionType | None = None,
@@ -528,10 +681,11 @@ the API's frames.
 Adapt `Transport` (base URL, headers, signing, envelope, errors) and `ws.Connection`
 (frames, acks, channel routing); the generated code never changes when you do.
 """
+
 from dataclasses import dataclass, field
 import json
 from types import UnionType
-from typing_extensions import Any, Self, TypeVar, cast
+from typing_extensions import Any, ClassVar, Self, TypeVar, cast
 
 from truewire_core.exceptions import ApiError
 from truewire_core.http import HttpClient
@@ -547,9 +701,10 @@ T = TypeVar('T')
 @dataclass(kw_only=True)
 class Transport:
   """The shared HTTP transport: base URL plus whatever auth the API needs."""
+
   base_url: str
   http: HttpClient = field(default_factory=HttpClient)
-  api_key: str | None = None
+  api_key: str | None = field(default=None, repr=False)
   validate: bool = True
 
   def headers(self, *, public: bool) -> dict[str, str]:
@@ -558,37 +713,69 @@ class Transport:
       return {}
     return {'Authorization': f'Bearer {self.api_key}'}
 
-  async def send(self, method: str, path: str, *, params: dict[str, Any], body: bytes | None, public: bool) -> bytes:
+  async def send(
+    self,
+    method: str,
+    path: str,
+    *,
+    params: dict[str, Any],
+    body: bytes | None,
+    public: bool,
+  ) -> bytes:
     """Send one request; raise `ApiError` on a non-2xx status."""
     filled = path
     for name, value in list(params.items()):
       if f'{{{name}}}' in filled:
         filled = filled.replace(f'{{{name}}}', str(value))
         params.pop(name)
+    headers = self.headers(public=public)
+    if body is not None:
+      headers = {**headers, 'Content-Type': 'application/json'}
     response = await self.http.request(
-      method, self.base_url.rstrip('/') + '/' + filled.lstrip('/'),
-      params=params or None, content=body, headers=self.headers(public=public),
+      method,
+      self.base_url.rstrip('/') + '/' + filled.lstrip('/'),
+      params=params or None,
+      content=body,
+      headers=headers,
     )
     if response.status_code >= 400:
-      raise ApiError(f'{method} {filled}: HTTP {response.status_code}: {response.text[:200]}')
+      raise ApiError(
+        f'{method} {filled}: HTTP {response.status_code}: {response.text[:200]}'
+      )
     return response.content
 
 
 @dataclass(kw_only=True)
 class ClientBase:
   """Root client: owns the HTTP transport and the socket every endpoint shares."""
+
   client: Transport
   socket: SocketClient
+  RATE: ClassVar[float | None] = None
+  """Requests per second to pace to; the generated root sets it from `[policy].rate`."""
+  RETRY: ClassVar[bool] = False
+  """Whether to retry on its own; the generated root sets it from `[policy].retry`."""
 
   @classmethod
   def new(
-    cls, *, base_url: str = '$base_url', ws_url: str = '$ws_url',
-    api_key: str | None = None, validate: bool = True,
+    cls,
+    *,
+    base_url: str = '$base_url',
+    ws_url: str = '$ws_url',
+    api_key: str | None = None,
+    validate: bool = True,
+    proxy: str | None = None,
   ) -> Self:
-    """Create a client against `base_url` (HTTP) and `ws_url` (the socket, opened on first use)."""
+    """Create a client against `base_url` (HTTP) and `ws_url` (the socket, opened on first
+    use), both through `proxy` if given (else `HTTPS_PROXY`)."""
     return cls(
-      client=Transport(base_url=base_url, api_key=api_key, validate=validate),
-      socket=SocketClient.new(ws_url, validate=validate),
+      client=Transport(
+        base_url=base_url,
+        api_key=api_key,
+        validate=validate,
+        http=HttpClient(proxy=proxy, rate=cls.RATE, retry=cls.RETRY),
+      ),
+      socket=SocketClient.new(ws_url, validate=validate, proxy=proxy),
     )
 
   async def __aenter__(self) -> Self:
@@ -602,22 +789,37 @@ class ClientBase:
 @dataclass(kw_only=True, frozen=True)
 class Endpoint:
   """Base for every generated HTTP endpoint class: one shared transport."""
+
   client: Transport
 
   async def request(
-    self, request: Any = None, *, method: str, path: str,
+    self,
+    request: Any = None,
+    *,
+    method: str,
+    path: str,
     validate: bool | None = None,
     request_type: type[Any] | UnionType | None = None,
     response_type: type[T] | UnionType | None = None,
     meta: Meta = {},
   ) -> T:
-    """Send one request and validate the reply against `response_type`."""
-    params = {k: v for k, v in dict(request or {}).items() if v is not None}
+    """Send one request and validate the reply against `response_type`.
+
+    The request is dumped by `request_type` in JSON mode, so a datetime is the same ISO
+    string in a `POST`, `PUT` or `PATCH` body as on a query string.
+    """
+    fields: dict[str, Any] = dict(request or {})
     body = None
-    if method.upper() in ('POST', 'PUT', 'PATCH') and request_type is not None and request is not None:
-      body = validator(cast(type, request_type)).dump(request)
-      params = {}
-    raw = await self.client.send(method, path, params=params, body=body, public=bool(meta.get('public')))
+    if request_type is not None and request is not None:
+      dumped = validator(cast(type, request_type)).dump(request)
+      if method.upper() in ('POST', 'PUT', 'PATCH'):
+        body, fields = dumped, {}
+      else:
+        fields = json.loads(dumped)
+    params = {k: v for k, v in fields.items() if v is not None}
+    raw = await self.client.send(
+      method, path, params=params, body=body, public=bool(meta.get('public'))
+    )
     if response_type is None:
       return None  # type: ignore[return-value]
     check = self.client.validate if validate is None else validate
@@ -629,10 +831,14 @@ class Endpoint:
 @dataclass(kw_only=True, frozen=True)
 class StreamEndpoint:
   """Base for every generated `stream` endpoint class: one shared socket."""
+
   client: SocketClient
 
   def subscribe(
-    self, channel: str, parameters: Any = None, *,
+    self,
+    channel: str,
+    parameters: Any = None,
+    *,
     validate: bool | None = None,
     request_type: type[Any] | UnionType | None = None,
     response_type: type[T] | UnionType | None = None,
@@ -652,8 +858,12 @@ class StreamEndpoint:
       if f'{{{name}}}' in filled:
         filled = filled.replace(f'{{{name}}}', str(value))
         params.pop(name)
-    payload_validator = validator(cast(type, response_type)) if response_type is not None else None
-    return self.client.subscribe(filled, params, payload_validator=payload_validator, validate=validate)
+    payload_validator = (
+      validator(cast(type, response_type)) if response_type is not None else None
+    )
+    return self.client.subscribe(
+      filled, params, payload_validator=payload_validator, validate=validate
+    )
 '''
 
 
@@ -672,7 +882,8 @@ decides which local subscription a pushed frame belongs to. An API that correlat
 a request id is a `truewire_core.ws.StreamsRpc` instead; `examples/kraken/src/kraken/core`
 in the Truewire repository is a complete reference for that shape.
 """
-from dataclasses import dataclass, field
+
+from dataclasses import dataclass
 from datetime import timedelta
 import json
 from typing_extensions import Any, Mapping, TypeVar, cast
@@ -715,14 +926,22 @@ class Connection(SerialReplies[Frame], Streams[Frame, Mapping[str, Any], Frame, 
     """A protocol-level ping every `ping_interval`; an API with its own heartbeat frame sends it here."""
     await ws.ping()
 
-  async def request_subscription(self, channel: str, params: Mapping[str, Any] | None = None) -> Frame:
-    reply = await self.request({'type': 'subscribe', 'channel': channel, **(params or {})})
+  async def request_subscription(
+    self, channel: str, params: Mapping[str, Any] | None = None
+  ) -> Frame:
+    reply = await self.request(
+      {'type': 'subscribe', 'channel': channel, **(params or {})}
+    )
     if reply.get('type') == 'error':
       raise ApiError(f'subscribe {channel}: {reply}')
     return reply
 
-  async def request_unsubscription(self, channel: str, params: Mapping[str, Any] | None = None) -> Frame:
-    return await self.request({'type': 'unsubscribe', 'channel': channel, **(params or {})})
+  async def request_unsubscription(
+    self, channel: str, params: Mapping[str, Any] | None = None
+  ) -> Frame:
+    return await self.request(
+      {'type': 'unsubscribe', 'channel': channel, **(params or {})}
+    )
 
   def parse_msg(self, msg: str | bytes) -> Subscription[Frame] | None:
     frame = json.loads(msg)
@@ -732,23 +951,35 @@ class Connection(SerialReplies[Frame], Streams[Frame, Mapping[str, Any], Frame, 
       self.replies.put_nowait(frame)
       return None
     if 'channel' in frame:
-      return {'channel': subscription_key(frame['channel'], frame), 'notification': frame}
+      return {
+        'channel': subscription_key(frame['channel'], frame),
+        'notification': frame,
+      }
     return None
 
 
 @dataclass(kw_only=True)
 class SocketClient:
   """Owns one `Connection` and the client-level validation default."""
+
   conn: Connection
   validate: bool = True
 
   @classmethod
   def new(
-    cls, url: str, *, validate: bool = True,
-    timeout: timedelta = timedelta(seconds=10), ping_interval: timedelta = timedelta(seconds=30),
+    cls,
+    url: str,
+    *,
+    validate: bool = True,
+    timeout: timedelta = timedelta(seconds=10),
+    ping_interval: timedelta = timedelta(seconds=30),
+    proxy: str | None = None,
   ) -> 'SocketClient':
-    """Build a client for `url`; the socket opens on the first subscription."""
-    return cls(conn=Connection(url, timeout=timeout, ping_interval=ping_interval), validate=validate)
+    """Build a client for `url`; the socket opens on the first subscription, through `proxy` if given."""
+    return cls(
+      conn=Connection(url, timeout=timeout, ping_interval=ping_interval, proxy=proxy),
+      validate=validate,
+    )
 
   async def __aenter__(self):
     await self.conn.__aenter__()
@@ -758,11 +989,17 @@ class SocketClient:
     await self.conn.__aexit__(exc_type, exc_value, traceback)
 
   def subscribe(
-    self, channel: str, params: Mapping[str, Any] | None = None, *,
-    payload_validator: validator[T] | None = None, validate: bool | None = None,
+    self,
+    channel: str,
+    params: Mapping[str, Any] | None = None,
+    *,
+    payload_validator: validator[T] | None = None,
+    validate: bool | None = None,
   ) -> StreamManager[T, Any, Any]:
     """Subscribe to `channel`, validating each pushed frame with `payload_validator` unless disabled."""
-    manager = self.conn.subscribe(subscription_key(channel, params), params, request_channel=channel)
+    manager = self.conn.subscribe(
+      subscription_key(channel, params), params, request_channel=channel
+    )
     check = self.validate if validate is None else validate
     if payload_validator is None or not check:
       return cast(StreamManager[T, Any, Any], manager)

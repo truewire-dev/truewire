@@ -59,6 +59,7 @@ class CommitDetail(TypedDict):
   html_url: NotRequired[str]
   """Web page of the commit."""
   commit: GitCommit
+  """The underlying git commit."""
   author: NotRequired[SimpleUser | None]
   """GitHub account matched to the author, when known."""
   committer: NotRequired[SimpleUser | None]

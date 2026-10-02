@@ -289,6 +289,50 @@ def test_stream_endpoint_spec_rejects_both_openapi_and_parameters():
     })
 
 
+def test_stream_endpoint_spec_accepts_an_optional_reply_schema():
+  """`reply` (ADR 0014) is an optional fourth new-shape field beside `parameters`/
+  `payload`, typing the subscribe acknowledgement's own extracted value; `new_shape`
+  reports it, and a stream without one still loads with `reply is None`."""
+  raw = {
+    'meta': {'public': True},
+    'spec': {
+      'kind': 'stream',
+      'channel': 'v4_orderbook:{id}',
+      'parameters': {'type': 'object', 'properties': {'id': {'type': 'string'}}},
+      'payload': {'title': 'BookUpdate', 'type': 'object', 'properties': {}},
+      'reply': {'$ref': 'indexer/orderbook_reply_contents'},
+    },
+  }
+  endpoint = Endpoint.model_validate(raw)
+  assert endpoint.spec.reply == {'$ref': 'indexer/orderbook_reply_contents'}
+  assert endpoint.spec.new_shape
+  del raw['spec']['reply']
+  assert Endpoint.model_validate(raw).spec.reply is None
+
+
+def test_stream_endpoint_spec_reply_alone_is_new_shape():
+  """`reply` counts toward the dual-shape gate on its own: it cannot sit beside a legacy
+  `openapi` block, and it makes `meta` required exactly as `payload` alone does."""
+  with pytest.raises(ValidationError, match='exactly one'):
+    Endpoint.model_validate({
+      'function': 'streams.trades',
+      'spec': {
+        'kind': 'stream',
+        'channel': 'trades',
+        'openapi': {'summary': 'Trades', 'responses': {'message': {'description': 'trade'}}},
+        'reply': {'type': 'object', 'properties': {}},
+      },
+    })
+  with pytest.raises(ValidationError, match='meta is required'):
+    Endpoint.model_validate({
+      'spec': {
+        'kind': 'stream',
+        'channel': 'trades',
+        'reply': {'type': 'object', 'properties': {}},
+      },
+    })
+
+
 def test_directory_function_derives_from_path():
   from pathlib import Path
   from truewire.spec.endpoint import directory_function

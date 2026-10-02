@@ -135,7 +135,7 @@ export class List {
     const next = async (page: number): Promise<[Issue[], number | null]> => {
       const response = await this.list({ ...request, page }, options)
       const rows = response
-      if (rows.length === 0 || rows.length < (request.per_page ?? 30)) return [rows, null]
+      if (rows.length === 0 || rows.length < Math.min((request.per_page ?? 30), 100)) return [rows, null]
       return [rows, page + 1]
     }
     return new PaginatedResponse(1, next)

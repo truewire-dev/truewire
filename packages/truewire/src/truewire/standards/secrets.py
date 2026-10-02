@@ -80,10 +80,7 @@ def credential_tokens(client_root: Path | Project) -> frozenset[str]:
     secrets = resolve(client_root).secrets
   except Exception:
     return frozenset(tokens)
-  names = [*secrets.get('required', []), *secrets.get('optional', [])]
-  for name in names:
-    if not isinstance(name, str):
-      continue
+  for name in (*secrets.required, *secrets.optional):
     for word in re.split(r'[^a-zA-Z0-9]+', name.lower()):
       if word in CREDENTIAL_VOCAB:
         tokens.add(word)

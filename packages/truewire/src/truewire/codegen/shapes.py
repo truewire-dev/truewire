@@ -75,8 +75,9 @@ def core_shapes(
       result.fields = {}
       for name, kid in kids:
         if kid.fields is not None:
+          renamed = _renames(mapping, name, kid)
           for field_name, types in kid.fields.items():
-            result.fields.setdefault(field_name, set()).update(types)
+            result.fields.setdefault(renamed.get(field_name, field_name), set()).update(types)
         elif kid.types:
           # A subtree the backend rendered nothing for contributes no field: there would
           # be nothing to hand it, and a field with no contract renders as a hole.
@@ -92,6 +93,28 @@ def core_shapes(
   return shapes
 
 
+def _renames(mapping: dict[str, str], child: str, kid: CoreShape) -> dict[str, str]:
+  """How a composite child's own fields are named on its parent.
+
+  `forward` keeps every field's name, except the default one: a composite child the parent
+  maps to a field in `children` (`app = "app_client"`) is built from that field as its own
+  `client`, as Python's `App.new(self.app_client, ...)` is. Every other field passes
+  through under the same name.
+  """
+  target = mapping.get(child)
+  if target is None or kid.fields is None or DEFAULT_FIELD not in kid.fields:
+    return {}
+  return {DEFAULT_FIELD: target}
+
+
+def child_fields(plan: PackagePlan, path: tuple[str, ...], child: str, kid: CoreShape) -> dict[str, str]:
+  """The parent field each of a composite child's own fields is handed from, by child field."""
+  router = next(r for r in plan.routers if tuple(r.path) == path)
+  mapping = (plan.cores[router.core].children if router.core in plan.cores else None) or {}
+  renamed = _renames(mapping, child, kid)
+  return {field_name: renamed.get(field_name, field_name) for field_name in sorted(kid.fields or {})}
+
+
 def field_for(plan: PackagePlan, path: tuple[str, ...], child: str) -> str:
   """The field a composite router hands `child`."""
   router = next(r for r in plan.routers if tuple(r.path) == path)
@@ -99,4 +122,4 @@ def field_for(plan: PackagePlan, path: tuple[str, ...], child: str) -> str:
   return mapping.get(child, DEFAULT_FIELD)
 
 
-__all__ = ['CoreShape', 'DEFAULT_FIELD', 'core_shapes', 'field_for', 'is_composite']
+__all__ = ['CoreShape', 'DEFAULT_FIELD', 'child_fields', 'core_shapes', 'field_for', 'is_composite']

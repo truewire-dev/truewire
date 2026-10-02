@@ -1,0 +1,8 @@
+{
+  "description": "Page 3: trade 4 is past `endTime`, so the walk drops it and stops.",
+  "request": {
+    "symbol": "BTCUSDT",
+    "fromId": 3,
+    "limit": 2
+  }
+}

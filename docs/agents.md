@@ -4,7 +4,7 @@ Truewire is built to be driven by a coding agent. Every step of a project ends i
 
 ## What to hand an agent
 
-**The six skills.** [`.agents/skills/`](../.agents/skills/README.md) holds one `SKILL.md` per step, in the format Claude Code, Cursor and Codex load on demand. Point the agent at the directory, or copy it into the project's own skills folder.
+**The six skills.** The `truewire` package ships one `SKILL.md` per step ([source](../packages/truewire/src/truewire/resources/agents/skills/README.md)), in the format Claude Code, Cursor and Codex load on demand. `truewire init` copies them into the project's `.agents/skills/`, each stamped with the toolchain version; `truewire agents update` refreshes the copies after an upgrade, and `truewire agents check` (run by `truewire standards`) fails when one has drifted without the line `<!-- truewire: local edit -->`.
 
 | Skill | One line |
 | --- | --- |
@@ -19,7 +19,7 @@ Truewire is built to be driven by a coding agent. Every step of a project ends i
 
 **The references.** [docs/spec/authoring.md](spec/authoring.md) is the rule set `truewire check` enforces, with a wrong and a right example per rule. [docs/standards.md](standards.md) is the bar `truewire standards` and the review skill hold the project to. [docs/truewire-toml.md](truewire-toml.md) is the project file. `examples/github` and `examples/kraken` are finished projects to copy from.
 
-**Credentials, as environment variables.** The core reads none of them; the caller passes them to `new(...)`, and `truewire capture --new api_key=$KEY` does the same on the command line. `[secrets].required` in `truewire.toml` names the variables so `truewire standards` can flag a leaked value.
+**Credentials, as environment variables.** The core reads none of them; the caller passes them to `new(...)`, and `truewire capture --new api_key=$KEY` does the same on the command line. `[secrets].required` in `truewire.toml` names the variables, so a recording that holds one of their values fails `truewire standards`, and `truewire capture` refuses to write it.
 
 ## The gates
 
@@ -39,7 +39,7 @@ Each command below prints a plain result and exits non-zero on failure. An agent
 
 ## `truewire capture`
 
-`truewire capture <group.name> --request '{...}'` calls one endpoint against the live API through the project's own generated client and core, and writes the request and the response as an example pair beside the endpoint's spec. The pair carries what the API actually sent, before the core unwrapped anything, and `truewire check` validates it against the schema on the spot. `--id` names the pair, `--scrub KEY` replaces a secret in the response with `REDACTED_KEY`, and `--new key=value` passes constructor arguments to `new(...)`. A non-2xx answer is printed and nothing is written: examples record success, and errors belong to the core.
+`truewire capture <group.name> --request '{...}'` calls one endpoint against the live API through the project's own generated client and core, and writes the request and the response as an example pair beside the endpoint's spec. The pair carries what the API actually sent, before the core unwrapped anything, and `truewire check` validates it against the schema on the spot. `--id` names the pair, `--scrub KEY` replaces a secret in the response with `REDACTED_KEY`, and `--new key=value` passes constructor arguments to `new(...)`. A non-2xx answer is printed and nothing is written: examples record success, and errors belong to the core. A pair that holds the value of a `[secrets]` variable is not written either; the refusal names the variable and the field to `--scrub`.
 
 This is how an agent turns a guess into evidence. It writes the spec from the docs, captures, and the check either accepts the recording or names the field the docs got wrong. An endpoint it cannot call (wrong credential tier, moves money, needs state) gets an `unverified` block with a reason from the closed set, never a skip.
 

@@ -1,0 +1,50 @@
+{
+  "function": "info.lookup",
+  "notes": [
+    "Synthetic dual-transport rpc whose `missing` recording answered with the body `null` (hyperliquid's `info` endpoints do). The WS example is synthesized from the HTTP one, so the mock must send the frame `null` rather than nothing."
+  ],
+  "spec": {
+    "kind": "rpc",
+    "transports": ["http", "ws"],
+    "path": "lookup",
+    "method": "POST",
+    "openapi": {
+      "description": "Look up one value by key; `null` when the key is unknown.",
+      "requestBody": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "title": "LookupParams",
+              "type": "object",
+              "properties": {"key": {"type": "string", "description": "Key to look up."}},
+              "required": ["key"],
+              "description": "Lookup parameters."
+            }
+          }
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "The value, or null.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "title": "LookupValue",
+                    "type": "object",
+                    "properties": {"value": {"type": "integer", "description": "The value."}},
+                    "required": ["value"],
+                    "description": "A found value."
+                  },
+                  {"type": "null"}
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

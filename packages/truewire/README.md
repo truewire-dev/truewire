@@ -10,7 +10,9 @@ client, by recording real wire examples and generating code, tests and mocks fro
 - `truewire surface` — reconcile every spec against the callables the package really has.
 - `truewire mock` — serve a project's recorded examples over HTTP and WebSocket.
 - `truewire generate` — generate the Python package from the spec.
+- `truewire lint [language]` — each declared package's own formatter, linter and type checker.
 - `truewire standards` — every mechanically-checkable production rule, in one pass.
 - `truewire docs check|lint` — type-check and lint the code blocks in a project's docs.
+- `truewire score` — one row per clause of `docs/shape/score.md`; exits zero only when finished.
 
 A project is a directory holding a `truewire.toml`; see `truewire init`.

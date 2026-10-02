@@ -84,6 +84,30 @@ where
         }
     }
 
+    /// The same subscription with its acknowledging reply passed through `f`: how a
+    /// generated stream endpoint declaring a `reply` schema (ADR 0014) types it. The reply
+    /// an `unsubscribe()` returns goes through `f` too.
+    pub fn map_reply<R, F>(self, f: F) -> Result<Stream<N, R>>
+    where
+        R: Send + 'static,
+        F: Fn(Reply) -> Result<R> + Send + Sync + 'static,
+    {
+        let f = std::sync::Arc::new(f);
+        let reply = self.reply.map(|reply| f(reply)).transpose()?;
+        let unsubscribe = self.unsubscribe.map(|unsubscribe| {
+            let f = f.clone();
+            Box::new(move || {
+                let pending = unsubscribe();
+                async move { pending.await?.map(|reply| f(reply)).transpose() }.boxed()
+            }) as Unsubscribe<R>
+        });
+        Ok(Stream {
+            reply,
+            items: self.items,
+            unsubscribe,
+        })
+    }
+
     /// The same subscription keeping only the notifications `f` accepts.
     pub fn filter<F>(self, f: F) -> Self
     where

@@ -26,6 +26,8 @@ A WS-transport RPC endpoint that declares `envelope` extracts exactly like an HT
 
 **Stream verbs.** A stream endpoint's `envelope` also declares `channel`, the path into the subscribe frame that carries the channel identity, and `verb`, the path that carries subscribe-vs-unsubscribe intent plus the two literal values it takes (`{"path": "op", "subscribe": "subscribe", "unsubscribe": "unsubscribe"}`). Before `verb` existed the mock server inferred intent from up to four undeclared signals, including a blind recursive scan of the subscribe payload for the string `"subscribe"`. That guess was right until an API's dialect did not match it, at which point the mock crashed on unsubscribe. An absent declaration defaulting to a guess instead of failing loudly is the exact anti-pattern `channel` already existed to end, one field over.
 
+Amended 2026-09-15: a stream whose subscribe frame names a different channel from the one its pushes arrive on also declares `subscribe_channel`, the identity found at `channel` (hyperliquid subscribes with `subscription.type: "userEvents"` and pushes on `user`). `spec.channel` stays the push channel, and only the mock's subscribe/unsubscribe matching reads the new field. On the serving side, a WS example synthesized from an HTTP recording replays that recording's body even when the body is `null`; only a native `null` `.reply.json` means "no reply".
+
 ## Consequences
 
 `truewire check` validates a stored example against the shape the core actually returns, by extracting first, rather than validating a template's guess. The mock server is transport- and envelope-agnostic. A mixed client (some endpoints enveloped, some not) is expressible, which the client-level design could not do.

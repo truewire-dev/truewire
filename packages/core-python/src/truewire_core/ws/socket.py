@@ -85,7 +85,7 @@ class Socket(ABC):
   url: str
   timeout: timedelta = field(kw_only=True, default=timedelta(seconds=10))
   ping_interval: timedelta = field(kw_only=True, default=timedelta(hours=24))
-  proxy: str | None = field(kw_only=True, default=None)
+  proxy: str | None = field(kw_only=True, default=None, repr=False)
   """HTTP(S) proxy URL the connection goes through, sent `CONNECT` (packages clause P18).
   Left `None` or `''`, websockets reads the environment: `WSS_PROXY`/`WS_PROXY`, then
   `SOCKS_PROXY`, then `HTTPS_PROXY`, then (for `ws://` only) `HTTP_PROXY`; `NO_PROXY` is

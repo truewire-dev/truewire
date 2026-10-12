@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1 (2026-10-12)
+
+- `HttpClient.proxy` and `Socket.proxy` are left out of `repr()`. A proxy URL carrying
+  userinfo (`http://user:password@host:port`) printed its password wherever a client was
+  shown, for example in logs and tracebacks. Clients built without an explicit proxy are
+  unaffected; no regeneration is needed.
+
 ## 0.3.0 (2026-09-30)
 
 - `EpochConverter.parse` takes a `float` or a fractional numeral string and keeps the

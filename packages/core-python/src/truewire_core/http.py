@@ -122,7 +122,7 @@ class HttpClient:
   1. Connection: single owner via `async with`, also supports lazy no-owner use
   2. Requests: many concurrent callers OK
   """
-  proxy: str | None = field(default=None, kw_only=True)
+  proxy: str | None = field(default=None, kw_only=True, repr=False)
   rate: float | None = field(default=None, kw_only=True)
   """Requests per second to pace to; `None` for no pacing."""
   retry: bool = field(default=False, kw_only=True)

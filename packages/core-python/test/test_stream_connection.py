@@ -32,6 +32,79 @@ class RpcStreamSocket(SubscriptionProtocol, StreamsRpc):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('socket_type', [StreamSocket, RpcStreamSocket])
+async def test_queue_task_creation_failure_preserves_error_and_frees_channel(socket_type, monkeypatch):
+  async def serve(ws):
+    await ws.wait_closed()
+
+  async with websockets.serve(serve, '127.0.0.1', 0) as server:
+    port = server.sockets[0].getsockname()[1]
+    async with socket_type(url=f'ws://127.0.0.1:{port}') as socket:
+      stream = await socket.subscribe('book')
+      failure = RuntimeError('queue task creation failed')
+      create_task = asyncio.create_task
+
+      def reject_queue_task(coro, **kwargs):
+        if coro.cr_code is asyncio.Queue.get.__code__:
+          coro.close()
+          raise failure
+        return create_task(coro, **kwargs)
+
+      with monkeypatch.context() as patch:
+        patch.setattr(asyncio, 'create_task', reject_queue_task)
+        with pytest.raises(RuntimeError) as raised:
+          await anext(stream.__aiter__())
+      assert raised.value is failure
+      assert not socket.subscriptions
+      async with socket.subscribe('book'):
+        assert 'book' in socket.subscriptions
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('socket_type', [StreamSocket, RpcStreamSocket])
+@pytest.mark.parametrize('ending', ['cancel', 'unsubscribe'])
+async def test_pending_stream_read_cleans_up_queue_task(socket_type, ending, monkeypatch):
+  async def serve(ws):
+    await ws.wait_closed()
+
+  async with websockets.serve(serve, '127.0.0.1', 0) as server:
+    port = server.sockets[0].getsockname()[1]
+    async with socket_type(url=f'ws://127.0.0.1:{port}') as socket:
+      stream = await socket.subscribe('book')
+      queue = socket.subscriptions['book']
+      get = queue.get
+      reading = asyncio.Event()
+      queue_tasks = []
+
+      async def observed_get():
+        queue_tasks.append(asyncio.current_task())
+        reading.set()
+        return await get()
+
+      monkeypatch.setattr(queue, 'get', observed_get)
+      reader = asyncio.create_task(anext(stream.__aiter__()))
+      try:
+        await asyncio.wait_for(reading.wait(), 1)
+        if ending == 'cancel':
+          reader.cancel()
+          with pytest.raises(asyncio.CancelledError):
+            await reader
+        else:
+          await asyncio.wait_for(stream.unsubscribe(), 1)
+          with pytest.raises(StopAsyncIteration):
+            await asyncio.wait_for(reader, 1)
+        assert len(queue_tasks) == 1
+        assert queue_tasks[0].cancelled()
+        assert not socket.subscriptions
+        await stream.unsubscribe()
+        async with socket.subscribe('book'):
+          assert 'book' in socket.subscriptions
+      finally:
+        reader.cancel()
+        await asyncio.gather(reader, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('socket_type', [StreamSocket, RpcStreamSocket])
 @pytest.mark.parametrize('reopen', [False, True])
 async def test_dropped_subscription_never_reads_or_unsubscribes_on_a_new_connection(socket_type, reopen):
   connections = []
@@ -223,3 +296,63 @@ async def test_a_dead_listener_on_an_open_connection_gets_a_fresh_connection(soc
       second = await asyncio.wait_for(socket.subscribe('trades'), 1)
       assert await asyncio.wait_for(anext(second.__aiter__()), 1) == 'fresh'
       assert len(connections) == 2
+
+
+class GatedSubscribe:
+  """Holds every subscribe frame until `release` is set, and records an abandoned one."""
+  reached: asyncio.Event
+  release: asyncio.Event
+  abandoned: asyncio.Event
+
+  async def request_subscription(self, channel, params=None):
+    self.reached.set()
+    try:
+      await self.release.wait()
+    except asyncio.CancelledError:
+      self.abandoned.set()
+      raise
+    await super().request_subscription(channel, params)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('socket_type', [StreamSocket, RpcStreamSocket])
+async def test_a_timed_out_subscribe_never_sends_later(socket_type):
+  """A subscribe the caller gave up on must stop with it (TRU-343).
+
+  `Socket.wait` ran the request in a task it never cancelled, so a subscribe that timed out
+  under `asyncio.wait_for` was still sent and acked later, with its queue already gone.
+  """
+  received = []
+  unsubscribed = asyncio.Event()
+
+  async def serve(ws):
+    async for frame in ws:
+      received.append(frame)
+      if frame.startswith('unsubscribe:'):
+        unsubscribed.set()
+      else:
+        await ws.send(json.dumps({'channel': frame, 'notification': 'snapshot'}))
+
+  gated_type = type('Gated' + socket_type.__name__, (GatedSubscribe, socket_type), {
+    'reached': asyncio.Event(), 'release': asyncio.Event(), 'abandoned': asyncio.Event(),
+  })
+  async with websockets.serve(serve, '127.0.0.1', 0) as server:
+    port = server.sockets[0].getsockname()[1]
+    async with gated_type(url=f'ws://127.0.0.1:{port}') as socket:
+      async def subscribe():
+        return await socket.subscribe('trades')
+
+      call = asyncio.create_task(subscribe())
+      await socket.reached.wait()
+      with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(call, timeout=0)
+      assert socket.abandoned.is_set(), 'the timed-out subscribe is still running'
+      assert not socket.subscriptions
+      # Anything the abandoned request would still send goes out before this subscribe's
+      # frames on the same connection, so the server's log at the unsubscribe is complete.
+      socket.release.set()
+      stream = await asyncio.wait_for(socket.subscribe('trades'), 1)
+      assert await asyncio.wait_for(anext(stream.__aiter__()), 1) == 'snapshot'
+      await asyncio.wait_for(stream.unsubscribe(), 1)
+      await asyncio.wait_for(unsubscribed.wait(), 1)
+      assert received == ['trades', 'unsubscribe:trades']

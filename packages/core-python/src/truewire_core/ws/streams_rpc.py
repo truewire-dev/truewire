@@ -142,6 +142,7 @@ class StreamsRpc(Socket, Generic[Request, Reply, Notification, SubscriptionParam
           # Notifications that arrived before a drop are delivered before the drop is reported.
           yield queue.get_nowait()
           continue
+        queue_get: asyncio.Task[Notification] | None = None
         try:
           queue_get = asyncio.create_task(queue.get())
           done, _ = await self.wait(
@@ -151,8 +152,9 @@ class StreamsRpc(Socket, Generic[Request, Reply, Notification, SubscriptionParam
           forget()
           raise
         finally:
-          queue_get.cancel()
-          await asyncio.gather(queue_get, return_exceptions=True)
+          if queue_get is not None:
+            queue_get.cancel()
+            await asyncio.gather(queue_get, return_exceptions=True)
         if queue_get in done:
           yield queue_get.result()
         else: # unsubscribed

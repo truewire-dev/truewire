@@ -327,6 +327,48 @@ async def test_wait_caller_cancellation_awaits_request_cleanup(timeout):
     assert not ctx.pinger.done()
 
 
+@dataclass
+class ReplySocket(RecordingSocket):
+  """Replies queue in arrival order; a caller reads the next one with
+  `self.wait(self.replies.get())`, as the bybit and kucoin cores do."""
+  replies: asyncio.Queue = field(default_factory=asyncio.Queue, init=False)
+
+  def on_msg(self, msg: str | bytes):
+    self.replies.put_nowait(msg)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('timeout', [False, True])
+async def test_a_cancelled_reply_read_does_not_take_the_next_callers_reply(timeout):
+  """A reply read the caller gave up on must not stay queued for replies (TRU-343).
+
+  `Socket.wait` never cancelled its request task when the caller was cancelled, so the
+  abandoned `replies.get()` stayed first in line and took the next caller's reply.
+  """
+  async with ReplySocket(url='wss://example.invalid') as socket:
+    await socket.open()
+
+    async def read(reading: asyncio.Event):
+      reading.set()
+      return await socket.replies.get()
+
+    first_reading, second_reading = asyncio.Event(), asyncio.Event()
+    first = asyncio.create_task(socket.wait(read(first_reading)))
+    await first_reading.wait()
+    if timeout:
+      with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(first, timeout=0)
+    else:
+      first.cancel()
+      with pytest.raises(asyncio.CancelledError):
+        await first
+    second = asyncio.create_task(socket.wait(read(second_reading)))
+    await second_reading.wait()
+    socket.on_msg('reply')
+    assert await asyncio.wait_for(second, 1) == 'reply'
+    assert socket.replies.empty()
+
+
 @pytest.mark.asyncio
 async def test_cancelled_connect_waiter_leaves_owner_and_other_waiter_running():
   started, finish = asyncio.Event(), asyncio.Event()

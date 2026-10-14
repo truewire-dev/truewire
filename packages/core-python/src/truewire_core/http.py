@@ -87,6 +87,18 @@ def retry_after(response: httpx.Response) -> float | None:
   return max(0.0, (when - datetime.now(timezone.utc)).total_seconds())
 
 
+def _network_error(req: str, e: httpx.HTTPError) -> NetworkError:
+  """The `NetworkError` for a failed send, naming the HTTPX error's kind when it has no message.
+
+  Timeouts usually carry an empty message, which would leave ours saying nothing.
+  """
+  if str(e):
+    return NetworkError(f'Error sending request to {req}', *e.args)
+  kind = type(e).__name__
+  reason = f'timed out ({kind})' if isinstance(e, httpx.TimeoutException) else kind
+  return NetworkError(f'Error sending request to {req}', reason)
+
+
 def _default_limits(proxy: str | None = None) -> httpx.Limits:
   """No kept-alive connections behind a proxy, explicit or from the environment."""
   if proxy or os.environ.get('HTTPS_PROXY') or os.environ.get('HTTP_PROXY'):
@@ -203,12 +215,11 @@ class HttpClient:
         # hop failed to connect. HTTPX does not expose that history on the exception.
         redirects = client.follow_redirects if isinstance(follow_redirects, httpx._client.UseClientDefault) else follow_redirects
         if last or redirects:
-          raise NetworkError(f'Error sending request to {method} {url}', *e.args) from e
+          raise _network_error(f'{method} {url}', e) from e
         await asyncio.sleep(backoff)
         continue
       except httpx.HTTPError as e:
-        req = f'{method} {url}'
-        raise NetworkError(f'Error sending request to {req}', *e.args) from e
+        raise _network_error(f'{method} {url}', e) from e
       exchanges = _recording.get()
       if exchanges is not None:
         exchanges.append(Exchange(request=response.request, response=response))

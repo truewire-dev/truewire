@@ -4,13 +4,14 @@ Each alias must parse the declared wire form into an aware `datetime`/`date` and
 to that same form under `mode='json'`; ADR 0008 relies on the serializer half.
 """
 from datetime import date, datetime, timezone
+from typing import Union
 
 from pydantic import TypeAdapter
-from typing_extensions import TypedDict
+from typing_extensions import Literal, NamedTuple, TypedDict
 
 from truewire_core import types
 from truewire_core.types import (
-  DateIso, TimestampIso, TimestampMicros, TimestampMillis, TimestampNanos, TimestampSeconds,
+  DateIso, TimestampIso, TimestampMicros, TimestampMillis, TimestampNanos, TimestampSeconds, wire_row,
 )
 
 INSTANT = datetime(2024, 5, 30, 12, 34, 56, 123456, tzinfo=timezone.utc)
@@ -82,3 +83,65 @@ class TestAliases:
     assert types.date_iso.dump(date(2024, 5, 30)) == '2024-05-30'
     for name in types.__all__:
       assert hasattr(types, name)
+
+
+class Candle(NamedTuple):
+  at: TimestampMillis
+  close: float
+
+  __get_pydantic_core_schema__ = wire_row
+
+
+class Level(NamedTuple):
+  price: float
+
+  __get_pydantic_core_schema__ = wire_row
+
+
+class Trade(NamedTuple):
+  """A second timestamped row, so a union of rows tries `Candle`'s serializer on it first."""
+  side: Literal['b', 's']
+  at: TimestampMillis
+
+  __get_pydantic_core_schema__ = wire_row
+
+
+class Book(NamedTuple):
+  """Recursive: a row holding rows of its own type."""
+  level: Level
+  children: list['Book']
+
+  __get_pydantic_core_schema__ = wire_row
+
+
+class TestWireRow:
+  """A generated `NamedTuple` row dumps the JSON array it was read from on every pydantic the
+  core admits (2.9 and later); before 2.14 the `TimestampMillis` position dumped ISO-8601
+  without `wire_row`."""
+
+  def test_row_dumps_its_positions_wire_form(self):
+    adapter = TypeAdapter(Candle)
+    row = adapter.validate_json('[1717072496123,1.5]')
+    assert row == Candle(INSTANT.replace(microsecond=123000), 1.5)
+    assert adapter.dump_json(row) == b'[1717072496123,1.5]'
+    assert adapter.dump_python(row, mode='json') == [1717072496123, 1.5]
+    assert adapter.dump_python(row) == (INSTANT.replace(microsecond=123000), 1.5)
+
+  def test_row_inside_a_union_and_a_list(self):
+    adapter = TypeAdapter(list[Union[Level, Candle]])
+    rows = adapter.validate_json('[[2.5],[1717072496123,1.5]]')
+    assert [type(row) for row in rows] == [Level, Candle]
+    assert adapter.dump_json(rows) == b'[[2.5],[1717072496123,1.5]]'
+
+  def test_union_of_two_timestamped_rows(self):
+    adapter = TypeAdapter(list[Union[Candle, Trade]])
+    wire = b'[[1717072496123,1.5],["b",1717072496123]]'
+    rows = adapter.validate_json(wire)
+    assert [type(row) for row in rows] == [Candle, Trade]
+    assert adapter.dump_json(rows) == wire
+    assert adapter.dump_python(rows, mode='json') == [[1717072496123, 1.5], ['b', 1717072496123]]
+
+  def test_recursive_row(self):
+    adapter = TypeAdapter(Book)
+    wire = b'[[1.0],[[[2.0],[]]]]'
+    assert adapter.dump_json(adapter.validate_json(wire)) == wire

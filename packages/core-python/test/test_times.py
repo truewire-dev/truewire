@@ -36,6 +36,17 @@ class TestIsoConverterParse:
     dt = IsoConverter().parse('2024-05-30T14:34:56+02:00')
     assert dt == datetime(2024, 5, 30, 12, 34, 56, tzinfo=timezone.utc)
 
+  @pytest.mark.parametrize('fraction, microsecond', [('', 0), ('.12', 120000), ('.123456789', 123456)])
+  @pytest.mark.parametrize('suffix, tz', [('', None), ('+02:00', timezone(timedelta(hours=2)))])
+  def test_fraction_normalization_preserves_naive_and_offset_timestamps(self, fraction, microsecond, suffix, tz):
+    dt = IsoConverter().parse(f'2024-05-30T14:34:56{fraction}{suffix}')
+    assert dt.replace(tzinfo=None) == datetime(2024, 5, 30, 14, 34, 56, microsecond)
+    assert dt.tzinfo == tz
+
+  def test_invalid_timestamp_still_raises(self):
+    with pytest.raises(ValueError):
+      IsoConverter().parse('not-a-timestamp')
+
 
 class TestIsoConverterDump:
   def test_naive_datetime_treated_as_already_utc(self):

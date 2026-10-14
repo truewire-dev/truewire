@@ -27,12 +27,13 @@ class IsoConverter(TimeConverter[str]):
     """
     if isinstance(value, datetime):
       return value
-    if value.endswith('Z'):
-      value = value[:-1] + '+00:00'
-    if m := _FRACTION.search(value):
+    timestamp = value
+    if timestamp.endswith('Z'):
+      timestamp = timestamp[:-1] + '+00:00'
+    if m := _FRACTION.search(timestamp):
       digits = (m.group(1) + '000000')[:6]
-      value = value[:m.start(1)] + digits + value[m.end(1):]
-    return datetime.fromisoformat(value)
+      timestamp = timestamp[:m.start(1)] + digits + timestamp[m.end(1):]
+    return datetime.fromisoformat(timestamp)
 
   def dump(self, dt: datetime) -> str:
     """Convert a `datetime` to UTC and render it `Z`-suffixed.
